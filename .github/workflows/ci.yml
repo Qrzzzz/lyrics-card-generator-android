@@ -27,7 +27,12 @@ jobs:
 
       - name: Install Android 16 QPR2 SDK
         shell: pwsh
-        run: sdkmanager "platforms;android-36.1" "build-tools;36.1.0"
+        run: |
+          $sdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA "Android\Sdk" }
+          $sdkManager = Get-ChildItem -Path (Join-Path $sdkRoot "cmdline-tools") -Filter "sdkmanager.bat" -Recurse -File | Select-Object -First 1
+          if (-not $sdkManager) { throw "sdkmanager.bat was not found under $sdkRoot\cmdline-tools" }
+          & $sdkManager.FullName "platforms;android-36.1" "build-tools;36.1.0"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify renderer
         working-directory: renderer
@@ -41,4 +46,3 @@ jobs:
         with:
           name: lyrics-card-android-alpha
           path: app/build/outputs/apk/alpha/debug/*.apk
-
