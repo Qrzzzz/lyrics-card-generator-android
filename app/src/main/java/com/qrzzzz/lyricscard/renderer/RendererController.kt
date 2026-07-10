@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
-import android.os.Looper
 import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
@@ -98,7 +97,6 @@ class RendererController(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<RendererEnvelope>>()
     private val exportAssemblies = ConcurrentHashMap<String, ExportAssembly>()
-    private val previewRequestIds = ConcurrentHashMap.newKeySet<String>()
     private val operationMutex = Mutex()
     private val _status = MutableStateFlow(RendererStatus())
     val status: StateFlow<RendererStatus> = _status.asStateFlow()
@@ -107,7 +105,9 @@ class RendererController(
 
     private var webView: WebView? = null
     private var pendingSpec: RenderSpec? = null
+    private var previewInFlightSpec: RenderSpec? = null
     private var specJob: Job? = null
+    private var previewPumpJob: Job? = null
     private var recoveryAttempts = 0
     private var closed = false
 
@@ -116,6 +116,11 @@ class RendererController(
         check(!closed) { "RendererController is closed" }
         webView?.let { existing ->
             (existing.parent as? ViewGroup)?.removeView(existing)
+            existing.onResume()
+            existing.post {
+                existing.requestLayout()
+                existing.invalidate()
+            }
             return existing
         }
         val assetLoader = WebViewAssetLoader.Builder()
@@ -172,37 +177,63 @@ class RendererController(
         }
     }
 
-    /** Starts the renderer while the user is still on the project list. Must run on the main thread. */
-    fun warmUp() {
-        if (closed || webView != null) return
-        check(Looper.myLooper() == Looper.getMainLooper()) { "Renderer warm-up must run on the main thread" }
-        createWebView(appContext)
-    }
-
     fun updateSpec(spec: RenderSpec) {
         pendingSpec = spec.requireValid()
+        schedulePreviewUpdate()
+    }
+
+    private fun schedulePreviewUpdate(delayMillis: Long = PREVIEW_DEBOUNCE_MS) {
         specJob?.cancel()
         specJob = scope.launchSafely {
-            delay(PREVIEW_DEBOUNCE_MS)
-            if (_status.value.phase in setOf(RendererStatus.Phase.READY, RendererStatus.Phase.RENDERING)) {
-                val value = pendingSpec ?: return@launchSafely
-                val requestId = UUID.randomUUID().toString()
+            if (delayMillis > 0) delay(delayMillis)
+            startPreviewPump()
+        }
+    }
+
+    private fun startPreviewPump() {
+        if (_status.value.phase !in setOf(RendererStatus.Phase.READY, RendererStatus.Phase.RENDERING)) return
+        if (previewPumpJob?.isActive == true || pendingSpec == null) return
+        previewPumpJob = scope.launchSafely {
+            while (!closed && _status.value.phase in setOf(RendererStatus.Phase.READY, RendererStatus.Phase.RENDERING)) {
+                val value = pendingSpec ?: break
+                pendingSpec = null
+                previewInFlightSpec = value
                 _status.value = RendererStatus(RendererStatus.Phase.RENDERING, "正在更新预览…")
-                previewRequestIds += requestId
                 try {
-                    send(
-                        RendererEnvelope(
-                            requestId = requestId,
+                    val applied = operationMutex.withLock {
+                        request(
                             type = "setSpec",
                             payload = RenderSpecJson.format.encodeToJsonElement(RenderSpec.serializer(), value),
-                        ),
-                    )
+                            timeoutMillis = SPEC_TIMEOUT_MS,
+                        )
+                    }
+                    if (applied.type != "specApplied") throw RendererException("渲染器未确认预览设置")
+                    previewInFlightSpec = null
+                    _status.value = RendererStatus(RendererStatus.Phase.READY, "预览已更新")
                 } catch (cause: Throwable) {
-                    previewRequestIds -= requestId
+                    pendingSpec = pendingSpec ?: value
+                    previewInFlightSpec = null
                     throw cause
                 }
             }
         }
+    }
+
+    private fun stopPreviewJobs(restoreInFlight: Boolean) {
+        specJob?.cancel()
+        previewPumpJob?.cancel()
+        if (restoreInFlight) {
+            restorePreviewAfterReload()
+        } else {
+            previewInFlightSpec = null
+        }
+        specJob = null
+        previewPumpJob = null
+    }
+
+    private fun restorePreviewAfterReload() {
+        pendingSpec = pendingSpec ?: previewInFlightSpec
+        previewInFlightSpec = null
     }
 
     suspend fun measure(spec: RenderSpec): CanvasMeasurement = operationMutex.withLock {
@@ -236,6 +267,7 @@ class RendererController(
             spec = exportSpec,
         )
         _status.value = RendererStatus(RendererStatus.Phase.READY, "导出完成")
+        if (pendingSpec != null) schedulePreviewUpdate(delayMillis = 0)
         image
     }
 
@@ -272,6 +304,7 @@ class RendererController(
 
     fun retry() {
         recoveryAttempts = 0
+        stopPreviewJobs(restoreInFlight = true)
         _status.value = RendererStatus()
         destroyWebView()
         _generation.value += 1
@@ -280,12 +313,11 @@ class RendererController(
     fun close() {
         if (closed) return
         closed = true
-        specJob?.cancel()
+        stopPreviewJobs(restoreInFlight = false)
         pending.values.forEach { it.cancel() }
         pending.clear()
         exportAssemblies.values.forEach(ExportAssembly::abort)
         exportAssemblies.clear()
-        previewRequestIds.clear()
         destroyWebView()
         scope.cancel()
     }
@@ -387,15 +419,10 @@ class RendererController(
         when (envelope.type) {
             "ready" -> {
                 _status.value = RendererStatus(RendererStatus.Phase.READY, "本地渲染器已就绪")
-                pendingSpec?.let(::updateSpec)
+                if (pendingSpec != null) schedulePreviewUpdate(delayMillis = 0)
             }
             "specApplied" -> {
-                val result = pending.remove(envelope.requestId)
-                val wasPreview = previewRequestIds.remove(envelope.requestId)
-                if (result != null || wasPreview) {
-                    _status.value = RendererStatus(RendererStatus.Phase.READY, "预览已更新")
-                    result?.complete(envelope)
-                }
+                pending.remove(envelope.requestId)?.complete(envelope)
             }
             "exportStarted" -> {
                 if (exportAssemblies.containsKey(envelope.requestId)) {
@@ -429,8 +456,7 @@ class RendererController(
             }
             "renderError" -> {
                 val result = pending.remove(envelope.requestId)
-                val wasPreview = previewRequestIds.remove(envelope.requestId)
-                if (result != null || wasPreview) {
+                if (result != null) {
                     val payload = envelope.payload.jsonObject
                     val message = payload["message"]?.jsonPrimitive?.contentOrNull ?: "渲染失败"
                     exportAssemblies.remove(envelope.requestId)?.abort()
@@ -548,7 +574,7 @@ class RendererController(
             pending.clear()
             exportAssemblies.values.forEach(ExportAssembly::abort)
             exportAssemblies.clear()
-            previewRequestIds.clear()
+            stopPreviewJobs(restoreInFlight = true)
             view.destroy()
             webView = null
             if (!closed && recoveryAttempts < MAX_AUTOMATIC_RECOVERIES) {
@@ -644,7 +670,7 @@ class RendererController(
         const val RENDERER_URL = "$TRUSTED_ORIGIN/renderer/index.html"
         const val BRIDGE_OBJECT = "LyricsCardNative"
         const val PROTOCOL_VERSION = 1
-        const val PREVIEW_DEBOUNCE_MS = 120L
+        const val PREVIEW_DEBOUNCE_MS = 40L
         const val READY_TIMEOUT_MS = 10_000L
         const val SPEC_TIMEOUT_MS = 8_000L
         const val EXPORT_TIMEOUT_MS = 30_000L

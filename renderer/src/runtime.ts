@@ -16,7 +16,8 @@ import {
 let controller: RendererController | null = null;
 let activeSpec: RenderSpec = DEFAULT_RENDER_SPEC;
 let activeExportRequestId: string | null = null;
-let exportSerial: Promise<void> = Promise.resolve();
+let renderSerial: Promise<void> = Promise.resolve();
+const exportRequestIds = new Set<string>();
 const cancelledRequests = new Set<string>();
 let listenersInstalled = false;
 
@@ -56,31 +57,39 @@ async function handleIncoming(input: unknown) {
         send(message.requestId, "pong", { rendererVersion: RENDERER_VERSION, timestamp: Date.now() });
         return;
       case "setSpec":
-        await applySpecMessage(message);
+        await enqueueRenderOperation(() => applySpecMessage(message));
         return;
       case "measure":
-        await measureMessage(message);
+        await enqueueRenderOperation(() => measureMessage(message));
         return;
       case "extractPalette":
         await extractPaletteMessage(message);
         return;
       case "exportPng":
-        {
-          const run = exportSerial.catch(() => undefined).then(() => exportMessage(message));
-          exportSerial = run.catch(() => undefined);
-          await run;
+        exportRequestIds.add(message.requestId);
+        try {
+          await enqueueRenderOperation(() => exportMessage(message));
+        } finally {
+          exportRequestIds.delete(message.requestId);
+          cancelledRequests.delete(message.requestId);
         }
         return;
       case "cancel": {
         const payload = readObjectPayload(message.payload);
         const target = typeof payload.requestId === "string" ? payload.requestId : activeExportRequestId;
-        if (target) cancelledRequests.add(target);
+        if (target && exportRequestIds.has(target)) cancelledRequests.add(target);
         return;
       }
     }
   } catch (error) {
     reportOperationError(message.requestId, error);
   }
+}
+
+function enqueueRenderOperation(operation: () => Promise<void>) {
+  const run = renderSerial.catch(() => undefined).then(operation);
+  renderSerial = run.catch(() => undefined);
+  return run;
 }
 
 async function applySpecMessage(message: HostEnvelope) {

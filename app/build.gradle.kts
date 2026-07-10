@@ -20,8 +20,8 @@ android {
         applicationId = "com.qrzzzz.lyricscard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -35,7 +35,7 @@ android {
         create("alpha") {
             dimension = "channel"
             applicationIdSuffix = ".alpha"
-            versionNameSuffix = "-alpha01"
+            versionNameSuffix = "-alpha02"
             resValue("string", "app_name", "歌词卡片 Alpha")
         }
         create("production") {

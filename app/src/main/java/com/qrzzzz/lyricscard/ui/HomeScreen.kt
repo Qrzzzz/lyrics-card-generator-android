@@ -83,7 +83,7 @@ fun HomeScreen(
                     Column {
                         Text("歌词卡片", fontWeight = FontWeight.Black)
                         Text(
-                            "Android Alpha 0.1",
+                            "Android Alpha 0.2",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

@@ -79,13 +79,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var editRevision = 0L
     private var savedRevision = 0L
 
-    init {
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(RENDERER_WARMUP_DELAY_MS)
-            rendererController.warmUp()
-        }
-    }
-
     suspend fun createBlank(): Project? {
         if (!flushAutosave()) return null
         return guarded("无法创建项目") { loadCreated(repository.createBlank()) }
@@ -487,7 +480,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val AUTOSAVE_DELAY_MS = 500L
-        const val RENDERER_WARMUP_DELAY_MS = 350L
         const val MAX_HISTORY = 50
         const val THUMBNAIL_EDGE = 480
 

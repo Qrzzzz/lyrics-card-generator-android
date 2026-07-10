@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { LyricsCard } from "./Card";
 import { DEFAULT_RENDER_SPEC } from "./defaultSpec";
@@ -55,8 +55,24 @@ export function App() {
 
 function useViewportSize() {
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
-  useEffect(() => {
-    const update = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+  useLayoutEffect(() => {
+    const update = () => {
+      const next = {
+        width: Math.max(1, window.innerWidth),
+        height: Math.max(1, window.innerHeight)
+      };
+      const width = `${next.width}px`;
+      const height = `${next.height}px`;
+      // Android WebView can finish loading during Compose's zero-height measure pass.
+      // Explicit viewport pixels make the percentage-height renderer recover on attachment.
+      [document.documentElement, document.body, document.getElementById("root")].forEach((element) => {
+        if (!element) return;
+        element.style.width = width;
+        element.style.height = height;
+      });
+      setSize(next);
+    };
+    update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);

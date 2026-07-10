@@ -2,7 +2,7 @@
 
 歌词卡片生成器 Android Alpha 工程。原生界面使用 Jetpack Compose，最终预览与 PNG 继续由 APK 内的 React/CSS 渲染器完成；卡片编辑与导出离线可用，网易云选歌与链接解析按需联网。
 
-当前版本：`0.1.0-alpha01`
+当前版本：`0.2.0-alpha02`
 
 Windows 版基准：[`Qrzzzz/lyrics-card-generator`](https://github.com/Qrzzzz/lyrics-card-generator) `b894db9e121848122a16ddcdaaab1283ffab1e27`（package `4.3.8`）。本仓库不修改相邻的 Windows 工作树；基准提交、字体散列和 Schema 都记录在 `renderer/renderer-manifest.json`。
 
@@ -14,8 +14,8 @@ Windows 版基准：[`Qrzzzz/lyrics-card-generator`](https://github.com/Qrzzzz/l
 - 对齐 Web 版的六步制作流程：选择歌曲、歌词、布局、字体方案、视觉、导出；
 - 网易云歌曲名搜索、结果解析、歌词/封面导入，以及分享文本或链接贴入解析；
 - 本地封面私有存储，RenderSpec 仅保存逻辑 Asset ID；
-- `WebViewAssetLoader` + 固定 Origin 的 WebMessage 通道，应用级 WebView 预热与跨编辑/导出复用；
-- 本地 React/CSS 实时预览、封面取色、1×/2× `html-to-image` PNG；
+- `WebViewAssetLoader` + 固定 Origin 的 WebMessage 通道，前两步不创建预览、第三步按需启动并跨后续步骤/导出复用；
+- 本地 React/CSS latest-wins 串行实时预览、独立自动测高、封面取色、1×/2× `html-to-image` PNG；
 - PNG 按每块 384 KiB 原始数据编号回传，Native 流式写入临时文件并校验顺序、大小和最终图片；
 - SAF 保存、FileProvider 分享、导出结果预览和诊断页；
 - 固定思源黑体/宋体、Renderer manifest、JSON Schema、Fixtures 和单元测试；

@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.qrzzzz.lyricscard.model.RenderSpec
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 
@@ -47,16 +48,20 @@ fun RendererPreview(
     }
 
     LaunchedEffect(controller) { onController(controller) }
+    LaunchedEffect(controller, spec) {
+        controller.updateSpec(spec)
+    }
     LaunchedEffect(controller, previewKey) {
-        delay(120)
-        if (spec.canvas.autoHeight) {
-            runCatching { controller.measure(spec) }
-                .onSuccess { measured ->
-                    controller.updateSpec(spec.copy(canvas = spec.canvas.copy(height = measured.height)))
-                    if (abs(measured.height - spec.canvas.height) > 1) onMeasuredHeight(measured.height)
-                }
-        } else {
-            controller.updateSpec(spec)
+        if (!spec.canvas.autoHeight) return@LaunchedEffect
+        delay(AUTO_HEIGHT_MEASURE_DEBOUNCE_MS)
+        try {
+            val measured = controller.measure(spec)
+            controller.updateSpec(spec.copy(canvas = spec.canvas.copy(height = measured.height)))
+            if (abs(measured.height - spec.canvas.height) > 1) onMeasuredHeight(measured.height)
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (_: Throwable) {
+            // The controller exposes renderer failures through its status overlay.
         }
     }
     Box(
@@ -97,6 +102,8 @@ fun RendererPreview(
         }
     }
 }
+
+private const val AUTO_HEIGHT_MEASURE_DEBOUNCE_MS = 220L
 
 @Composable
 private fun PreviewStatus(

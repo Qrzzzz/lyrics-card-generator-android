@@ -200,6 +200,7 @@ fun EditorScreen(
                 .padding(padding),
         ) {
             val wide = maxWidth >= 840.dp
+            val showPreview = selectedStep >= EditorStep.LAYOUT.ordinal
             if (wide) {
                 Row(
                     modifier = Modifier
@@ -207,15 +208,17 @@ fun EditorScreen(
                         .padding(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    RendererPreview(
-                        spec = project.spec,
-                        controller = renderer,
-                        onMeasuredHeight = onMeasuredHeight,
-                        showSafeArea = showSafeArea,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    )
+                    if (showPreview) {
+                        RendererPreview(
+                            spec = project.spec,
+                            controller = renderer,
+                            onMeasuredHeight = onMeasuredHeight,
+                            showSafeArea = showSafeArea,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
+                    }
                     EditorProperties(
                         project = project,
                         selectedStep = selectedStep,
@@ -230,7 +233,7 @@ fun EditorScreen(
                         onSearchNetease = onSearchNetease,
                         onResolveNeteaseSong = onResolveNeteaseSong,
                         onResolveNeteaseLink = onResolveNeteaseLink,
-                        modifier = Modifier.width(420.dp),
+                        modifier = if (showPreview) Modifier.width(420.dp) else Modifier.fillMaxSize(),
                     )
                 }
             } else {
@@ -240,15 +243,17 @@ fun EditorScreen(
                         .padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    RendererPreview(
-                        spec = project.spec,
-                        controller = renderer,
-                        onMeasuredHeight = onMeasuredHeight,
-                        showSafeArea = showSafeArea,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(0.42f),
-                    )
+                    if (showPreview) {
+                        RendererPreview(
+                            spec = project.spec,
+                            controller = renderer,
+                            onMeasuredHeight = onMeasuredHeight,
+                            showSafeArea = showSafeArea,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(0.42f),
+                        )
+                    }
                     EditorProperties(
                         project = project,
                         selectedStep = selectedStep,
@@ -263,9 +268,13 @@ fun EditorScreen(
                         onSearchNetease = onSearchNetease,
                         onResolveNeteaseSong = onResolveNeteaseSong,
                         onResolveNeteaseLink = onResolveNeteaseLink,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(0.58f),
+                        modifier = if (showPreview) {
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(0.58f)
+                        } else {
+                            Modifier.fillMaxSize()
+                        },
                     )
                 }
             }
