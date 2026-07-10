@@ -95,7 +95,8 @@ fun LyricsCardApp(viewModel: AppViewModel) {
                     canUndo = editor.canUndo,
                     canRedo = editor.canRedo,
                     showSafeArea = preferences.showSafeArea,
-                    assetStore = viewModel.assetStore,
+                    renderer = viewModel.rendererController,
+                    netease = editor.netease,
                     onBack = {
                         scope.launch {
                             if (viewModel.flushAutosave()) navController.popBackStack()
@@ -109,6 +110,9 @@ fun LyricsCardApp(viewModel: AppViewModel) {
                     onRedo = viewModel::redo,
                     onSelectCover = viewModel::importCover,
                     onRemoveCover = viewModel::removeCover,
+                    onSearchNetease = viewModel::searchNetease,
+                    onResolveNeteaseSong = viewModel::resolveNeteaseSong,
+                    onResolveNeteaseLink = viewModel::resolveNeteaseLink,
                     onExport = {
                         scope.launch {
                             if (viewModel.flushAutosave()) navController.navigate(Routes.export(project.id))
@@ -135,7 +139,7 @@ fun LyricsCardApp(viewModel: AppViewModel) {
             } else {
                 ExportScreen(
                     project = project,
-                    assetStore = viewModel.assetStore,
+                    renderer = viewModel.rendererController,
                     defaultMultiplier = preferences.defaultExportScale,
                     onBack = { navController.popBackStack() },
                     onExportRecorded = viewModel::recordExport,

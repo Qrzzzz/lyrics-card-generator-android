@@ -79,6 +79,10 @@ android {
         )
     }
 
+    androidResources {
+        noCompress += "otf"
+    }
+
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
@@ -142,6 +146,7 @@ val buildRenderer by tasks.registering(Exec::class) {
         rootProject.file("renderer/renderer-manifest.json"),
     )
     inputs.dir(rootProject.file("renderer/src"))
+    inputs.dir(rootProject.file("renderer/scripts"))
     inputs.dir(rootProject.file("renderer/public"))
     inputs.dir(rootProject.file("renderer/schema"))
     outputs.dir(project.file("src/main/assets/renderer"))

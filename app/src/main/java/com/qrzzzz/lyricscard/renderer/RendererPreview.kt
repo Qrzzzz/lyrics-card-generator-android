@@ -16,16 +16,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.qrzzzz.lyricscard.model.RenderSpec
@@ -35,14 +32,12 @@ import kotlin.math.abs
 @Composable
 fun RendererPreview(
     spec: RenderSpec,
-    assetStore: ProjectAssetStore,
+    controller: RendererController,
     modifier: Modifier = Modifier,
     onController: (RendererController) -> Unit = {},
     onMeasuredHeight: (Int) -> Unit = {},
     showSafeArea: Boolean = false,
 ) {
-    val context = LocalContext.current
-    val controller = remember(assetStore) { RendererController(context, assetStore) }
     val status by controller.status.collectAsState()
     val generation by controller.generation.collectAsState()
     val previewKey = if (spec.canvas.autoHeight) {
@@ -64,10 +59,6 @@ fun RendererPreview(
             controller.updateSpec(spec)
         }
     }
-    DisposableEffect(controller) {
-        onDispose(controller::close)
-    }
-
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))

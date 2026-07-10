@@ -1,10 +1,9 @@
-import Ajv2020, { type ErrorObject } from "ajv/dist/2020.js";
-import renderSpecSchema from "../schema/render-spec-v1.schema.json";
+import type { ErrorObject, ValidateFunction } from "ajv";
 import { normalizeHex } from "./color";
+import generatedValidateV1 from "./generated/renderSpecValidator";
 import type { RenderSpec } from "./types";
 
-const ajv = new Ajv2020({ allErrors: true, strict: true, strictTypes: false });
-const validateV1 = ajv.compile<RenderSpec>(renderSpecSchema);
+const validateV1 = generatedValidateV1 as ValidateFunction<RenderSpec>;
 
 export class InvalidRenderSpecError extends Error {
   readonly validationErrors: readonly ErrorObject[];

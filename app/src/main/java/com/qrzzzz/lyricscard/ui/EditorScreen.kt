@@ -20,17 +20,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.NavigateNext
 import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -58,7 +64,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.qrzzzz.lyricscard.model.BackgroundMode
@@ -75,14 +83,18 @@ import com.qrzzzz.lyricscard.model.SongSource
 import com.qrzzzz.lyricscard.model.TextAlignment
 import com.qrzzzz.lyricscard.model.TextColorMode
 import com.qrzzzz.lyricscard.model.TextColorPreset
-import com.qrzzzz.lyricscard.renderer.ProjectAssetStore
 import com.qrzzzz.lyricscard.renderer.RendererController
 import com.qrzzzz.lyricscard.renderer.RendererPreview
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-private enum class EditorTab(val label: String) {
-    CONTENT("内容"), LAYOUT("布局"), STYLE("样式"), TYPOGRAPHY("文字"), BRANDING("品牌")
+private enum class EditorStep(val label: String, val description: String) {
+    CHOOSE_SONG("选择歌曲", "搜索、链接解析或手动填写歌曲信息"),
+    LYRICS("歌词", "整理原文、译文与纯音乐内容"),
+    LAYOUT("布局", "设置方向、比例与卡片元素"),
+    FONT("字体方案", "调整字体、字号、行高与对齐"),
+    VISUAL("视觉", "设置配色、背景、网格与品牌信息"),
+    EXPORT("导出", "确认卡片内容并进入 PNG 输出"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -93,7 +105,8 @@ fun EditorScreen(
     canUndo: Boolean,
     canRedo: Boolean,
     showSafeArea: Boolean,
-    assetStore: ProjectAssetStore,
+    renderer: RendererController,
+    netease: NeteaseLookupUiState,
     onBack: () -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
@@ -103,10 +116,12 @@ fun EditorScreen(
     onRedo: () -> Unit,
     onSelectCover: (Uri) -> Unit,
     onRemoveCover: () -> Unit,
+    onSearchNetease: (String) -> Unit,
+    onResolveNeteaseSong: (String) -> Unit,
+    onResolveNeteaseLink: (String) -> Unit,
     onExport: () -> Unit,
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-    var renderer by remember { mutableStateOf<RendererController?>(null) }
+    var selectedStep by remember(project.id) { mutableIntStateOf(0) }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(onSelectCover)
     }
@@ -118,7 +133,7 @@ fun EditorScreen(
                     Column {
                         Text(project.name, maxLines = 1, fontWeight = FontWeight.Bold)
                         Text(
-                            if (isSaving) "正在自动保存…" else "已自动保存",
+                            "${selectedStep + 1}/${EditorStep.entries.size} · ${if (isSaving) "正在自动保存…" else "已自动保存"}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -142,16 +157,39 @@ fun EditorScreen(
         },
         bottomBar = {
             Surface(shadowElevation = 10.dp) {
-                Button(
-                    onClick = onExport,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                        .height(52.dp),
-                    shape = RoundedCornerShape(18.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(Icons.Rounded.FileUpload, contentDescription = null)
-                    Text("导出 PNG", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
+                    OutlinedButton(
+                        onClick = { selectedStep = (selectedStep - 1).coerceAtLeast(0) },
+                        enabled = selectedStep > 0,
+                        modifier = Modifier.weight(1f).height(52.dp),
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+                        Text("上一步", modifier = Modifier.padding(start = 6.dp))
+                    }
+                    Button(
+                        onClick = {
+                            if (selectedStep == EditorStep.entries.lastIndex) onExport()
+                            else selectedStep += 1
+                        },
+                        modifier = Modifier.weight(1.5f).height(52.dp),
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Icon(
+                            if (selectedStep == EditorStep.entries.lastIndex) Icons.Rounded.FileUpload else Icons.AutoMirrored.Rounded.NavigateNext,
+                            contentDescription = null,
+                        )
+                        Text(
+                            if (selectedStep == EditorStep.entries.lastIndex) "导出 PNG" else "下一步",
+                            modifier = Modifier.padding(start = 8.dp),
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
             }
         },
@@ -171,8 +209,7 @@ fun EditorScreen(
                 ) {
                     RendererPreview(
                         spec = project.spec,
-                        assetStore = assetStore,
-                        onController = { renderer = it },
+                        controller = renderer,
                         onMeasuredHeight = onMeasuredHeight,
                         showSafeArea = showSafeArea,
                         modifier = Modifier
@@ -181,14 +218,18 @@ fun EditorScreen(
                     )
                     EditorProperties(
                         project = project,
-                        selectedTab = selectedTab,
-                        onSelectedTab = { selectedTab = it },
+                        selectedStep = selectedStep,
+                        onSelectedStep = { selectedStep = it },
+                        netease = netease,
                         onProjectNameChange = onProjectNameChange,
                         onSpecChange = onSpecChange,
                         onPickCover = { coverPicker.launch("image/*") },
                         onRemoveCover = onRemoveCover,
                         renderer = renderer,
                         onPaletteExtracted = onPaletteExtracted,
+                        onSearchNetease = onSearchNetease,
+                        onResolveNeteaseSong = onResolveNeteaseSong,
+                        onResolveNeteaseLink = onResolveNeteaseLink,
                         modifier = Modifier.width(420.dp),
                     )
                 }
@@ -201,8 +242,7 @@ fun EditorScreen(
                 ) {
                     RendererPreview(
                         spec = project.spec,
-                        assetStore = assetStore,
-                        onController = { renderer = it },
+                        controller = renderer,
                         onMeasuredHeight = onMeasuredHeight,
                         showSafeArea = showSafeArea,
                         modifier = Modifier
@@ -211,14 +251,18 @@ fun EditorScreen(
                     )
                     EditorProperties(
                         project = project,
-                        selectedTab = selectedTab,
-                        onSelectedTab = { selectedTab = it },
+                        selectedStep = selectedStep,
+                        onSelectedStep = { selectedStep = it },
+                        netease = netease,
                         onProjectNameChange = onProjectNameChange,
                         onSpecChange = onSpecChange,
                         onPickCover = { coverPicker.launch("image/*") },
                         onRemoveCover = onRemoveCover,
                         renderer = renderer,
                         onPaletteExtracted = onPaletteExtracted,
+                        onSearchNetease = onSearchNetease,
+                        onResolveNeteaseSong = onResolveNeteaseSong,
+                        onResolveNeteaseLink = onResolveNeteaseLink,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(0.58f),
@@ -232,49 +276,72 @@ fun EditorScreen(
 @Composable
 private fun EditorProperties(
     project: Project,
-    selectedTab: Int,
-    onSelectedTab: (Int) -> Unit,
+    selectedStep: Int,
+    onSelectedStep: (Int) -> Unit,
+    netease: NeteaseLookupUiState,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onPickCover: () -> Unit,
     onRemoveCover: () -> Unit,
-    renderer: RendererController?,
+    renderer: RendererController,
     onPaletteExtracted: (PaletteSpec) -> Unit,
+    onSearchNetease: (String) -> Unit,
+    onResolveNeteaseSong: (String) -> Unit,
+    onResolveNeteaseLink: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier, shape = RoundedCornerShape(22.dp), tonalElevation = 2.dp) {
         Column {
             ScrollableTabRow(
-                selectedTabIndex = selectedTab,
+                selectedTabIndex = selectedStep,
                 edgePadding = 8.dp,
                 divider = {},
             ) {
-                EditorTab.entries.forEachIndexed { index, tab ->
+                EditorStep.entries.forEachIndexed { index, step ->
                     Tab(
-                        selected = index == selectedTab,
-                        onClick = { onSelectedTab(index) },
-                        text = { Text(tab.label, fontWeight = if (index == selectedTab) FontWeight.Bold else null) },
+                        selected = index == selectedStep,
+                        onClick = { onSelectedStep(index) },
+                        text = {
+                            Text(
+                                "${index + 1}. ${step.label}",
+                                fontWeight = if (index == selectedStep) FontWeight.Bold else null,
+                            )
+                        },
                     )
                 }
             }
+            Text(
+                EditorStep.entries[selectedStep].description,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 item {
-                    when (EditorTab.entries[selectedTab]) {
-                        EditorTab.CONTENT -> ContentPanel(
-                            project,
-                            onProjectNameChange,
-                            onSpecChange,
-                            onPickCover,
-                            onRemoveCover,
+                    when (EditorStep.entries[selectedStep]) {
+                        EditorStep.CHOOSE_SONG -> ChooseSongPanel(
+                            project = project,
+                            netease = netease,
+                            onProjectNameChange = onProjectNameChange,
+                            onSpecChange = onSpecChange,
+                            onPickCover = onPickCover,
+                            onRemoveCover = onRemoveCover,
+                            onSearchNetease = onSearchNetease,
+                            onResolveNeteaseSong = onResolveNeteaseSong,
+                            onResolveNeteaseLink = onResolveNeteaseLink,
                         )
-                        EditorTab.LAYOUT -> LayoutPanel(project.spec, onSpecChange)
-                        EditorTab.STYLE -> StylePanel(project.spec, renderer, onSpecChange, onPaletteExtracted)
-                        EditorTab.TYPOGRAPHY -> TypographyPanel(project.spec, onSpecChange)
-                        EditorTab.BRANDING -> BrandingPanel(project.spec, onSpecChange)
+                        EditorStep.LYRICS -> LyricsPanel(project.spec, onSpecChange)
+                        EditorStep.LAYOUT -> LayoutPanel(project.spec, onSpecChange)
+                        EditorStep.FONT -> TypographyPanel(project.spec, onSpecChange)
+                        EditorStep.VISUAL -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            StylePanel(project.spec, renderer, onSpecChange, onPaletteExtracted)
+                            BrandingPanel(project.spec, onSpecChange)
+                        }
+                        EditorStep.EXPORT -> ExportStepPanel(project)
                     }
                 }
             }
@@ -283,18 +350,111 @@ private fun EditorProperties(
 }
 
 @Composable
-private fun ContentPanel(
+private fun ChooseSongPanel(
     project: Project,
+    netease: NeteaseLookupUiState,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onPickCover: () -> Unit,
     onRemoveCover: () -> Unit,
+    onSearchNetease: (String) -> Unit,
+    onResolveNeteaseSong: (String) -> Unit,
+    onResolveNeteaseLink: (String) -> Unit,
 ) {
     val spec = project.spec
-    val instrumental = spec.content.mode == ContentMode.INSTRUMENTAL
     var projectNameDraft by remember(project.id) { mutableStateOf(project.name) }
+    var searchQuery by remember(project.id) { mutableStateOf("") }
+    var linkInput by remember(project.id) { mutableStateOf("") }
+    val clipboard = LocalClipboardManager.current
+    val lookupBusy = netease.isSearching || netease.isResolving
     PanelColumn {
-        SectionTitle("项目与歌曲")
+        SectionTitle("网易云选歌")
+        Text(
+            "与 Web 版一致，可先按歌名搜索；也可直接贴入网易云分享文本或链接。",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it.take(120) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("歌曲名或歌手") },
+            placeholder = { Text("例如：晴天 周杰伦") },
+            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+            trailingIcon = if (netease.isSearching) {
+                { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
+            } else null,
+            singleLine = true,
+            enabled = !netease.isResolving,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSearchNetease(searchQuery) }),
+        )
+        Button(
+            onClick = { onSearchNetease(searchQuery) },
+            enabled = searchQuery.isNotBlank() && !lookupBusy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Rounded.Search, contentDescription = null)
+            Text("搜索网易云歌曲", modifier = Modifier.padding(start = 8.dp))
+        }
+        netease.results.forEach { result ->
+            OutlinedButton(
+                onClick = { onResolveNeteaseSong(result.id) },
+                enabled = !lookupBusy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        listOf(result.title, result.artist).filter(String::isNotBlank).joinToString(" · "),
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (result.album.isNotBlank()) {
+                        Text(
+                            result.album,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+        OutlinedTextField(
+            value = linkInput,
+            onValueChange = { linkInput = it.take(8_192) },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("网易云分享文本或链接") },
+            placeholder = { Text("https://music.163.com/song?id=…") },
+            leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null) },
+            minLines = 2,
+            maxLines = 4,
+            enabled = !lookupBusy,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(
+                onClick = { clipboard.getText()?.text?.let { linkInput = it.take(8_192) } },
+                enabled = !lookupBusy,
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Rounded.ContentPaste, contentDescription = null)
+                Text("贴入", modifier = Modifier.padding(start = 6.dp))
+            }
+            Button(
+                onClick = { onResolveNeteaseLink(linkInput) },
+                enabled = linkInput.isNotBlank() && !lookupBusy,
+                modifier = Modifier.weight(1f),
+            ) {
+                if (netease.isResolving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Rounded.AutoAwesome, contentDescription = null)
+                Text("解析", modifier = Modifier.padding(start = 6.dp))
+            }
+        }
+        Text(
+            netease.message,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        SectionTitle("手动补充")
         OutlinedTextField(
             value = projectNameDraft,
             onValueChange = { value ->
@@ -352,7 +512,14 @@ private fun ContentPanel(
             }
         }
 
-        SectionTitle("歌词")
+    }
+}
+
+@Composable
+private fun LyricsPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
+    val instrumental = spec.content.mode == ContentMode.INSTRUMENTAL
+    PanelColumn {
+        SectionTitle("歌词内容")
         SettingSwitch("纯音乐模式", instrumental) { enabled ->
             onSpecChange(
                 if (enabled) {
@@ -382,9 +549,7 @@ private fun ContentPanel(
             OutlinedTextField(
                 value = spec.content.lyrics,
                 onValueChange = { onSpecChange(spec.copy(content = spec.content.copy(lyrics = it))) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp),
+                modifier = Modifier.fillMaxWidth().height(180.dp),
                 label = { Text("原文歌词") },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -402,9 +567,7 @@ private fun ContentPanel(
                 OutlinedTextField(
                     value = spec.content.translation,
                     onValueChange = { onSpecChange(spec.copy(content = spec.content.copy(translation = it))) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp),
+                    modifier = Modifier.fillMaxWidth().height(150.dp),
                     label = { Text("译文歌词") },
                 )
             }
@@ -635,6 +798,52 @@ private fun BrandingPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) 
         }
         SettingSwitch("显示 Generated watermark", spec.visibility.showGeneratedWatermark) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showGeneratedWatermark = it)))
+        }
+    }
+}
+
+@Composable
+private fun ExportStepPanel(project: Project) {
+    val spec = project.spec
+    val songReady = spec.song.title.isNotBlank() || spec.song.artist.isNotBlank()
+    val contentReady = spec.content.mode == ContentMode.INSTRUMENTAL || spec.content.lyrics.isNotBlank()
+    PanelColumn {
+        SectionTitle("导出前确认")
+        Text(project.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+        ReadinessRow("歌曲信息", songReady, if (songReady) "已填写" else "仍可返回第一步补充")
+        ReadinessRow("卡片内容", contentReady, if (contentReady) "已准备" else "歌词为空")
+        ReadinessRow(
+            "画布",
+            true,
+            "${spec.canvas.width} × ${spec.canvas.height} · ${if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) "竖版" else "横版"}",
+        )
+        Text(
+            "点击下方“导出 PNG”后，可选择标准/高清倍率、文件名，并保存或分享图片。",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ReadinessRow(label: String, ready: Boolean, detail: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                if (ready) Icons.Rounded.Check else Icons.Rounded.Close,
+                contentDescription = null,
+                tint = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+            Column {
+                Text(label, fontWeight = FontWeight.Bold)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

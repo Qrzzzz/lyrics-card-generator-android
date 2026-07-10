@@ -7,13 +7,18 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qrzzzz.lyricscard.LyricsCardApplication
+import com.qrzzzz.lyricscard.data.NeteaseMusicService
+import com.qrzzzz.lyricscard.data.NeteaseSongSearchResult
+import com.qrzzzz.lyricscard.data.ResolvedNeteaseSong
 import com.qrzzzz.lyricscard.data.UserPreferences
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.ProjectSummary
 import com.qrzzzz.lyricscard.model.PaletteSpec
 import com.qrzzzz.lyricscard.model.RenderSpec
+import com.qrzzzz.lyricscard.model.SongSource
 import com.qrzzzz.lyricscard.model.requireValid
 import com.qrzzzz.lyricscard.renderer.ExportedImage
+import com.qrzzzz.lyricscard.renderer.RendererController
 import java.io.File
 import java.util.ArrayDeque
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +43,14 @@ data class EditorUiState(
     val errorMessage: String? = null,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
+    val netease: NeteaseLookupUiState = NeteaseLookupUiState(),
+)
+
+data class NeteaseLookupUiState(
+    val results: List<NeteaseSongSearchResult> = emptyList(),
+    val isSearching: Boolean = false,
+    val isResolving: Boolean = false,
+    val message: String = "可按歌曲名搜索，或贴入网易云分享链接",
 )
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
@@ -45,6 +58,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = app.projectRepository
     val assetStore = app.assetStore
     private val preferencesRepository = app.preferencesRepository
+    private val neteaseMusicService = NeteaseMusicService()
+    val rendererController = RendererController(app, assetStore)
 
     val preferences: StateFlow<UserPreferences> = preferencesRepository.preferences
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UserPreferences())
@@ -57,10 +72,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val editor: StateFlow<EditorUiState> = _editor.asStateFlow()
     private val saveMutex = Mutex()
     private var autosaveJob: Job? = null
+    private var neteaseSearchJob: Job? = null
+    private var neteaseResolveJob: Job? = null
     private val undoStack = ArrayDeque<RenderSpec>()
     private val redoStack = ArrayDeque<RenderSpec>()
     private var editRevision = 0L
     private var savedRevision = 0L
+
+    init {
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(RENDERER_WARMUP_DELAY_MS)
+            rendererController.warmUp()
+        }
+    }
 
     suspend fun createBlank(): Project? {
         if (!flushAutosave()) return null
@@ -192,6 +216,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun searchNetease(keyword: String) {
+        val normalized = keyword.trim()
+        val projectId = _editor.value.currentProject?.id ?: return
+        neteaseSearchJob?.cancel()
+        if (normalized.isBlank()) {
+            updateNetease { it.copy(results = emptyList(), isSearching = false, message = "请输入歌曲名或歌手") }
+            return
+        }
+        updateNetease { it.copy(isSearching = true, message = "正在搜索网易云音乐…") }
+        neteaseSearchJob = viewModelScope.launch {
+            try {
+                val results = neteaseMusicService.search(normalized)
+                if (_editor.value.currentProject?.id != projectId) return@launch
+                updateNetease {
+                    it.copy(
+                        results = results,
+                        isSearching = false,
+                        message = if (results.isEmpty()) "没有找到匹配歌曲，可继续手动填写" else "选择一首歌曲以导入信息与可用歌词",
+                    )
+                }
+            } catch (cause: CancellationException) {
+                throw cause
+            } catch (cause: Throwable) {
+                if (_editor.value.currentProject?.id == projectId) {
+                    updateNetease { it.copy(isSearching = false, message = cause.message ?: "网易云搜索失败") }
+                }
+            }
+        }
+    }
+
+    fun resolveNeteaseSong(id: String) {
+        resolveNetease { neteaseMusicService.resolveSong(id) }
+    }
+
+    fun resolveNeteaseLink(input: String) {
+        resolveNetease { neteaseMusicService.resolveLink(input) }
+    }
+
     suspend fun duplicateProject(id: String): Project? = guarded("复制失败") { repository.duplicate(id) }
 
     suspend fun renameProject(id: String, name: String): Boolean = guarded("重命名失败") {
@@ -272,7 +334,78 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         autosaveJob?.cancel()
+        neteaseSearchJob?.cancel()
+        neteaseResolveJob?.cancel()
+        rendererController.close()
         super.onCleared()
+    }
+
+    private fun resolveNetease(block: suspend () -> ResolvedNeteaseSong) {
+        val projectId = _editor.value.currentProject?.id ?: return
+        neteaseResolveJob?.cancel()
+        updateNetease { it.copy(isResolving = true, message = "正在解析歌曲信息、歌词与封面…") }
+        neteaseResolveJob = viewModelScope.launch {
+            var importedCoverId: String? = null
+            try {
+                val resolved = block()
+                importedCoverId = resolved.coverUrl.takeIf(String::isNotBlank)?.let { coverUrl ->
+                    runCatching {
+                        val bytes = neteaseMusicService.downloadCover(coverUrl)
+                        assetStore.importCover(bytes)
+                    }.getOrNull()
+                }
+                if (_editor.value.currentProject?.id != projectId) {
+                    importedCoverId?.let { assetStore.delete(it) }
+                    return@launch
+                }
+                val previousCoverId = _editor.value.currentProject?.spec?.song?.coverAssetId
+                val nextCoverId = importedCoverId
+                val nextTitle = resolved.title.take(240)
+                val nextArtist = resolved.artist.take(240)
+                val nextAlbum = resolved.album.take(240)
+                updateSpec { spec ->
+                    spec.copy(
+                        song = spec.song.copy(
+                            source = SongSource.NETEASE,
+                            title = nextTitle,
+                            artist = nextArtist,
+                            album = nextAlbum,
+                            coverAssetId = nextCoverId ?: spec.song.coverAssetId,
+                        ),
+                        content = if (resolved.lyrics.isBlank()) spec.content else spec.content.copy(lyrics = resolved.lyrics),
+                        visibility = if (nextCoverId == null) spec.visibility else spec.visibility.copy(showCover = true),
+                        branding = spec.branding.copy(platform = SongSource.NETEASE),
+                    )
+                }
+                val appliedSong = _editor.value.currentProject?.spec?.song
+                check(appliedSong?.title == nextTitle && (nextCoverId == null || appliedSong.coverAssetId == nextCoverId)) {
+                    "无法应用网易云歌曲信息"
+                }
+                importedCoverId = null // The project owns the imported asset from this point onward.
+                if (nextCoverId != null && previousCoverId != null && previousCoverId != nextCoverId) {
+                    assetStore.delete(previousCoverId)
+                }
+                val imported = buildList {
+                    add("歌曲信息")
+                    if (resolved.lyrics.isNotBlank()) add("歌词")
+                    if (nextCoverId != null) add("封面")
+                }.joinToString("、")
+                updateNetease { it.copy(isResolving = false, message = "已从网易云导入$imported") }
+                flushAutosave()
+            } catch (cause: CancellationException) {
+                importedCoverId?.let { assetStore.delete(it) }
+                throw cause
+            } catch (cause: Throwable) {
+                importedCoverId?.let { assetStore.delete(it) }
+                if (_editor.value.currentProject?.id == projectId) {
+                    updateNetease { it.copy(isResolving = false, message = cause.message ?: "网易云解析失败") }
+                }
+            }
+        }
+    }
+
+    private fun updateNetease(transform: (NeteaseLookupUiState) -> NeteaseLookupUiState) {
+        _editor.value = _editor.value.copy(netease = transform(_editor.value.netease))
     }
 
     private fun scheduleAutosave() {
@@ -354,6 +487,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         const val AUTOSAVE_DELAY_MS = 500L
+        const val RENDERER_WARMUP_DELAY_MS = 350L
         const val MAX_HISTORY = 50
         const val THUMBNAIL_EDGE = 480
 

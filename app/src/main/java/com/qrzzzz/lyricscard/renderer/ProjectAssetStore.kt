@@ -7,9 +7,11 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import android.webkit.WebResourceResponse
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,6 +27,17 @@ class ProjectAssetStore(context: Context) {
     private val root = File(appContext.filesDir, "project-assets").apply { mkdirs() }
 
     suspend fun importCover(uri: Uri): String = withContext(Dispatchers.IO) {
+        appContext.contentResolver.openInputStream(uri)?.use(::importCover)
+            ?: error("无法打开所选图片")
+    }
+
+    suspend fun importCover(bytes: ByteArray): String = withContext(Dispatchers.IO) {
+        require(bytes.isNotEmpty()) { "无法读取空图片" }
+        require(bytes.size <= MAX_COVER_BYTES) { "封面图片不能超过 25 MB" }
+        ByteArrayInputStream(bytes).use(::importCover)
+    }
+
+    private fun importCover(input: InputStream): String {
         val id = UUID.randomUUID().toString()
         val dataFile = dataFile(id)
         val mimeFile = mimeFile(id)
@@ -32,21 +45,19 @@ class ProjectAssetStore(context: Context) {
         val dataTemp = File(root, "$id.image.tmp")
         val mimeTemp = File(root, "$id.mime.tmp")
 
-        try {
-            appContext.contentResolver.openInputStream(uri)?.use { input ->
-                importFile.outputStream().use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var total = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        require(total <= MAX_COVER_BYTES) { "封面图片不能超过 25 MB" }
-                        output.write(buffer, 0, read)
-                    }
-                    require(total > 0) { "无法读取空图片" }
+        return try {
+            importFile.outputStream().use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var total = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    total += read
+                    require(total <= MAX_COVER_BYTES) { "封面图片不能超过 25 MB" }
+                    output.write(buffer, 0, read)
                 }
-            } ?: error("无法打开所选图片")
+                require(total > 0) { "无法读取空图片" }
+            }
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(importFile.absolutePath, bounds)
             require(bounds.outWidth > 0 && bounds.outHeight > 0) { "所选文件不是可解码的图片" }
@@ -123,7 +134,7 @@ class ProjectAssetStore(context: Context) {
         return try {
             WebResourceResponse(mime, null, FileInputStream(file)).also {
                 it.responseHeaders = mapOf(
-                    "Cache-Control" to "no-store",
+                    "Cache-Control" to "public, max-age=31536000, immutable",
                     "X-Content-Type-Options" to "nosniff",
                 )
             }

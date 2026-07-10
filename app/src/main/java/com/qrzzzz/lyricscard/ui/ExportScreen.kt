@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.renderer.ExportedImage
-import com.qrzzzz.lyricscard.renderer.ProjectAssetStore
 import com.qrzzzz.lyricscard.renderer.RendererController
 import com.qrzzzz.lyricscard.renderer.RendererPreview
 import java.text.SimpleDateFormat
@@ -69,14 +68,13 @@ import kotlinx.coroutines.withContext
 @Composable
 fun ExportScreen(
     project: Project,
-    assetStore: ProjectAssetStore,
+    renderer: RendererController,
     defaultMultiplier: Int,
     onBack: () -> Unit,
     onExportRecorded: suspend (ExportedImage) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var renderer by remember { mutableStateOf<RendererController?>(null) }
     var multiplier by remember { mutableIntStateOf(defaultMultiplier.coerceIn(1, 2)) }
     var measuredHeight by remember(project.id) { mutableIntStateOf(project.spec.canvas.height) }
     var exported by remember { mutableStateOf<ExportedImage?>(null) }
@@ -106,16 +104,12 @@ fun ExportScreen(
     }
 
     fun runExport(onReady: (ExportedImage) -> Unit) {
-        val controller = renderer ?: run {
-            error = "渲染器尚未就绪"
-            return
-        }
         scope.launch {
             busy = true
             error = null
             status = "正在生成 ${multiplier}× PNG…"
             try {
-                val image = controller.exportPng(project.spec, multiplier)
+                val image = renderer.exportPng(project.spec, multiplier)
                 runCatching { onExportRecorded(image) }
                 exported = image
                 status = "已生成 ${image.width} × ${image.height} PNG"
@@ -158,8 +152,7 @@ fun ExportScreen(
                 ) {
                     RendererPreview(
                         spec = project.spec.copy(canvas = project.spec.canvas.copy(pixelRatio = multiplier)),
-                        assetStore = assetStore,
-                        onController = { renderer = it },
+                        controller = renderer,
                         onMeasuredHeight = { measuredHeight = it },
                         modifier = Modifier.weight(1f),
                     )
@@ -197,8 +190,7 @@ fun ExportScreen(
                 ) {
                     RendererPreview(
                         spec = project.spec.copy(canvas = project.spec.canvas.copy(pixelRatio = multiplier)),
-                        assetStore = assetStore,
-                        onController = { renderer = it },
+                        controller = renderer,
                         onMeasuredHeight = { measuredHeight = it },
                         modifier = Modifier
                             .fillMaxWidth()

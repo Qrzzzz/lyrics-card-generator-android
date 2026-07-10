@@ -5,6 +5,8 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
+import android.os.Looper
+import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -112,6 +114,10 @@ class RendererController(
     @SuppressLint("SetJavaScriptEnabled")
     fun createWebView(context: Context): WebView {
         check(!closed) { "RendererController is closed" }
+        webView?.let { existing ->
+            (existing.parent as? ViewGroup)?.removeView(existing)
+            return existing
+        }
         val assetLoader = WebViewAssetLoader.Builder()
             .setDomain(APP_ASSET_HOST)
             .addPathHandler("/renderer/") { path -> openRendererAsset(path) }
@@ -136,7 +142,7 @@ class RendererController(
                 setSupportMultipleWindows(false)
                 builtInZoomControls = false
                 displayZoomControls = false
-                cacheMode = WebSettings.LOAD_NO_CACHE
+                cacheMode = WebSettings.LOAD_DEFAULT
                 blockNetworkLoads = true
                 loadsImagesAutomatically = true
                 mediaPlaybackRequiresUserGesture = true
@@ -164,6 +170,13 @@ class RendererController(
                 view.destroy()
             }
         }
+    }
+
+    /** Starts the renderer while the user is still on the project list. Must run on the main thread. */
+    fun warmUp() {
+        if (closed || webView != null) return
+        check(Looper.myLooper() == Looper.getMainLooper()) { "Renderer warm-up must run on the main thread" }
+        createWebView(appContext)
     }
 
     fun updateSpec(spec: RenderSpec) {
@@ -566,9 +579,10 @@ class RendererController(
     }
 
     private fun openRendererAsset(path: String): WebResourceResponse? {
-        if (!SAFE_RENDERER_PATH.matches(path) || path.split('/').any { it == ".." }) return null
+        val assetPath = path.substringBefore('?').substringBefore('#')
+        if (!SAFE_RENDERER_PATH.matches(assetPath) || assetPath.split('/').any { it == ".." }) return null
         return runCatching {
-            val mime = when (path.substringAfterLast('.', "")) {
+            val mime = when (assetPath.substringAfterLast('.', "")) {
                 "html" -> "text/html"
                 "js" -> "application/javascript"
                 "css" -> "text/css"
@@ -580,13 +594,17 @@ class RendererController(
                 "otf" -> "font/otf"
                 else -> "application/octet-stream"
             }
+            val cacheControl = when {
+                assetPath == "index.html" || assetPath.endsWith(".json") -> "no-cache"
+                else -> "public, max-age=31536000, immutable"
+            }
             WebResourceResponse(
                 mime,
                 if (mime.startsWith("text/") || mime.contains("json") || mime.contains("javascript")) "utf-8" else null,
-                appContext.assets.open("renderer/$path"),
+                appContext.assets.open("renderer/$assetPath"),
             ).also {
                 it.responseHeaders = mapOf(
-                    "Cache-Control" to "no-store",
+                    "Cache-Control" to cacheControl,
                     "X-Content-Type-Options" to "nosniff",
                 )
             }
