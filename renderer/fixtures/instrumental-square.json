@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "rendererVersion": "android-alpha-renderer-1",
+  "locale": "zh-TW",
+  "song": {
+    "source": "qq",
+    "title": "雨後街景",
+    "artist": "微光電台",
+    "album": "城市留聲機",
+    "explicit": false,
+    "coverAssetId": null
+  },
+  "content": {
+    "mode": "instrumental",
+    "lyrics": "",
+    "translationEnabled": false,
+    "translation": "",
+    "instrumentalText": "純音樂"
+  },
+  "canvas": {
+    "layoutMode": "portrait",
+    "ratio": "1:1",
+    "width": 1080,
+    "height": 1080,
+    "autoHeight": false,
+    "pixelRatio": 2
+  },
+  "typography": {
+    "fontScheme": "serif-heavy",
+    "fontFamily": "Source Han Serif SC",
+    "lyricSize": 60,
+    "lineHeight": 1.4,
+    "alignment": "left",
+    "translationScale": 0.75,
+    "twoLineTitle": false,
+    "textColorMode": "auto",
+    "textColorPreset": "warmWhite",
+    "customTextColor": null
+  },
+  "visual": {
+    "backgroundMode": "gradient",
+    "palette": {
+      "dominant": "#293650",
+      "secondary": "#46657B",
+      "accent": "#D18A64"
+    },
+    "gridEnabled": true,
+    "gridDensity": "sparse",
+    "gridOpacity": 0.08
+  },
+  "visibility": {
+    "showCover": true,
+    "showSongInfo": true,
+    "showAlbum": true,
+    "showPlatformBadge": true,
+    "showSharedBy": false,
+    "showGeneratedWatermark": true
+  },
+  "branding": {
+    "sharedByName": "",
+    "platform": "qq"
+  },
+  "media": {
+    "coverCropScale": 1
+  }
+}

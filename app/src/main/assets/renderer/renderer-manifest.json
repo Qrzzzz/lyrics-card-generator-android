@@ -1,0 +1,25 @@
+{
+  "rendererVersion": "android-alpha-renderer-1",
+  "sourceCommit": "b894db9e121848122a16ddcdaaab1283ffab1e27",
+  "sourcePackageVersion": "4.3.8",
+  "schemaVersion": 1,
+  "protocolVersion": 1,
+  "goldenDatasetVersion": "android-alpha-fixtures-v1",
+  "buildTime": "2026-07-10T07:55:34.557Z",
+  "fontManifestHash": "cfd264f074ff825dba28f74f8234ee01f7e55bff4aeb7b1676fd54943563bf7c",
+  "fontLicense": "fonts/LICENSE.txt",
+  "fonts": [
+    {
+      "family": "Source Han Sans SC",
+      "file": "fonts/SourceHanSansSC-Heavy.otf",
+      "weight": 900,
+      "sha256": "4a8b2ee4f041fa56c7a5561f36e13ed6780eec66161c30274fc90b0c5ba7cea2"
+    },
+    {
+      "family": "Source Han Serif SC",
+      "file": "fonts/SourceHanSerifSC-Heavy.otf",
+      "weight": 900,
+      "sha256": "d033af54f96530476faed924ab5d5e9e6ef0833495670fd57bab9a7758398048"
+    }
+  ]
+}

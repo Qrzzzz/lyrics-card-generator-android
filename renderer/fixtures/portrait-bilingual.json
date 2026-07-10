@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "rendererVersion": "android-alpha-renderer-1",
+  "locale": "zh",
+  "song": {
+    "source": "netease",
+    "title": "光落在我们肩上",
+    "artist": "未完待续乐队",
+    "album": "沿途的风景",
+    "explicit": false,
+    "coverAssetId": null
+  },
+  "content": {
+    "mode": "lyrics",
+    "lyrics": "把夜色折成一艘纸船\n让它沿着银河慢慢靠岸\n如果明天仍有风\n就把我们的名字唱完",
+    "translationEnabled": true,
+    "translation": "Fold the night into a paper boat\nLet it drift ashore along the Milky Way\nIf the wind still rises tomorrow\nSing our names through to the end",
+    "instrumentalText": "纯音乐"
+  },
+  "canvas": {
+    "layoutMode": "portrait",
+    "ratio": "4:5",
+    "width": 1080,
+    "height": 1350,
+    "autoHeight": false,
+    "pixelRatio": 2
+  },
+  "typography": {
+    "fontScheme": "sans-heavy",
+    "fontFamily": "Source Han Sans SC",
+    "lyricSize": 56,
+    "lineHeight": 1.4,
+    "alignment": "left",
+    "translationScale": 0.72,
+    "twoLineTitle": false,
+    "textColorMode": "auto",
+    "textColorPreset": "warmWhite",
+    "customTextColor": null
+  },
+  "visual": {
+    "backgroundMode": "palette",
+    "palette": {
+      "dominant": "#163B65",
+      "secondary": "#2B7181",
+      "accent": "#DB936C"
+    },
+    "gridEnabled": true,
+    "gridDensity": "medium",
+    "gridOpacity": 0.12
+  },
+  "visibility": {
+    "showCover": true,
+    "showSongInfo": true,
+    "showAlbum": true,
+    "showPlatformBadge": true,
+    "showSharedBy": true,
+    "showGeneratedWatermark": true
+  },
+  "branding": {
+    "sharedByName": "Shared by Qrzzzz",
+    "platform": "netease"
+  },
+  "media": {
+    "coverCropScale": 1
+  }
+}

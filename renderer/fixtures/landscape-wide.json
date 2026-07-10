@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "rendererVersion": "android-alpha-renderer-1",
+  "locale": "en",
+  "song": {
+    "source": "spotify",
+    "title": "Everything Between the Lines",
+    "artist": "Northbound",
+    "album": "Windows Open at Midnight",
+    "explicit": true,
+    "coverAssetId": null
+  },
+  "content": {
+    "mode": "lyrics",
+    "lyrics": "We left the porch light burning\nFor every road we never knew\nThe map was only paper\nThe north was always you",
+    "translationEnabled": false,
+    "translation": "",
+    "instrumentalText": "Instrumental"
+  },
+  "canvas": {
+    "layoutMode": "landscape",
+    "ratio": "16:9",
+    "width": 1920,
+    "height": 1080,
+    "autoHeight": false,
+    "pixelRatio": 1
+  },
+  "typography": {
+    "fontScheme": "serif-heavy",
+    "fontFamily": "Source Han Serif SC",
+    "lyricSize": 60,
+    "lineHeight": 1.35,
+    "alignment": "left",
+    "translationScale": 0.72,
+    "twoLineTitle": true,
+    "textColorMode": "preset",
+    "textColorPreset": "cream",
+    "customTextColor": null
+  },
+  "visual": {
+    "backgroundMode": "gradient",
+    "palette": {
+      "dominant": "#3B203E",
+      "secondary": "#17365A",
+      "accent": "#C87956"
+    },
+    "gridEnabled": false,
+    "gridDensity": "sparse",
+    "gridOpacity": 0.08
+  },
+  "visibility": {
+    "showCover": true,
+    "showSongInfo": true,
+    "showAlbum": true,
+    "showPlatformBadge": true,
+    "showSharedBy": false,
+    "showGeneratedWatermark": true
+  },
+  "branding": {
+    "sharedByName": "",
+    "platform": "spotify"
+  },
+  "media": {
+    "coverCropScale": 1.18
+  }
+}

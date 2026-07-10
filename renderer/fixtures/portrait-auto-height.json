@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "rendererVersion": "android-alpha-renderer-1",
+  "locale": "fr",
+  "song": {
+    "source": "unknown",
+    "title": "La ville en silence",
+    "artist": "Ligne de fuite",
+    "album": "Après minuit",
+    "explicit": false,
+    "coverAssetId": null
+  },
+  "content": {
+    "mode": "lyrics",
+    "lyrics": "La ville retient son souffle\nSous les fenêtres encore allumées\nNos pas dessinent une route\nQue le matin saura garder\nEt dans le bruit des heures\nJe reconnais ta voix",
+    "translationEnabled": false,
+    "translation": "",
+    "instrumentalText": "Instrumental"
+  },
+  "canvas": {
+    "layoutMode": "portrait",
+    "ratio": "custom",
+    "width": 1040,
+    "height": 1080,
+    "autoHeight": true,
+    "pixelRatio": 1
+  },
+  "typography": {
+    "fontScheme": "sans-heavy",
+    "fontFamily": "Source Han Sans SC",
+    "lyricSize": 52,
+    "lineHeight": 1.42,
+    "alignment": "right",
+    "translationScale": 0.72,
+    "twoLineTitle": true,
+    "textColorMode": "custom",
+    "textColorPreset": "white",
+    "customTextColor": "#F7EEDC"
+  },
+  "visual": {
+    "backgroundMode": "palette",
+    "palette": {
+      "dominant": "#283545",
+      "secondary": "#46596B",
+      "accent": "#AF765F"
+    },
+    "gridEnabled": true,
+    "gridDensity": "dense",
+    "gridOpacity": 0.08
+  },
+  "visibility": {
+    "showCover": false,
+    "showSongInfo": true,
+    "showAlbum": true,
+    "showPlatformBadge": false,
+    "showSharedBy": true,
+    "showGeneratedWatermark": false
+  },
+  "branding": {
+    "sharedByName": "Partagé par Qrzzzz",
+    "platform": "unknown"
+  },
+  "media": {
+    "coverCropScale": 1
+  }
+}

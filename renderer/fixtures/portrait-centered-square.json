@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "rendererVersion": "android-alpha-renderer-1",
+  "locale": "ja",
+  "song": {
+    "source": "apple",
+    "title": "星を数える夜",
+    "artist": "朝凪",
+    "album": "余白",
+    "explicit": false,
+    "coverAssetId": null
+  },
+  "content": {
+    "mode": "lyrics",
+    "lyrics": "静かな窓辺で\nほどけた夢を集める\n君の声がまだ\n遠い空に残っている",
+    "translationEnabled": true,
+    "translation": "在安静的窗边\n收集散落的梦\n你的声音仍然\n留在遥远的天空",
+    "instrumentalText": "インストゥルメンタル"
+  },
+  "canvas": {
+    "layoutMode": "portrait",
+    "ratio": "1:1",
+    "width": 1080,
+    "height": 1080,
+    "autoHeight": false,
+    "pixelRatio": 2
+  },
+  "typography": {
+    "fontScheme": "sans-heavy",
+    "fontFamily": "Source Han Sans SC",
+    "lyricSize": 48,
+    "lineHeight": 1.35,
+    "alignment": "center",
+    "translationScale": 0.68,
+    "twoLineTitle": false,
+    "textColorMode": "preset",
+    "textColorPreset": "white",
+    "customTextColor": null
+  },
+  "visual": {
+    "backgroundMode": "palette",
+    "palette": {
+      "dominant": "#3C315F",
+      "secondary": "#2E6582",
+      "accent": "#C68AA4"
+    },
+    "gridEnabled": false,
+    "gridDensity": "dense",
+    "gridOpacity": 0.1
+  },
+  "visibility": {
+    "showCover": false,
+    "showSongInfo": true,
+    "showAlbum": false,
+    "showPlatformBadge": false,
+    "showSharedBy": false,
+    "showGeneratedWatermark": false
+  },
+  "branding": {
+    "sharedByName": "",
+    "platform": "apple"
+  },
+  "media": {
+    "coverCropScale": 1
+  }
+}

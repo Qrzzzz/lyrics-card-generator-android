@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lyrics-card.local/schema/render-spec-v1.schema.json",
+  "title": "Lyrics Card RenderSpec v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "rendererVersion",
+    "locale",
+    "song",
+    "content",
+    "canvas",
+    "typography",
+    "visual",
+    "visibility",
+    "branding",
+    "media"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "rendererVersion": { "const": "android-alpha-renderer-1" },
+    "locale": { "type": "string", "enum": ["zh", "zh-TW", "en", "fr", "ja", "es"] },
+    "song": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "title", "artist", "album", "explicit", "coverAssetId"],
+      "properties": {
+        "source": { "type": "string", "enum": ["qq", "netease", "apple", "spotify", "unknown"] },
+        "title": { "type": "string", "maxLength": 240 },
+        "artist": { "type": "string", "maxLength": 240 },
+        "album": { "type": "string", "maxLength": 240 },
+        "explicit": { "type": "boolean" },
+        "coverAssetId": {
+          "anyOf": [
+            { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "lyrics", "translationEnabled", "translation", "instrumentalText"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["lyrics", "instrumental"] },
+        "lyrics": { "type": "string", "maxLength": 200000 },
+        "translationEnabled": { "type": "boolean" },
+        "translation": { "type": "string", "maxLength": 200000 },
+        "instrumentalText": { "type": "string", "maxLength": 240 }
+      }
+    },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layoutMode", "ratio", "width", "height", "autoHeight", "pixelRatio"],
+      "properties": {
+        "layoutMode": { "type": "string", "enum": ["portrait", "landscape"] },
+        "ratio": { "type": "string", "enum": ["1:1", "4:5", "9:16", "16:9", "21:9", "3:2", "custom"] },
+        "width": { "type": "integer", "minimum": 720, "maximum": 3000 },
+        "height": { "type": "integer", "minimum": 720, "maximum": 3200 },
+        "autoHeight": { "type": "boolean" },
+        "pixelRatio": { "type": "integer", "enum": [1, 2] }
+      }
+    },
+    "typography": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fontScheme",
+        "fontFamily",
+        "lyricSize",
+        "lineHeight",
+        "alignment",
+        "translationScale",
+        "twoLineTitle",
+        "textColorMode",
+        "textColorPreset",
+        "customTextColor"
+      ],
+      "properties": {
+        "fontScheme": { "type": "string", "enum": ["sans-heavy", "serif-heavy", "system-sans", "system-serif"] },
+        "fontFamily": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "lyricSize": { "type": "integer", "minimum": 36, "maximum": 72 },
+        "lineHeight": { "type": "number", "minimum": 1.1, "maximum": 1.75 },
+        "alignment": { "type": "string", "enum": ["left", "center", "right"] },
+        "translationScale": { "type": "number", "minimum": 0.6, "maximum": 0.9 },
+        "twoLineTitle": { "type": "boolean" },
+        "textColorMode": { "type": "string", "enum": ["auto", "preset", "custom"] },
+        "textColorPreset": { "type": "string", "enum": ["white", "black", "warmWhite", "cream", "charcoal", "softBlue", "softGold"] },
+        "customTextColor": {
+          "anyOf": [
+            { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backgroundMode", "palette", "gridEnabled", "gridDensity", "gridOpacity"],
+      "properties": {
+        "backgroundMode": { "type": "string", "enum": ["palette", "gradient"] },
+        "palette": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dominant", "secondary", "accent"],
+          "properties": {
+            "dominant": { "$ref": "#/$defs/color" },
+            "secondary": { "$ref": "#/$defs/color" },
+            "accent": { "$ref": "#/$defs/color" }
+          }
+        },
+        "gridEnabled": { "type": "boolean" },
+        "gridDensity": { "type": "string", "enum": ["sparse", "medium", "dense"] },
+        "gridOpacity": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "visibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["showCover", "showSongInfo", "showAlbum", "showPlatformBadge", "showSharedBy", "showGeneratedWatermark"],
+      "properties": {
+        "showCover": { "type": "boolean" },
+        "showSongInfo": { "type": "boolean" },
+        "showAlbum": { "type": "boolean" },
+        "showPlatformBadge": { "type": "boolean" },
+        "showSharedBy": { "type": "boolean" },
+        "showGeneratedWatermark": { "type": "boolean" }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sharedByName", "platform"],
+      "properties": {
+        "sharedByName": { "type": "string", "maxLength": 240 },
+        "platform": { "type": "string", "enum": ["qq", "netease", "apple", "spotify", "unknown"] }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverCropScale"],
+      "properties": {
+        "coverCropScale": { "type": "number", "minimum": 1, "maximum": 2 }
+      }
+    }
+  },
+  "$defs": {
+    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "canvas": { "properties": { "layoutMode": { "const": "portrait" } } } } },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "ratio": { "enum": ["1:1", "4:5", "9:16", "custom"] },
+              "width": { "minimum": 720, "maximum": 1440 },
+              "height": { "minimum": 720, "maximum": 3200 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "canvas": { "properties": { "layoutMode": { "const": "landscape" } } } } },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "ratio": { "enum": ["16:9", "21:9", "3:2", "custom"] },
+              "width": { "minimum": 1080, "maximum": 3000 },
+              "height": { "minimum": 720, "maximum": 1600 },
+              "autoHeight": { "const": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "canvas": { "properties": { "autoHeight": { "const": true } } } } },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "layoutMode": { "const": "portrait" },
+              "ratio": { "const": "custom" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "content": { "properties": { "mode": { "const": "instrumental" } } } } },
+      "then": {
+        "properties": {
+          "content": { "properties": { "translationEnabled": { "const": false } } },
+          "canvas": {
+            "properties": {
+              "layoutMode": { "const": "portrait" },
+              "ratio": { "const": "1:1" },
+              "width": { "const": 1080 },
+              "height": { "const": 1080 },
+              "autoHeight": { "const": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "1:1" } } } } },
+      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1080 }, "height": { "const": 1080 } } } } }
+    },
+    {
+      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "4:5" } } } } },
+      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1080 }, "height": { "const": 1350 } } } } }
+    },
+    {
+      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "9:16" } } } } },
+      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1080 }, "height": { "const": 1920 } } } } }
+    },
+    {
+      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "16:9" } } } } },
+      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1920 }, "height": { "const": 1080 } } } } }
+    },
+    {
+      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "21:9" } } } } },
+      "then": { "properties": { "canvas": { "properties": { "width": { "const": 2520 }, "height": { "const": 1080 } } } } }
+    },
+    {
+      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "3:2" } } } } },
+      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1800 }, "height": { "const": 1200 } } } } }
+    },
+    {
+      "if": { "properties": { "typography": { "properties": { "textColorMode": { "const": "custom" } } } } },
+      "then": {
+        "properties": {
+          "typography": {
+            "properties": {
+              "customTextColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
