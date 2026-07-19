@@ -1,0 +1,96 @@
+name: Android Alpha Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: renderer/package-lock.json
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Android 16 QPR2 SDK
+        shell: pwsh
+        run: |
+          $sdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
+          $sdkManager = Get-ChildItem -Path (Join-Path $sdkRoot 'cmdline-tools') -Filter 'sdkmanager.bat' -Recurse -File | Select-Object -First 1
+          if (-not $sdkManager) { throw "sdkmanager.bat was not found under $sdkRoot\cmdline-tools" }
+          & $sdkManager.FullName 'platforms;android-36.1' 'build-tools;36.1.0'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify release tag
+        id: version
+        shell: pwsh
+        run: |
+          $gradle = Get-Content 'app/build.gradle.kts' -Raw
+          $versionName = [regex]::Match($gradle, 'versionName\s*=\s*"([^"]+)"').Groups[1].Value
+          $alphaSuffix = [regex]::Match($gradle, 'versionNameSuffix\s*=\s*"([^"]+)"').Groups[1].Value
+          if (-not $versionName -or -not $alphaSuffix) { throw 'Could not read the Alpha version from app/build.gradle.kts' }
+          $version = "$versionName$alphaSuffix"
+          $expectedTag = "v$version"
+          if ($env:RELEASE_TAG -ne $expectedTag) { throw "Release tag '$env:RELEASE_TAG' does not match Gradle version '$expectedTag'" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($alphaSuffix -match '(?i)(alpha|beta|rc)')" >> $env:GITHUB_OUTPUT
+
+      - name: Verify renderer
+        working-directory: renderer
+        run: npm ci && npm run check
+
+      - name: Test and build installable Alpha APK
+        shell: pwsh
+        run: .\gradlew.bat :app:testAlphaDebugUnitTest :app:assembleAlphaDebug
+
+      - name: Prepare release assets
+        id: assets
+        shell: pwsh
+        run: |
+          $assetDir = New-Item -ItemType Directory -Path release-assets -Force
+          $apk = Get-ChildItem 'app/build/outputs/apk/alpha/debug/*.apk' | Select-Object -First 1
+          if (-not $apk) { throw 'Alpha APK was not produced' }
+          $assetName = "lyrics-card-generator-android-${{ steps.version.outputs.version }}.apk"
+          $assetPath = Join-Path $assetDir.FullName $assetName
+          Copy-Item $apk.FullName $assetPath
+          $hash = (Get-FileHash $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $assetName" | Set-Content (Join-Path $assetDir.FullName 'SHA256SUMS.txt') -Encoding ascii
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        run: |
+          $releaseArgs = @('release', 'create', $env:RELEASE_TAG, 'release-assets/*.apk', 'release-assets/SHA256SUMS.txt', '--verify-tag', '--generate-notes', '--title', $env:RELEASE_TAG)
+          if ('${{ steps.version.outputs.prerelease }}' -eq 'True') { $releaseArgs += '--prerelease' }
+          gh @releaseArgs
