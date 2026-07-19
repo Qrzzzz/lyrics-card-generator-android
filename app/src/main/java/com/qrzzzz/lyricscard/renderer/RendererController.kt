@@ -104,6 +104,7 @@ class RendererController(
     val generation: StateFlow<Int> = _generation.asStateFlow()
 
     private var webView: WebView? = null
+    private var webViewContext: RendererWebViewContext? = null
     private var pendingSpec: RenderSpec? = null
     private var previewInFlightSpec: RenderSpec? = null
     private var specJob: Job? = null
@@ -112,10 +113,11 @@ class RendererController(
     private var closed = false
 
     @SuppressLint("SetJavaScriptEnabled")
-    fun createWebView(context: Context): WebView {
+    fun acquireWebView(context: Context, owner: Any): WebView {
         check(!closed) { "RendererController is closed" }
         webView?.let { existing ->
             (existing.parent as? ViewGroup)?.removeView(existing)
+            checkNotNull(webViewContext).bind(owner, context)
             existing.onResume()
             existing.post {
                 existing.requestLayout()
@@ -129,8 +131,11 @@ class RendererController(
             .addPathHandler("/media/") { path -> assetStore.openForWebView(path) }
             .build()
 
-        return WebView(context).also { view ->
+        val contextBinding = RendererWebViewContext(appContext)
+        return WebView(contextBinding.context).also { view ->
             webView = view
+            webViewContext = contextBinding
+            contextBinding.bind(owner, context)
             WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
             view.setBackgroundColor(Color.TRANSPARENT)
             view.isLongClickable = false
@@ -172,9 +177,20 @@ class RendererController(
                     message = "当前 Android System WebView 不支持安全消息通道，请先更新 WebView。",
                 )
                 webView = null
+                webViewContext = null
+                contextBinding.close()
                 view.destroy()
             }
         }
+    }
+
+    fun releaseWebView(owner: Any, view: WebView) {
+        if (webView !== view) return
+        val contextBinding = webViewContext ?: return
+        if (!contextBinding.isOwnedBy(owner)) return
+        runCatching { (view.parent as? ViewGroup)?.removeView(view) }
+        runCatching { view.onPause() }
+        contextBinding.release(owner)
     }
 
     fun updateSpec(spec: RenderSpec) {
@@ -575,8 +591,7 @@ class RendererController(
             exportAssemblies.values.forEach(ExportAssembly::abort)
             exportAssemblies.clear()
             stopPreviewJobs(restoreInFlight = true)
-            view.destroy()
-            webView = null
+            destroyWebView(loadBlank = false)
             if (!closed && recoveryAttempts < MAX_AUTOMATIC_RECOVERIES) {
                 recoveryAttempts += 1
                 _status.value = RendererStatus(
@@ -594,11 +609,16 @@ class RendererController(
         }
     }
 
-    private fun destroyWebView() {
+    private fun destroyWebView(loadBlank: Boolean = true) {
         val view = webView ?: return
         webView = null
+        val contextBinding = webViewContext
+        webViewContext = null
+        (view.parent as? ViewGroup)?.removeView(view)
+        runCatching { view.onPause() }
+        contextBinding?.close()
         runCatching { view.stopLoading() }
-        runCatching { view.loadUrl("about:blank") }
+        if (loadBlank) runCatching { view.loadUrl("about:blank") }
         runCatching { view.clearHistory() }
         runCatching { view.removeAllViews() }
         runCatching { view.destroy() }

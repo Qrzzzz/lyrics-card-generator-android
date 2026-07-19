@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,9 +71,11 @@ fun RendererPreview(
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         key(generation) {
+            val owner = remember { Any() }
             AndroidView(
-                factory = controller::createWebView,
+                factory = { context -> controller.acquireWebView(context, owner) },
                 modifier = Modifier.fillMaxSize(),
+                onRelease = { view -> controller.releaseWebView(owner, view) },
             )
         }
 
