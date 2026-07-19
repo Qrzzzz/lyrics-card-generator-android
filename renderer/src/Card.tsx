@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { isDarkColor, mixColors, resolveTextColor, withAlpha } from "./color";
+import { assertLyricLineLimit, type LyricTextPath } from "./renderLimits";
 import { resolveCoverAssetUrl } from "./spec";
 import type { RenderSpec, SongSource, TextAlignment } from "./types";
 
@@ -14,8 +15,14 @@ const GRID_SIZES = {
 export function LyricsCard({ spec }: { spec: RenderSpec }) {
   const textColor = resolveTextColor(spec);
   const darkText = isDarkColor(textColor);
-  const lines = useMemo(() => splitUsefulLines(spec.content.lyrics), [spec.content.lyrics]);
-  const translations = useMemo(() => splitUsefulLines(spec.content.translation), [spec.content.translation]);
+  const lines = useMemo(
+    () => splitUsefulLines(spec.content.lyrics, "content.lyrics"),
+    [spec.content.lyrics]
+  );
+  const translations = useMemo(
+    () => splitUsefulLines(spec.content.translation, "content.translation"),
+    [spec.content.translation]
+  );
   const source = spec.branding.platform === "unknown" ? spec.song.source : spec.branding.platform;
   const showHeader =
     spec.content.mode === "lyrics" && (spec.visibility.showCover || spec.visibility.showSongInfo);
@@ -374,9 +381,10 @@ function alignmentClass(alignment: TextAlignment) {
   return `align-${alignment}`;
 }
 
-function splitUsefulLines(text: string) {
+export function splitUsefulLines(text: string, path: LyricTextPath = "content.lyrics") {
+  assertLyricLineLimit(text, path);
   return text
-    .split(/\r?\n/)
+    .split(/\r\n|\r|\n/)
     .map((line) => line.trimEnd())
     .filter((line, index, lines) => line.trim().length > 0 || (index > 0 && index < lines.length - 1));
 }

@@ -1,8 +1,12 @@
 package com.qrzzzz.lyricscard.data
 
+import com.qrzzzz.lyricscard.model.ContentSpec
+import com.qrzzzz.lyricscard.model.InvalidRenderSpecException
+import com.qrzzzz.lyricscard.model.LyricTextLimits
 import com.qrzzzz.lyricscard.model.ProjectTemplates
 import com.qrzzzz.lyricscard.model.RenderSpec
 import com.qrzzzz.lyricscard.model.RenderSpecJson
+import com.qrzzzz.lyricscard.model.RenderSpecViolation
 import com.qrzzzz.lyricscard.model.SongSpec
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -160,6 +164,44 @@ class ProjectRepositoryTest {
         } catch (_: CorruptProjectException) {
             // Expected: redundant entity columns must agree with the serialized contract.
         }
+    }
+
+    @Test
+    fun `stored over-limit lyrics are rejected without modifying the project row`() = runTest {
+        val dao = FakeProjectDao()
+        val invalidSpec = RenderSpec(
+            content = ContentSpec(lyrics = "\n".repeat(LyricTextLimits.MAX_LINES)),
+        )
+        val rawSpecJson = RenderSpecJson.format.encodeToString(RenderSpec.serializer(), invalidSpec)
+        val entity = ProjectEntity(
+            id = "over-limit",
+            name = "Over limit",
+            schemaVersion = RenderSpec.SCHEMA_VERSION,
+            rendererVersion = RenderSpec.DEFAULT_RENDERER_VERSION,
+            specJson = rawSpecJson,
+            coverAssetId = null,
+            thumbnailPath = null,
+            createdAt = 0L,
+            updatedAt = 0L,
+            lastExportedAt = null,
+        )
+        dao.upsert(entity)
+        val repository = ProjectRepository(dao)
+
+        val failure = try {
+            repository.getProject(entity.id)
+            fail("Expected CorruptProjectException")
+            null
+        } catch (cause: CorruptProjectException) {
+            cause
+        }
+        val lineViolation = generateSequence(failure as Throwable?) { it.cause }
+            .filterIsInstance<InvalidRenderSpecException>()
+            .flatMap { it.violations.asSequence() }
+            .single { it.constraint == RenderSpecViolation.Constraint.MAX_LINES }
+
+        assertEquals(LyricTextLimits.MAX_LINES + 1, lineViolation.actual)
+        assertEquals(entity, dao.getById(entity.id))
     }
 }
 

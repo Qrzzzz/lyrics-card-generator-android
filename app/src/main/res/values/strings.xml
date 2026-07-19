@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">歌词卡片</string>
+    <string name="lyric_field_original">歌词</string>
+    <string name="lyric_field_translation">译文</string>
+    <string name="error_lyric_line_limit">%1$s最多可包含 %2$d 行，当前为 %3$d 行。内容未被更改。</string>
+    <string name="error_imported_lyric_line_limit">导入的歌词共有 %2$d 行，超过 %1$d 行上限。当前项目未被更改。</string>
+    <string name="error_loaded_lyric_line_limit">项目中的%1$s共有 %3$d 行，超过 %2$d 行上限。项目已保留且未修改。</string>
 </resources>
 

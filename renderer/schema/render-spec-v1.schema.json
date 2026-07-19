@@ -45,9 +45,9 @@
       "required": ["mode", "lyrics", "translationEnabled", "translation", "instrumentalText"],
       "properties": {
         "mode": { "type": "string", "enum": ["lyrics", "instrumental"] },
-        "lyrics": { "type": "string", "maxLength": 200000 },
+        "lyrics": { "type": "string", "maxLength": 200000, "maxLines": 400 },
         "translationEnabled": { "type": "boolean" },
-        "translation": { "type": "string", "maxLength": 200000 },
+        "translation": { "type": "string", "maxLength": 200000, "maxLines": 400 },
         "instrumentalText": { "type": "string", "maxLength": 240 }
       }
     },

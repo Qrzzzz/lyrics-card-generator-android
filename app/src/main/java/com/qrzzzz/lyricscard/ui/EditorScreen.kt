@@ -107,6 +107,7 @@ fun EditorScreen(
     showSafeArea: Boolean,
     renderer: RendererController,
     netease: NeteaseLookupUiState,
+    snackbarHost: @Composable () -> Unit,
     onBack: () -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
@@ -155,6 +156,7 @@ fun EditorScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
+        snackbarHost = snackbarHost,
         bottomBar = {
             Surface(shadowElevation = 10.dp) {
                 Row(

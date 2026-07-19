@@ -1,6 +1,7 @@
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { normalizeHex } from "./color";
 import generatedValidateV1 from "./generated/renderSpecValidator";
+import { assertRenderSpecLineLimits, LyricLineLimitError } from "./renderLimits";
 import type { RenderSpec } from "./types";
 
 const validateV1 = generatedValidateV1 as ValidateFunction<RenderSpec>;
@@ -19,6 +20,23 @@ export function parseRenderSpec(input: unknown): RenderSpec {
   const candidate = typeof input === "string" ? parseJson(input) : input;
   if (!validateV1(candidate)) {
     throw new InvalidRenderSpecError(validateV1.errors ?? []);
+  }
+  try {
+    assertRenderSpecLineLimits(candidate);
+  } catch (error) {
+    if (error instanceof LyricLineLimitError) {
+      const field = error.path.substring("content.".length);
+      throw new InvalidRenderSpecError([
+        {
+          instancePath: `/content/${field}`,
+          schemaPath: `#/properties/content/properties/${field}/maxLines`,
+          keyword: "maxLines",
+          params: { limit: error.limit, actual: error.actual },
+          message: `must NOT have more than ${error.limit} physical lines`
+        }
+      ]);
+    }
+    throw error;
   }
 
   return normalizeRenderSpec(candidate);

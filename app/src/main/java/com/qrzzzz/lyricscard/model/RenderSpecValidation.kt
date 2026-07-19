@@ -3,7 +3,14 @@ package com.qrzzzz.lyricscard.model
 data class RenderSpecViolation(
     val path: String,
     val message: String,
-)
+    val constraint: Constraint? = null,
+    val limit: Int? = null,
+    val actual: Int? = null,
+) {
+    enum class Constraint {
+        MAX_LINES,
+    }
+}
 
 class InvalidRenderSpecException(
     val violations: List<RenderSpecViolation>,
@@ -33,8 +40,8 @@ fun RenderSpec.validate(): List<RenderSpecViolation> = buildList {
         }
     }
 
-    validateText("content.lyrics", content.lyrics, MAX_LYRICS_LENGTH)
-    validateText("content.translation", content.translation, MAX_LYRICS_LENGTH)
+    validateLyricText("content.lyrics", content.lyrics)
+    validateLyricText("content.translation", content.translation)
     validateText("content.instrumentalText", content.instrumentalText, MAX_METADATA_LENGTH)
 
     val widthRange = when (canvas.layoutMode) {
@@ -151,14 +158,37 @@ private fun MutableList<RenderSpecViolation>.validateText(
     }
 }
 
+private fun MutableList<RenderSpecViolation>.validateLyricText(
+    path: String,
+    value: String,
+) {
+    validateText(path, value, LyricTextLimits.MAX_CHARACTERS)
+    val lineCount = LyricTextLimits.countPhysicalLines(value)
+    if (lineCount > LyricTextLimits.MAX_LINES) {
+        violation(
+            path = path,
+            message = "must be at most ${LyricTextLimits.MAX_LINES} physical lines",
+            constraint = RenderSpecViolation.Constraint.MAX_LINES,
+            limit = LyricTextLimits.MAX_LINES,
+            actual = lineCount,
+        )
+    }
+}
+
 private fun MutableList<RenderSpecViolation>.validateColor(path: String, value: String) {
     if (!value.matches(HEX_COLOR_PATTERN)) {
         violation(path, "must be a #RRGGBB or #RRGGBBAA color")
     }
 }
 
-private fun MutableList<RenderSpecViolation>.violation(path: String, message: String) {
-    add(RenderSpecViolation(path, message))
+private fun MutableList<RenderSpecViolation>.violation(
+    path: String,
+    message: String,
+    constraint: RenderSpecViolation.Constraint? = null,
+    limit: Int? = null,
+    actual: Int? = null,
+) {
+    add(RenderSpecViolation(path, message, constraint, limit, actual))
 }
 
 private val ASSET_ID_PATTERN = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -178,4 +208,3 @@ private val LANDSCAPE_RATIOS = setOf(
 
 private const val MAX_METADATA_LENGTH = 240
 private const val MAX_FONT_FAMILY_LENGTH = 200
-private const val MAX_LYRICS_LENGTH = 200_000

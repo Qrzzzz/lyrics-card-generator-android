@@ -97,6 +97,7 @@ fun LyricsCardApp(viewModel: AppViewModel) {
                     showSafeArea = preferences.showSafeArea,
                     renderer = viewModel.rendererController,
                     netease = editor.netease,
+                    snackbarHost = { SnackbarHost(snackbar) },
                     onBack = {
                         scope.launch {
                             if (viewModel.flushAutosave()) navController.popBackStack()

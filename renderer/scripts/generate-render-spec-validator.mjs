@@ -3,14 +3,46 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import standaloneCode from "ajv/dist/standalone/index.js";
+import { _, str } from "ajv/dist/compile/codegen/index.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const schema = JSON.parse(await readFile(resolve(root, "schema/render-spec-v1.schema.json"), "utf8"));
+const lyricTextSchemas = [
+  schema.properties.content.properties.lyrics,
+  schema.properties.content.properties.translation
+];
+const lyricLineLimits = lyricTextSchemas.map((field) => field.maxLines);
+if (
+  lyricLineLimits.some((limit) => !Number.isSafeInteger(limit) || limit < 1) ||
+  new Set(lyricLineLimits).size !== 1
+) {
+  throw new Error("RenderSpec lyric and translation maxLines must be the same positive integer");
+}
 const ajv = new Ajv2020({
   allErrors: true,
   strict: true,
   strictTypes: false,
   code: { source: true, esm: true }
+});
+ajv.addKeyword({
+  keyword: "maxLines",
+  type: "string",
+  schemaType: "number",
+  error: {
+    message: ({ schemaCode }) => str`must NOT have more than ${schemaCode} physical lines`,
+    params: ({ schemaCode }) => _`{limit: ${schemaCode}}`
+  },
+  code(cxt) {
+    const { data, schemaCode, gen } = cxt;
+    const lineCount = gen.let("lineCount", 1);
+    gen.forRange("lineIndex", 0, _`${data}.length`, (index) => {
+      gen.if(
+        _`${data}.charCodeAt(${index}) === 13 || (${data}.charCodeAt(${index}) === 10 && (${index} === 0 || ${data}.charCodeAt(${index} - 1) !== 13))`,
+        () => gen.add(lineCount, 1)
+      );
+    });
+    cxt.fail(_`${lineCount} > ${schemaCode}`);
+  }
 });
 const validate = ajv.compile(schema);
 const generated = standaloneCode(ajv, validate).replace(

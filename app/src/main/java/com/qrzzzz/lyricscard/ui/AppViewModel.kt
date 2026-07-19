@@ -7,14 +7,18 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.qrzzzz.lyricscard.LyricsCardApplication
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.data.NeteaseMusicService
 import com.qrzzzz.lyricscard.data.NeteaseSongSearchResult
 import com.qrzzzz.lyricscard.data.ResolvedNeteaseSong
 import com.qrzzzz.lyricscard.data.UserPreferences
+import com.qrzzzz.lyricscard.model.InvalidRenderSpecException
+import com.qrzzzz.lyricscard.model.LyricTextLimits
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.ProjectSummary
 import com.qrzzzz.lyricscard.model.PaletteSpec
 import com.qrzzzz.lyricscard.model.RenderSpec
+import com.qrzzzz.lyricscard.model.RenderSpecViolation
 import com.qrzzzz.lyricscard.model.SongSource
 import com.qrzzzz.lyricscard.model.requireValid
 import com.qrzzzz.lyricscard.renderer.ExportedImage
@@ -115,16 +119,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (cause: CancellationException) {
             throw cause
         } catch (cause: Throwable) {
-            _editor.value = _editor.value.copy(isLoading = false, errorMessage = cause.message ?: "无法打开项目")
+            _editor.value = _editor.value.copy(
+                isLoading = false,
+                errorMessage = lineLimitMessage(cause, loadingStoredProject = true)
+                    ?: cause.message
+                    ?: "无法打开项目",
+            )
             null
         }
     }
 
     fun updateSpec(transform: (RenderSpec) -> RenderSpec) {
         val project = _editor.value.currentProject ?: return
-        val updated = runCatching { project.copy(spec = transform(project.spec).requireValid()) }
+        val updated = runCatching {
+            val candidate = transform(project.spec)
+            project.copy(spec = candidate.requireValid())
+        }
             .getOrElse { cause ->
-                setError(cause.message ?: "设置无效")
+                setError(lineLimitMessage(cause) ?: cause.message ?: "设置无效")
                 return
             }
         if (updated.spec == project.spec) return
@@ -353,6 +365,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var importedCoverId: String? = null
             try {
                 val resolved = block()
+                val importedLineCount = LyricTextLimits.countPhysicalLines(resolved.lyrics)
+                if (resolved.lyrics.isNotEmpty() && importedLineCount > LyricTextLimits.MAX_LINES) {
+                    val message = app.getString(
+                        R.string.error_imported_lyric_line_limit,
+                        LyricTextLimits.MAX_LINES,
+                        importedLineCount,
+                    )
+                    updateNetease { it.copy(isResolving = false, message = message) }
+                    setError(message)
+                    return@launch
+                }
                 importedCoverId = resolved.coverUrl.takeIf(String::isNotBlank)?.let { coverUrl ->
                     runCatching {
                         val bytes = neteaseMusicService.downloadCover(coverUrl)
@@ -486,6 +509,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _editor.value = _editor.value.copy(errorMessage = message)
     }
 
+    private fun lineLimitMessage(
+        cause: Throwable,
+        loadingStoredProject: Boolean = false,
+    ): String? {
+        val violation = cause.findLineLimitViolation() ?: return null
+        val field = app.getString(
+            if (violation.path == "content.translation") {
+                R.string.lyric_field_translation
+            } else {
+                R.string.lyric_field_original
+            },
+        )
+        val limit = violation.limit ?: LyricTextLimits.MAX_LINES
+        val actual = violation.actual ?: return null
+        return app.getString(
+            if (loadingStoredProject) {
+                R.string.error_loaded_lyric_line_limit
+            } else {
+                R.string.error_lyric_line_limit
+            },
+            field,
+            limit,
+            actual,
+        )
+    }
+
     private companion object {
         const val AUTOSAVE_DELAY_MS = 500L
         const val MAX_HISTORY = 50
@@ -524,4 +573,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+}
+
+private fun Throwable.findLineLimitViolation(): RenderSpecViolation? {
+    var current: Throwable? = this
+    repeat(16) {
+        val violation = (current as? InvalidRenderSpecException)
+            ?.violations
+            ?.firstOrNull { it.constraint == RenderSpecViolation.Constraint.MAX_LINES }
+        if (violation != null) return violation
+        current = current?.cause ?: return null
+    }
+    return null
 }
