@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import android.webkit.WebResourceResponse
+import com.qrzzzz.lyricscard.data.CoverAssetFileStore
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
@@ -15,6 +16,8 @@ import java.io.InputStream
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Private, logical-ID based storage for project cover images.
@@ -22,22 +25,28 @@ import kotlinx.coroutines.withContext
  * Android URIs never enter RenderSpec. The local renderer can request only one UUID-shaped ID,
  * and the WebView handler resolves it to a private file without exposing a filesystem path.
  */
-class ProjectAssetStore(context: Context) {
+class ProjectAssetStore(context: Context) : CoverAssetFileStore {
     private val appContext = context.applicationContext
     private val root = File(appContext.filesDir, "project-assets").apply { mkdirs() }
+    private val fileMutex = Mutex()
+    private val pendingAssetIds = mutableSetOf<String>()
 
     suspend fun importCover(uri: Uri): String = withContext(Dispatchers.IO) {
-        appContext.contentResolver.openInputStream(uri)?.use(::importCover)
+        appContext.contentResolver.openInputStream(uri)?.use { input ->
+            fileMutex.withLock { importCoverLocked(input) }
+        }
             ?: error("无法打开所选图片")
     }
 
     suspend fun importCover(bytes: ByteArray): String = withContext(Dispatchers.IO) {
         require(bytes.isNotEmpty()) { "无法读取空图片" }
         require(bytes.size <= MAX_COVER_BYTES) { "封面图片不能超过 25 MB" }
-        ByteArrayInputStream(bytes).use(::importCover)
+        ByteArrayInputStream(bytes).use { input ->
+            fileMutex.withLock { importCoverLocked(input) }
+        }
     }
 
-    private fun importCover(input: InputStream): String {
+    private fun importCoverLocked(input: InputStream): String {
         val id = UUID.randomUUID().toString()
         val dataFile = dataFile(id)
         val mimeFile = mimeFile(id)
@@ -108,7 +117,7 @@ class ProjectAssetStore(context: Context) {
             } finally {
                 working?.recycle()
             }
-            id
+            id.also(pendingAssetIds::add)
         } catch (cause: Throwable) {
             dataFile.delete()
             mimeFile.delete()
@@ -143,15 +152,53 @@ class ProjectAssetStore(context: Context) {
         }
     }
 
-    suspend fun delete(id: String) = withContext(Dispatchers.IO) {
+    override suspend fun markReferenced(id: String) = withContext(Dispatchers.IO) {
+        fileMutex.withLock {
+            pendingAssetIds.remove(id)
+            Unit
+        }
+    }
+
+    override suspend fun delete(id: String) = withContext(Dispatchers.IO) {
+        fileMutex.withLock {
+            pendingAssetIds.remove(id)
+            deleteFiles(id)
+        }
+    }
+
+    override suspend fun deleteUnreferenced(referencedIds: Set<String>) = withContext(Dispatchers.IO) {
+        fileMutex.withLock {
+            pendingAssetIds.removeAll(referencedIds)
+            val storedIds = root.listFiles()
+                .orEmpty()
+                .mapNotNull { file ->
+                    when {
+                        file.name.endsWith(DATA_SUFFIX) -> file.name.removeSuffix(DATA_SUFFIX)
+                        file.name.endsWith(MIME_SUFFIX) -> file.name.removeSuffix(MIME_SUFFIX)
+                        else -> null
+                    }
+                }
+                .filter(ASSET_ID::matches)
+                .toSet()
+            storedIds
+                .filterNot { it in referencedIds || it in pendingAssetIds }
+                .forEach(::deleteFiles)
+            root.listFiles()
+                .orEmpty()
+                .filter { it.name.endsWith(".tmp") || it.name.endsWith(".import") }
+                .forEach(File::delete)
+        }
+    }
+
+    private fun deleteFiles(id: String) {
         if (ASSET_ID.matches(id)) {
             dataFile(id).delete()
             mimeFile(id).delete()
         }
     }
 
-    private fun dataFile(id: String) = File(root, "$id.image")
-    private fun mimeFile(id: String) = File(root, "$id.mime")
+    private fun dataFile(id: String) = File(root, "$id$DATA_SUFFIX")
+    private fun mimeFile(id: String) = File(root, "$id$MIME_SUFFIX")
 
     private fun applyExifOrientation(bitmap: Bitmap, source: File): Bitmap {
         val orientation = runCatching {
@@ -180,5 +227,7 @@ class ProjectAssetStore(context: Context) {
         const val MAX_SOURCE_EDGE = 20_000
         const val MAX_SOURCE_PIXELS = 160_000_000L
         const val STORED_COVER_EDGE = 2_048
+        const val DATA_SUFFIX = ".image"
+        const val MIME_SUFFIX = ".mime"
     }
 }

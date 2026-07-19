@@ -8,12 +8,17 @@ import com.qrzzzz.lyricscard.model.requireValid
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class ProjectRepository(
     private val projectDao: ProjectDao,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val idGenerator: () -> String = { UUID.randomUUID().toString() },
+    private val assetFiles: CoverAssetFileStore = CoverAssetFileStore.NoOp,
 ) {
+    private val assetMutationMutex = Mutex()
+
     fun observeProjects(): Flow<List<ProjectSummary>> = projectDao.observeAll().map { projects ->
         projects.map { it.toSummary() }
     }
@@ -24,10 +29,11 @@ class ProjectRepository(
 
     suspend fun getProject(id: String): Project? = projectDao.getById(id)?.toProject()
 
-    suspend fun create(project: Project): Project {
+    suspend fun create(project: Project): Project = assetMutationMutex.withLock {
         val validated = project.requireValid()
-        projectDao.upsert(validated.toEntity())
-        return validated
+        val result = projectDao.upsertProjectWithAssetReferences(validated.toEntity())
+        completeAssetMutation(result)
+        result.project.toProject()
     }
 
     suspend fun createBlank(name: String = ProjectTemplates.DEFAULT_BLANK_NAME): Project {
@@ -41,24 +47,23 @@ class ProjectRepository(
     }
 
     /** Persists the full spec JSON and advances updatedAt without allowing time to go backwards. */
-    suspend fun save(project: Project): Project {
+    suspend fun save(project: Project): Project = assetMutationMutex.withLock {
         val validated = project.requireValid()
         val current = projectDao.getById(project.id)
             ?: throw IllegalStateException("Project '${project.id}' no longer exists")
         val requestedUpdatedAt = nextUpdatedAt(maxOf(validated.updatedAt, current.updatedAt))
-        check(
-            projectDao.updateEditable(
-                id = validated.id,
-                name = validated.name,
-                schemaVersion = validated.spec.schemaVersion,
-                rendererVersion = validated.spec.rendererVersion,
-                specJson = RenderSpecJson.encode(validated.spec),
-                coverAssetId = validated.coverAssetId,
-                requestedUpdatedAt = requestedUpdatedAt,
-            ) == 1,
-        ) { "Project '${project.id}' changed while saving" }
-        return projectDao.getById(project.id)?.toProject()
+        val result = projectDao.updateEditableWithAssetReferences(
+            id = validated.id,
+            name = validated.name,
+            schemaVersion = validated.spec.schemaVersion,
+            rendererVersion = validated.spec.rendererVersion,
+            specJson = RenderSpecJson.encode(validated.spec),
+            coverAssetId = validated.coverAssetId,
+            requestedUpdatedAt = requestedUpdatedAt,
+        )
             ?: throw IllegalStateException("Project '${project.id}' no longer exists")
+        completeAssetMutation(result)
+        result.project.toProject()
     }
 
     suspend fun rename(id: String, name: String): Boolean {
@@ -67,7 +72,7 @@ class ProjectRepository(
         return projectDao.rename(id, normalizedName, updatedAt) > 0
     }
 
-    suspend fun duplicate(id: String, name: String? = null): Project? {
+    suspend fun duplicate(id: String, name: String? = null): Project? = assetMutationMutex.withLock {
         val source = getProject(id) ?: return null
         val now = clock()
         val duplicateName = name?.let(::validateProjectName)
@@ -80,8 +85,9 @@ class ProjectRepository(
             updatedAt = now,
             lastExportedAt = null,
         ).requireValid()
-        projectDao.upsert(duplicate.toEntity())
-        return duplicate
+        val result = projectDao.upsertProjectWithAssetReferences(duplicate.toEntity())
+        completeAssetMutation(result)
+        result.project.toProject()
     }
 
     suspend fun updateThumbnail(id: String, thumbnailPath: String?): Boolean {
@@ -98,7 +104,21 @@ class ProjectRepository(
         return projectDao.markExported(id, exportedAt, updatedAt) > 0
     }
 
-    suspend fun delete(id: String): Boolean = projectDao.deleteById(id) > 0
+    suspend fun delete(id: String): Boolean = assetMutationMutex.withLock {
+        val result = projectDao.deleteProjectWithAssetReferences(id)
+        result.releasedAssetId?.let { deleteIfStillUnreferenced(it) }
+        result.deleted
+    }
+
+    /**
+     * Repairs the derived reference ledger and removes files left orphaned by a prior process
+     * interruption. Imported-but-not-yet-committed files are protected by the file-store
+     * implementation.
+     */
+    suspend fun reconcileCoverAssets() = assetMutationMutex.withLock {
+        val referencedIds = projectDao.rebuildCoverAssetReferences()
+        assetFiles.deleteUnreferenced(referencedIds)
+    }
 
     private suspend fun monotonicUpdatedAt(id: String): Long? {
         val current = projectDao.getById(id) ?: return null
@@ -111,6 +131,19 @@ class ProjectRepository(
             wallClock > current -> wallClock
             current < Long.MAX_VALUE -> current + 1L
             else -> current
+        }
+    }
+
+    private suspend fun completeAssetMutation(result: ProjectWriteResult) {
+        result.project.coverAssetId?.let { id ->
+            runCatching { assetFiles.markReferenced(id) }
+        }
+        result.releasedAssetId?.let { deleteIfStillUnreferenced(it) }
+    }
+
+    private suspend fun deleteIfStillUnreferenced(id: String) {
+        if (projectDao.countProjectsReferencingAsset(id) == 0) {
+            runCatching { assetFiles.delete(id) }
         }
     }
 

@@ -13,11 +13,16 @@ class LyricsCardApplication : Application() {
             applicationContext,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME,
-        ).build()
+        )
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
     }
 
     val projectRepository: ProjectRepository by lazy {
-        ProjectRepository(database.projectDao())
+        ProjectRepository(
+            projectDao = database.projectDao(),
+            assetFiles = assetStore,
+        )
     }
 
     val assetStore: ProjectAssetStore by lazy {

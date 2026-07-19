@@ -79,6 +79,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var editRevision = 0L
     private var savedRevision = 0L
 
+    init {
+        viewModelScope.launch {
+            try {
+                repository.reconcileCoverAssets()
+            } catch (cause: CancellationException) {
+                throw cause
+            } catch (_: Throwable) {
+                // A later startup can retry orphan cleanup; project loading must remain available.
+            }
+        }
+    }
+
     suspend fun createBlank(): Project? {
         if (!flushAutosave()) return null
         return guarded("无法创建项目") { loadCreated(repository.createBlank()) }
@@ -351,7 +363,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     importedCoverId?.let { assetStore.delete(it) }
                     return@launch
                 }
-                val previousCoverId = _editor.value.currentProject?.spec?.song?.coverAssetId
                 val nextCoverId = importedCoverId
                 val nextTitle = resolved.title.take(240)
                 val nextArtist = resolved.artist.take(240)
@@ -375,9 +386,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "无法应用网易云歌曲信息"
                 }
                 importedCoverId = null // The project owns the imported asset from this point onward.
-                if (nextCoverId != null && previousCoverId != null && previousCoverId != nextCoverId) {
-                    assetStore.delete(previousCoverId)
-                }
                 val imported = buildList {
                     add("歌曲信息")
                     if (resolved.lyrics.isNotBlank()) add("歌词")

@@ -163,8 +163,9 @@ class ProjectRepositoryTest {
     }
 }
 
-private class FakeProjectDao : ProjectDao {
+private class FakeProjectDao : ProjectDao() {
     private val entities = MutableStateFlow<List<ProjectEntity>>(emptyList())
+    private val coverAssets = mutableMapOf<String, CoverAssetEntity>()
 
     override fun observeAll(): Flow<List<ProjectEntity>> = entities.map { projects ->
         projects.sortedWith(compareByDescending<ProjectEntity> { it.updatedAt }.thenBy { it.id })
@@ -217,6 +218,36 @@ private class FakeProjectDao : ProjectDao {
         if (next.size == entities.value.size) return 0
         entities.value = next
         return 1
+    }
+
+    override suspend fun countProjectsReferencingAsset(id: String): Int =
+        entities.value.count { it.coverAssetId == id }
+
+    override suspend fun getCoverAssetReferenceCount(id: String): Int? =
+        coverAssets[id]?.referenceCount
+
+    override suspend fun getTrackedCoverAssetIds(): List<String> =
+        coverAssets.keys.sorted()
+
+    protected override suspend fun upsertCoverAsset(asset: CoverAssetEntity) {
+        coverAssets[asset.id] = asset
+    }
+
+    protected override suspend fun deleteCoverAsset(id: String): Int =
+        if (coverAssets.remove(id) != null) 1 else 0
+
+    protected override suspend fun clearCoverAssets() {
+        coverAssets.clear()
+    }
+
+    protected override suspend fun rebuildCoverAssetsFromProjects() {
+        entities.value
+            .mapNotNull(ProjectEntity::coverAssetId)
+            .groupingBy { it }
+            .eachCount()
+            .forEach { (id, count) ->
+                coverAssets[id] = CoverAssetEntity(id = id, referenceCount = count)
+            }
     }
 
     private fun update(id: String, transform: (ProjectEntity) -> ProjectEntity): Int {
