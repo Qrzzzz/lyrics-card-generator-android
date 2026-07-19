@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
@@ -60,7 +61,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -79,6 +82,7 @@ fun ExportScreen(
     var measuredHeight by remember(project.id) { mutableIntStateOf(project.spec.canvas.height) }
     var exported by remember { mutableStateOf<ExportedImage?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var exportJob by remember { mutableStateOf<Job?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("准备导出") }
     var fileName by remember(project.id) {
@@ -104,7 +108,9 @@ fun ExportScreen(
     }
 
     fun runExport(onReady: (ExportedImage) -> Unit) {
-        scope.launch {
+        if (exportJob?.isActive == true) return
+        lateinit var launched: Job
+        launched = scope.launch(start = CoroutineStart.LAZY) {
             busy = true
             error = null
             status = "正在生成 ${multiplier}× PNG…"
@@ -115,13 +121,27 @@ fun ExportScreen(
                 status = "已生成 ${image.width} × ${image.height} PNG"
                 onReady(image)
             } catch (cause: CancellationException) {
+                error = null
+                status = "导出已取消，可立即重试"
                 throw cause
             } catch (cause: Throwable) {
                 error = cause.message ?: "导出失败"
             } finally {
-                busy = false
+                if (exportJob === launched) {
+                    exportJob = null
+                    busy = false
+                }
             }
         }
+        exportJob = launched
+        launched.start()
+    }
+
+    fun cancelExport() {
+        if (exportJob?.isActive != true) return
+        error = null
+        status = "正在取消并恢复渲染器…"
+        exportJob?.cancel()
     }
 
     Scaffold(
@@ -177,6 +197,7 @@ fun ExportScreen(
                             if (current != null) shareImage(context, current)
                             else runExport { shareImage(context, it) }
                         },
+                        onCancel = ::cancelExport,
                         onRetry = { exported = null; runExport {} },
                         modifier = Modifier.weight(0.72f),
                     )
@@ -217,6 +238,7 @@ fun ExportScreen(
                             if (current != null) shareImage(context, current)
                             else runExport { shareImage(context, it) }
                         },
+                        onCancel = ::cancelExport,
                         onRetry = { exported = null; runExport {} },
                         modifier = Modifier.weight(0.54f),
                     )
@@ -240,6 +262,7 @@ private fun ExportControls(
     error: String?,
     onSave: () -> Unit,
     onShare: () -> Unit,
+    onCancel: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -334,9 +357,16 @@ private fun ExportControls(
                     Icon(Icons.Rounded.Download, contentDescription = null)
                     Text(if (busy) "生成中…" else "保存", modifier = Modifier.padding(start = 6.dp))
                 }
-                OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f), enabled = !busy) {
-                    Icon(Icons.Rounded.Share, contentDescription = null)
-                    Text("分享", modifier = Modifier.padding(start = 6.dp))
+                if (busy) {
+                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Rounded.Close, contentDescription = null)
+                        Text("取消", modifier = Modifier.padding(start = 6.dp))
+                    }
+                } else {
+                    OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Rounded.Share, contentDescription = null)
+                        Text("分享", modifier = Modifier.padding(start = 6.dp))
+                    }
                 }
             }
         }

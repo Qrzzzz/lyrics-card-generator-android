@@ -28,12 +28,14 @@ import java.io.FileOutputStream
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +62,10 @@ import kotlinx.serialization.json.put
 private const val EXPORT_CHUNK_BYTES = 384 * 1024
 private const val MAX_BASE64_CHARS_PER_CHUNK = ((EXPORT_CHUNK_BYTES + 2) / 3) * 4
 private const val MAX_PNG_BYTES = 64L * 1024L * 1024L
+private const val APP_ASSET_HOST = "appassets.androidplatform.net"
+private const val TRUSTED_ORIGIN = "https://$APP_ASSET_HOST"
+private const val RENDERER_URL = "$TRUSTED_ORIGIN/renderer/index.html"
+private const val BRIDGE_OBJECT = "LyricsCardNative"
 private val MAX_EXPORT_CHUNKS = ((MAX_PNG_BYTES + EXPORT_CHUNK_BYTES - 1) / EXPORT_CHUNK_BYTES).toInt()
 
 @Serializable
@@ -89,10 +95,59 @@ data class CanvasMeasurement(val width: Int, val height: Int)
 
 class RendererException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-class RendererController(
+internal interface RendererBridge {
+    fun attach(view: WebView, onMessage: (String) -> Unit): Boolean
+
+    fun send(view: WebView, envelope: RendererEnvelope)
+
+    fun detach(view: WebView)
+}
+
+private class WebViewRendererBridge : RendererBridge {
+    override fun attach(view: WebView, onMessage: (String) -> Unit): Boolean {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return false
+        WebViewCompat.addWebMessageListener(
+            view,
+            BRIDGE_OBJECT,
+            setOf(TRUSTED_ORIGIN),
+        ) { _, message, sourceOrigin, isMainFrame, _ ->
+            if (isMainFrame && sourceOrigin.toString() == TRUSTED_ORIGIN) {
+                message.data?.let(onMessage)
+            }
+        }
+        return true
+    }
+
+    override fun send(view: WebView, envelope: RendererEnvelope) {
+        val json = RenderSpecJson.format.encodeToString(envelope)
+        val quoted = JsonPrimitive(json).toString()
+        val script = "window.LyricsCardRenderer && window.LyricsCardRenderer.receive(JSON.parse($quoted));"
+        view.evaluateJavascript(script, null)
+    }
+
+    override fun detach(view: WebView) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            runCatching { WebViewCompat.removeWebMessageListener(view, BRIDGE_OBJECT) }
+        }
+    }
+}
+
+class RendererController private constructor(
     context: Context,
     private val assetStore: ProjectAssetStore,
+    private val bridge: RendererBridge,
+    private val exportTimeoutMillis: Long,
 ) {
+    constructor(context: Context, assetStore: ProjectAssetStore) :
+        this(context, assetStore, WebViewRendererBridge(), EXPORT_TIMEOUT_MS)
+
+    internal constructor(
+        context: Context,
+        assetStore: ProjectAssetStore,
+        exportTimeoutMillis: Long,
+        bridge: RendererBridge,
+    ) : this(context, assetStore, bridge, exportTimeoutMillis)
+
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<RendererEnvelope>>()
@@ -105,6 +160,9 @@ class RendererController(
 
     private var webView: WebView? = null
     private var webViewContext: RendererWebViewContext? = null
+    private var activeSessionId: Long? = null
+    private var nextSessionId = 0L
+    private var currentSpec: RenderSpec? = null
     private var pendingSpec: RenderSpec? = null
     private var previewInFlightSpec: RenderSpec? = null
     private var specJob: Job? = null
@@ -133,8 +191,10 @@ class RendererController(
 
         val contextBinding = RendererWebViewContext(appContext)
         return WebView(contextBinding.context).also { view ->
+            val sessionId = ++nextSessionId
             webView = view
             webViewContext = contextBinding
+            activeSessionId = sessionId
             contextBinding.bind(owner, context)
             WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
             view.setBackgroundColor(Color.TRANSPARENT)
@@ -158,18 +218,9 @@ class RendererController(
                 mediaPlaybackRequiresUserGesture = true
                 safeBrowsingEnabled = true
             }
-            view.webViewClient = secureClient(assetLoader)
+            view.webViewClient = secureClient(assetLoader, sessionId)
 
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-                WebViewCompat.addWebMessageListener(
-                    view,
-                    BRIDGE_OBJECT,
-                    setOf(TRUSTED_ORIGIN),
-                ) { _, message, sourceOrigin, isMainFrame, _ ->
-                    if (isMainFrame && sourceOrigin.toString() == TRUSTED_ORIGIN) {
-                        message.data?.let(::handleMessage)
-                    }
-                }
+            if (bridge.attach(view) { raw -> handleMessage(sessionId, raw) }) {
                 view.loadUrl(RENDERER_URL)
             } else {
                 _status.value = RendererStatus(
@@ -178,6 +229,7 @@ class RendererController(
                 )
                 webView = null
                 webViewContext = null
+                activeSessionId = null
                 contextBinding.close()
                 view.destroy()
             }
@@ -194,7 +246,9 @@ class RendererController(
     }
 
     fun updateSpec(spec: RenderSpec) {
-        pendingSpec = spec.requireValid()
+        val validated = spec.requireValid()
+        currentSpec = validated
+        pendingSpec = validated
         schedulePreviewUpdate()
     }
 
@@ -248,7 +302,7 @@ class RendererController(
     }
 
     private fun restorePreviewAfterReload() {
-        pendingSpec = pendingSpec ?: previewInFlightSpec
+        pendingSpec = pendingSpec ?: previewInFlightSpec ?: currentSpec
         previewInFlightSpec = null
     }
 
@@ -258,40 +312,66 @@ class RendererController(
 
     suspend fun exportPng(spec: RenderSpec, pixelRatio: Int): ExportedImage = operationMutex.withLock {
         require(pixelRatio in 1..2) { "Alpha 仅支持 1 倍或 2 倍导出" }
-        var exportSpec = spec.copy(canvas = spec.canvas.copy(pixelRatio = pixelRatio)).requireValid()
-        _status.value = RendererStatus(RendererStatus.Phase.EXPORTING, "正在生成 PNG…")
+        val requestedSpec = spec.requireValid()
+        currentSpec = requestedSpec
+        var exportSpec = requestedSpec.copy(canvas = requestedSpec.canvas.copy(pixelRatio = pixelRatio)).requireValid()
+        val sessionId = awaitReady()
+        try {
+            _status.value = RendererStatus(RendererStatus.Phase.EXPORTING, "正在生成 PNG…")
 
-        if (exportSpec.canvas.autoHeight) {
-            val measurement = measureUnlocked(exportSpec)
-            exportSpec = exportSpec.copy(canvas = exportSpec.canvas.copy(height = measurement.height)).requireValid()
+            if (exportSpec.canvas.autoHeight) {
+                val measurement = measureUnlocked(exportSpec, sessionId)
+                exportSpec = exportSpec.copy(canvas = exportSpec.canvas.copy(height = measurement.height)).requireValid()
+            }
+
+            val applied = request(
+                type = "setSpec",
+                payload = RenderSpecJson.format.encodeToJsonElement(RenderSpec.serializer(), exportSpec),
+                timeoutMillis = SPEC_TIMEOUT_MS,
+                expectedSessionId = sessionId,
+            )
+            if (applied.type != "specApplied") {
+                throw RendererException("渲染器未确认当前设置")
+            }
+
+            val image = requestExport(
+                payload = buildJsonObject {
+                    put("pixelRatio", pixelRatio)
+                    put("spec", RenderSpecJson.format.encodeToJsonElement(RenderSpec.serializer(), exportSpec))
+                },
+                spec = exportSpec,
+                sessionId = sessionId,
+            )
+            if (!isCurrentSession(sessionId)) {
+                image.file.delete()
+                throw RendererException("导出期间渲染器会话已重建，请重试")
+            }
+            _status.value = RendererStatus(RendererStatus.Phase.READY, "导出完成")
+            if (pendingSpec != null) schedulePreviewUpdate(delayMillis = 0)
+            image
+        } catch (cause: TimeoutCancellationException) {
+            val failure = RendererException("导出超时，渲染器已恢复，可立即重试", cause)
+            recoverRendererSession(sessionId, "导出超时，正在恢复渲染器…", failure)
+            throw failure
+        } catch (cause: CancellationException) {
+            recoverRendererSession(
+                sessionId,
+                "导出已取消，正在恢复渲染器…",
+                RendererException("导出已取消", cause),
+            )
+            throw cause
         }
-
-        val applied = request(
-            type = "setSpec",
-            payload = RenderSpecJson.format.encodeToJsonElement(RenderSpec.serializer(), exportSpec),
-            timeoutMillis = SPEC_TIMEOUT_MS,
-        )
-        if (applied.type != "specApplied") {
-            throw RendererException("渲染器未确认当前设置")
-        }
-
-        val image = requestExport(
-            payload = buildJsonObject {
-                put("pixelRatio", pixelRatio)
-                put("spec", RenderSpecJson.format.encodeToJsonElement(RenderSpec.serializer(), exportSpec))
-            },
-            spec = exportSpec,
-        )
-        _status.value = RendererStatus(RendererStatus.Phase.READY, "导出完成")
-        if (pendingSpec != null) schedulePreviewUpdate(delayMillis = 0)
-        image
     }
 
-    private suspend fun measureUnlocked(spec: RenderSpec): CanvasMeasurement {
+    private suspend fun measureUnlocked(
+        spec: RenderSpec,
+        expectedSessionId: Long? = null,
+    ): CanvasMeasurement {
         val measured = request(
             type = "measure",
             payload = RenderSpecJson.format.encodeToJsonElement(RenderSpec.serializer(), spec),
             timeoutMillis = SPEC_TIMEOUT_MS,
+            expectedSessionId = expectedSessionId,
         )
         if (measured.type != "measured") throw RendererException("渲染器未返回画布尺寸")
         val payload = measured.payload.jsonObject
@@ -319,10 +399,15 @@ class RendererController(
     }
 
     fun retry() {
+        if (closed) return
+        if (activeSessionId == null && webView == null && _status.value.phase == RendererStatus.Phase.STARTING) return
         recoveryAttempts = 0
-        stopPreviewJobs(restoreInFlight = true)
+        invalidateRendererSession(
+            expectedSessionId = activeSessionId,
+            failure = RendererException("渲染器正在重试"),
+            restorePreview = true,
+        )
         _status.value = RendererStatus()
-        destroyWebView()
         _generation.value += 1
     }
 
@@ -330,6 +415,7 @@ class RendererController(
         if (closed) return
         closed = true
         stopPreviewJobs(restoreInFlight = false)
+        activeSessionId = null
         pending.values.forEach { it.cancel() }
         pending.clear()
         exportAssemblies.values.forEach(ExportAssembly::abort)
@@ -342,24 +428,32 @@ class RendererController(
         type: String,
         payload: JsonElement,
         timeoutMillis: Long,
+        expectedSessionId: Long? = null,
     ): RendererEnvelope {
-        awaitReady()
+        val sessionId = awaitReady()
+        if (expectedSessionId != null && expectedSessionId != sessionId) {
+            throw RendererException("渲染器会话已重建，请重试")
+        }
         val requestId = UUID.randomUUID().toString()
         val result = CompletableDeferred<RendererEnvelope>()
         pending[requestId] = result
         try {
             withContext(Dispatchers.Main.immediate) {
-                send(RendererEnvelope(requestId = requestId, type = type, payload = payload))
+                send(RendererEnvelope(requestId = requestId, type = type, payload = payload), sessionId)
             }
             return withTimeout(timeoutMillis) { result.await() }
         } finally {
             pending.remove(requestId)
-            if (!result.isCompleted) sendCancel(requestId)
+            if (!result.isCompleted) sendCancel(requestId, sessionId)
         }
     }
 
-    private suspend fun requestExport(payload: JsonElement, spec: RenderSpec): ExportedImage {
-        awaitReady()
+    private suspend fun requestExport(
+        payload: JsonElement,
+        spec: RenderSpec,
+        sessionId: Long,
+    ): ExportedImage {
+        if (awaitReady() != sessionId) throw RendererException("渲染器会话已重建，请重试")
         val requestId = UUID.randomUUID().toString()
         val result = CompletableDeferred<RendererEnvelope>()
         val assembly = withContext(Dispatchers.IO) { createExportAssembly(spec) }
@@ -368,9 +462,9 @@ class RendererController(
         var completedNormally = false
         try {
             withContext(Dispatchers.Main.immediate) {
-                send(RendererEnvelope(requestId = requestId, type = "exportPng", payload = payload))
+                send(RendererEnvelope(requestId = requestId, type = "exportPng", payload = payload), sessionId)
             }
-            val completed = withTimeout(EXPORT_TIMEOUT_MS) { result.await() }
+            val completed = withTimeout(exportTimeoutMillis) { result.await() }
             if (completed.type != "exportCompleted") {
                 throw RendererException("渲染器返回了意外结果：${completed.type}")
             }
@@ -380,14 +474,14 @@ class RendererController(
         } finally {
             pending.remove(requestId)
             exportAssemblies.remove(requestId)
-            if (!result.isCompleted) sendCancel(requestId)
+            if (!result.isCompleted) sendCancel(requestId, sessionId)
             if (!completedNormally) {
                 withContext(NonCancellable + Dispatchers.IO) { assembly.abort() }
             }
         }
     }
 
-    private suspend fun sendCancel(targetRequestId: String) {
+    private suspend fun sendCancel(targetRequestId: String, sessionId: Long) {
         withContext(NonCancellable + Dispatchers.Main.immediate) {
             runCatching {
                 send(
@@ -396,12 +490,13 @@ class RendererController(
                         type = "cancel",
                         payload = buildJsonObject { put("requestId", targetRequestId) },
                     ),
+                    sessionId,
                 )
             }
         }
     }
 
-    private suspend fun awaitReady() {
+    private suspend fun awaitReady(): Long {
         withTimeout(READY_TIMEOUT_MS) {
             while (_status.value.phase == RendererStatus.Phase.STARTING) {
                 delay(25)
@@ -410,17 +505,19 @@ class RendererController(
         if (_status.value.phase == RendererStatus.Phase.ERROR) {
             throw RendererException(_status.value.message)
         }
+        return activeSessionId ?: throw RendererException("本地渲染器尚未创建")
     }
 
-    private fun send(envelope: RendererEnvelope) {
-        val json = RenderSpecJson.format.encodeToString(envelope)
-        val quoted = JsonPrimitive(json).toString()
-        val script = "window.LyricsCardRenderer && window.LyricsCardRenderer.receive(JSON.parse($quoted));"
-        webView?.evaluateJavascript(script, null)
-            ?: throw RendererException("本地渲染器尚未创建")
+    private fun send(envelope: RendererEnvelope, sessionId: Long) {
+        val view = webView
+        if (view == null || !isCurrentSession(sessionId)) {
+            throw RendererException("渲染器会话已重建，请重试")
+        }
+        bridge.send(view, envelope)
     }
 
-    private fun handleMessage(raw: String) {
+    private fun handleMessage(sessionId: Long, raw: String) {
+        if (!isCurrentSession(sessionId)) return
         val envelope = runCatching {
             RenderSpecJson.format.decodeFromString(RendererEnvelope.serializer(), raw)
         }.getOrElse { cause ->
@@ -467,7 +564,7 @@ class RendererController(
                     }
                     _status.value = RendererStatus(RendererStatus.Phase.ERROR, failure.message ?: "导出分块无效")
                     pending.remove(envelope.requestId)?.completeExceptionally(failure)
-                    scope.launch { sendCancel(envelope.requestId) }
+                    scope.launch { sendCancel(envelope.requestId, sessionId) }
                 }
             }
             "renderError" -> {
@@ -556,7 +653,10 @@ class RendererController(
             }
         }
 
-    private fun secureClient(assetLoader: WebViewAssetLoader) = object : WebViewClient() {
+    private fun secureClient(
+        assetLoader: WebViewAssetLoader,
+        sessionId: Long,
+    ) = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
             !isAllowedRendererUrl(request.url)
 
@@ -576,7 +676,7 @@ class RendererController(
             request: WebResourceRequest,
             error: WebResourceError,
         ) {
-            if (request.isForMainFrame) {
+            if (request.isForMainFrame && isCurrentSession(sessionId, view)) {
                 _status.value = RendererStatus(
                     RendererStatus.Phase.ERROR,
                     "本地渲染器加载失败（${error.errorCode}）",
@@ -585,31 +685,78 @@ class RendererController(
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-            val failure = RendererException("WebView 渲染进程已终止")
-            pending.values.forEach { it.completeExceptionally(failure) }
-            pending.clear()
-            exportAssemblies.values.forEach(ExportAssembly::abort)
-            exportAssemblies.clear()
-            stopPreviewJobs(restoreInFlight = true)
-            destroyWebView(loadBlank = false)
-            if (!closed && recoveryAttempts < MAX_AUTOMATIC_RECOVERIES) {
-                recoveryAttempts += 1
-                _status.value = RendererStatus(
-                    RendererStatus.Phase.STARTING,
-                    if (detail.didCrash()) "WebView 渲染进程崩溃，正在自动恢复…" else "WebView 渲染进程已被系统回收，正在自动恢复…",
-                )
-                _generation.value += 1
-            } else {
-                _status.value = RendererStatus(
-                    RendererStatus.Phase.ERROR,
-                    if (detail.didCrash()) "WebView 渲染进程反复崩溃，请点击重试" else "WebView 渲染进程反复被回收，请点击重试",
-                )
-            }
-            return true
+            return handleRenderProcessGone(view, detail.didCrash())
         }
     }
 
+    internal fun handleRenderProcessGone(view: WebView, didCrash: Boolean): Boolean {
+        val sessionId = activeSessionId
+        if (sessionId == null || !isCurrentSession(sessionId, view)) return true
+        val failure = RendererException("WebView 渲染进程已终止")
+        invalidateRendererSession(
+            expectedSessionId = sessionId,
+            failure = failure,
+            restorePreview = true,
+            loadBlank = false,
+        )
+        if (!closed && recoveryAttempts < MAX_AUTOMATIC_RECOVERIES) {
+            recoveryAttempts += 1
+            _status.value = RendererStatus(
+                RendererStatus.Phase.STARTING,
+                if (didCrash) "WebView 渲染进程崩溃，正在自动恢复…" else "WebView 渲染进程已被系统回收，正在自动恢复…",
+            )
+            _generation.value += 1
+        } else if (!closed) {
+            _status.value = RendererStatus(
+                RendererStatus.Phase.ERROR,
+                if (didCrash) "WebView 渲染进程反复崩溃，请点击重试" else "WebView 渲染进程反复被回收，请点击重试",
+            )
+        }
+        return true
+    }
+
+    private suspend fun recoverRendererSession(
+        sessionId: Long,
+        message: String,
+        failure: RendererException,
+    ) {
+        withContext(NonCancellable + Dispatchers.Main.immediate) {
+            if (
+                invalidateRendererSession(
+                    expectedSessionId = sessionId,
+                    failure = failure,
+                    restorePreview = true,
+                )
+            ) {
+                _status.value = RendererStatus(RendererStatus.Phase.STARTING, message)
+                _generation.value += 1
+            }
+        }
+    }
+
+    private fun invalidateRendererSession(
+        expectedSessionId: Long?,
+        failure: RendererException,
+        restorePreview: Boolean,
+        loadBlank: Boolean = true,
+    ): Boolean {
+        if (expectedSessionId != null && activeSessionId != expectedSessionId) return false
+        if (expectedSessionId == null && activeSessionId != null) return false
+        activeSessionId = null
+        pending.values.forEach { it.completeExceptionally(failure) }
+        pending.clear()
+        exportAssemblies.values.forEach(ExportAssembly::abort)
+        exportAssemblies.clear()
+        stopPreviewJobs(restoreInFlight = restorePreview)
+        destroyWebView(loadBlank)
+        return true
+    }
+
+    private fun isCurrentSession(sessionId: Long, view: WebView? = webView): Boolean =
+        activeSessionId == sessionId && view != null && webView === view
+
     private fun destroyWebView(loadBlank: Boolean = true) {
+        activeSessionId = null
         val view = webView ?: return
         webView = null
         val contextBinding = webViewContext
@@ -617,6 +764,7 @@ class RendererController(
         (view.parent as? ViewGroup)?.removeView(view)
         runCatching { view.onPause() }
         contextBinding?.close()
+        bridge.detach(view)
         runCatching { view.stopLoading() }
         if (loadBlank) runCatching { view.loadUrl("about:blank") }
         runCatching { view.clearHistory() }
@@ -685,10 +833,6 @@ class RendererController(
         }
 
     private companion object {
-        const val APP_ASSET_HOST = "appassets.androidplatform.net"
-        const val TRUSTED_ORIGIN = "https://$APP_ASSET_HOST"
-        const val RENDERER_URL = "$TRUSTED_ORIGIN/renderer/index.html"
-        const val BRIDGE_OBJECT = "LyricsCardNative"
         const val PROTOCOL_VERSION = 1
         const val PREVIEW_DEBOUNCE_MS = 40L
         const val READY_TIMEOUT_MS = 10_000L
