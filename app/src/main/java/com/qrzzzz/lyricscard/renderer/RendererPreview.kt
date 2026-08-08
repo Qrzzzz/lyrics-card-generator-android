@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.annotation.StringRes
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.model.RenderSpec
@@ -43,6 +44,7 @@ fun RendererPreview(
 ) {
     val status by controller.status.collectAsStateWithLifecycle()
     val generation by controller.generation.collectAsStateWithLifecycle()
+    val localizedStatus = stringResource(rendererStatusResource(status.phase))
     val previewKey = if (spec.canvas.autoHeight) {
         spec.copy(canvas = spec.canvas.copy(height = 0, pixelRatio = 1))
     } else {
@@ -95,11 +97,11 @@ fun RendererPreview(
 
         when (status.phase) {
             RendererStatus.Phase.STARTING -> PreviewStatus(
-                message = stringResource(R.string.renderer_starting),
+                message = localizedStatus,
                 showProgress = true,
             )
             RendererStatus.Phase.ERROR -> PreviewStatus(
-                message = stringResource(R.string.renderer_error),
+                message = localizedStatus,
                 retry = controller::retry,
             )
             else -> Unit
@@ -108,6 +110,15 @@ fun RendererPreview(
 }
 
 private const val AUTO_HEIGHT_MEASURE_DEBOUNCE_MS = 220L
+
+@StringRes
+private fun rendererStatusResource(phase: RendererStatus.Phase): Int = when (phase) {
+    RendererStatus.Phase.STARTING -> R.string.renderer_starting
+    RendererStatus.Phase.READY -> R.string.renderer_ready
+    RendererStatus.Phase.RENDERING -> R.string.renderer_rendering
+    RendererStatus.Phase.EXPORTING -> R.string.renderer_exporting
+    RendererStatus.Phase.ERROR -> R.string.renderer_error
+}
 
 @Composable
 private fun PreviewStatus(

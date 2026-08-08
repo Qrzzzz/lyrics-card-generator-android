@@ -635,13 +635,11 @@ private fun EditorNavigationBar(
                     contentDescription = null,
                 )
                 Text(
-                    stringResource(
-                        if (selectedStep == EditorStep.entries.lastIndex) {
-                            R.string.editor_export_png
-                        } else {
-                            R.string.editor_next_step
-                        },
-                    ),
+                    if (selectedStep == EditorStep.entries.lastIndex) {
+                        stringResource(R.string.editor_export_png, stringResource(R.string.file_png))
+                    } else {
+                        stringResource(R.string.editor_next_step)
+                    },
                     modifier = Modifier.padding(start = 8.dp),
                     fontWeight = FontWeight.Bold,
                 )
@@ -1120,7 +1118,10 @@ private fun BrandingPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) 
             label = ::songSourceLabel,
             onSelect = { onSpecChange(spec.copy(branding = spec.branding.copy(platform = it))) },
         )
-        SettingSwitch(stringResource(R.string.editor_show_shared_by), spec.visibility.showSharedBy) {
+        SettingSwitch(
+            stringResource(R.string.editor_show_shared_by, stringResource(R.string.brand_shared_by)),
+            spec.visibility.showSharedBy,
+        ) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showSharedBy = it)))
         }
         if (spec.visibility.showSharedBy) {
@@ -1132,7 +1133,13 @@ private fun BrandingPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) 
                 singleLine = true,
             )
         }
-        SettingSwitch(stringResource(R.string.editor_show_generated_watermark), spec.visibility.showGeneratedWatermark) {
+        SettingSwitch(
+            stringResource(
+                R.string.editor_show_generated_watermark,
+                stringResource(R.string.brand_generated_watermark),
+            ),
+            spec.visibility.showGeneratedWatermark,
+        ) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showGeneratedWatermark = it)))
         }
     }

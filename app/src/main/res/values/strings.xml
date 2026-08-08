@@ -75,7 +75,7 @@
     <string name="editor_autosave_failed">自动保存失败</string>
     <string name="editor_previous_step">上一步</string>
     <string name="editor_next_step">下一步</string>
-    <string name="editor_export_png">导出 PNG</string>
+    <string name="editor_export_png">导出 %1$s</string>
     <string name="editor_netease_section">网易云选歌</string>
     <string name="editor_netease_help">与 Web 版一致，可先按歌名搜索；也可直接贴入网易云分享文本或链接。</string>
     <string name="editor_netease_query_label">歌曲名或歌手</string>
@@ -152,9 +152,9 @@
     <string name="brand_spotify" translatable="false">Spotify</string>
     <string name="editor_platform_attribution">平台与署名</string>
     <string name="editor_show_platform_logo">显示平台 Logo</string>
-    <string name="editor_show_shared_by">显示 Shared by</string>
+    <string name="editor_show_shared_by">显示 %1$s</string>
     <string name="editor_sharer_name">分享者名称</string>
-    <string name="editor_show_generated_watermark">显示 Generated watermark</string>
+    <string name="editor_show_generated_watermark">显示 %1$s</string>
     <string name="editor_pre_export_check">导出前确认</string>
     <string name="editor_song_info">歌曲信息</string>
     <string name="editor_filled">已填写</string>
@@ -175,13 +175,11 @@
     <string name="editor_import_part_song">歌曲信息</string>
     <string name="editor_import_part_lyrics">歌词</string>
     <string name="editor_import_part_cover">封面</string>
-    <string name="editor_cover_not_imported">；封面未导入</string>
     <string name="editor_error_invalid_setting">设置无效</string>
     <string name="editor_error_import_cover">无法导入封面</string>
     <string name="editor_error_extract_palette">无法提取颜色</string>
     <string name="editor_error_busy_leaving">正在应用封面、歌曲信息或配色，请完成后再离开</string>
     <string name="editor_error_open_project">无法打开项目</string>
-    <string name="editor_error_apply_netease">无法应用网易云歌曲信息</string>
     <string name="editor_error_save_netease">无法保存网易云导入结果</string>
     <string name="editor_error_netease_search">网易云搜索失败</string>
     <string name="editor_error_netease_resolve">网易云解析失败</string>
