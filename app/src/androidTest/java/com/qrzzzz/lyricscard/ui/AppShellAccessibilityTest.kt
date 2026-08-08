@@ -301,10 +301,12 @@ class AppShellAccessibilityTest {
             waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
             logImeStage(startedAt, "export-ime-ready")
             assertTrue("IME inset was not visible over Export", imeBottomPx.intValue > 0)
+            assertMinimumHeight(EXPORT_OPTIONS_LIST_TAG, MIN_TOUCH_TARGET_DP)
             compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
                 .performScrollToNode(hasTestTag(EXPORT_SAVE_ACTION_TAG))
             compose.onNodeWithTag(EXPORT_SAVE_ACTION_TAG)
                 .assertIsDisplayed()
+            assertMinimumHeight(EXPORT_SAVE_ACTION_TAG, MIN_TOUCH_TARGET_DP)
             logImeStage(startedAt, "assertions-complete")
         } finally {
             logImeStage(startedAt, "controller-close-begin")
@@ -344,6 +346,12 @@ class AppShellAccessibilityTest {
         assertTrue("$value ends outside viewport", bounds.right <= viewport.right && bounds.bottom <= viewport.bottom)
     }
 
+    private fun assertMinimumHeight(tag: String, minimumDp: Float) {
+        val height = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.height
+        val minimumPx = minimumDp * compose.activity.resources.displayMetrics.density
+        assertTrue("$tag height $height px was below $minimumPx px", height >= minimumPx)
+    }
+
     private fun waitForCondition(timeoutMillis: Long, condition: () -> Boolean) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMillis
         var satisfied = runCatching(condition).getOrDefault(false)
@@ -376,6 +384,7 @@ class AppShellAccessibilityTest {
         const val ORIENTATION_TIMEOUT_MS = 5_000L
         const val POLL_FRAME_MILLIS = 100L
         const val ESPRESSO_TIMEOUT_MS = 20_000L
+        const val MIN_TOUCH_TARGET_DP = 48f
         const val IME_TAG = "LCG_IME"
     }
 }

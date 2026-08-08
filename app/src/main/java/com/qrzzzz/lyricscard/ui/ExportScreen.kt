@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -94,6 +97,7 @@ fun ExportScreen(
     val windowWidth = currentLyricsWindowWidth(windowWidthSizeClass)
     val defaultFileName = stringResource(R.string.export_default_file_name)
     val screenTitle = stringResource(R.string.export_title)
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/png"),
     ) { uri ->
@@ -138,26 +142,28 @@ fun ExportScreen(
     Scaffold(
         modifier = Modifier.semantics { paneTitle = screenTitle },
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        screenTitle,
-                        modifier = Modifier.semantics { heading() },
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack, enabled = !state.isBusy) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.common_back),
+            if (!imeVisible) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            screenTitle,
+                            modifier = Modifier.semantics { heading() },
+                            fontWeight = FontWeight.Bold,
                         )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack, enabled = !state.isBusy) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = stringResource(R.string.common_back),
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            }
         },
     ) { padding ->
         if (windowWidth == LyricsWindowWidth.COMPACT) {
