@@ -1,6 +1,5 @@
 package com.qrzzzz.lyricscard.ui
 
-import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -498,9 +497,6 @@ private fun shareImage(context: android.content.Context, image: ExportedImage) {
             uri,
         )
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    if (context.packageManager.queryIntentActivities(sendIntent, 0).isEmpty()) {
-        throw ActivityNotFoundException("No activity can share an image")
     }
     context.startActivity(
         Intent.createChooser(sendIntent, context.getString(R.string.export_share_chooser)),

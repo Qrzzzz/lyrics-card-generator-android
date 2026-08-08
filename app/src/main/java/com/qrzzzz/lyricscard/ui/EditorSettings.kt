@@ -252,9 +252,9 @@ internal fun LimitedSingleLineField(
     label: String,
     value: String,
     maxLength: Int,
+    modifier: Modifier = Modifier,
     required: Boolean = false,
     imeAction: ImeAction = ImeAction.Next,
-    modifier: Modifier = Modifier,
     leadingIcon: (@Composable () -> Unit)? = null,
     onValueChange: (String) -> Unit,
 ) {
