@@ -2,6 +2,7 @@ package com.qrzzzz.lyricscard.quality
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -12,6 +13,7 @@ import android.net.Uri
 import android.os.Debug
 import android.os.StrictMode
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -25,6 +27,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
+import androidx.test.platform.app.InstrumentationRegistry
 import com.qrzzzz.lyricscard.LyricsCardApplication
 import com.qrzzzz.lyricscard.RendererOperations
 import com.qrzzzz.lyricscard.model.GridDensity
@@ -227,9 +230,7 @@ class QualityStressTest {
 
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
                 if (elapsed - lastBackground >= BACKGROUND_INTERVAL_MS) {
-                    scenario.moveToState(Lifecycle.State.CREATED)
-                    SystemClock.sleep(350)
-                    scenario.moveToState(Lifecycle.State.RESUMED)
+                    backgroundAndResume(scenario)
                     backgroundCycles += 1
                     lastBackground = elapsed
                 }
@@ -489,6 +490,27 @@ class QualityStressTest {
         }
     }
 
+    private fun backgroundAndResume(scenario: ActivityScenario<ComponentActivity>) {
+        var host: ComponentActivity? = null
+        scenario.onActivity { activity -> host = activity }
+        val activity = checkNotNull(host)
+        appContext.startActivity(
+            Intent(Settings.ACTION_SETTINGS).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
+            ),
+        )
+        waitUntil(BACKGROUND_TIMEOUT_MS) {
+            activity.lifecycle.currentState == Lifecycle.State.CREATED
+        }
+        SystemClock.sleep(350)
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("input keyevent KEYCODE_BACK")
+            .close()
+        waitUntil(BACKGROUND_TIMEOUT_MS) {
+            activity.lifecycle.currentState == Lifecycle.State.RESUMED
+        }
+    }
+
     private fun memorySample(
         stage: String,
         exportDirectory: File? = null,
@@ -574,6 +596,7 @@ class QualityStressTest {
         const val APP_PACKAGE_PREFIX = "com.qrzzzz.lyricscard"
         const val EDITING_DURATION_MS = 30L * 60L * 1_000L
         const val BACKGROUND_INTERVAL_MS = 90L * 1_000L
+        const val BACKGROUND_TIMEOUT_MS = 20_000L
         const val RECREATION_INTERVAL_MS = 3L * 60L * 1_000L
         const val MEMORY_INTERVAL_MS = 5L * 60L * 1_000L
         const val LARGE_COVER_EDGE = 4_096
