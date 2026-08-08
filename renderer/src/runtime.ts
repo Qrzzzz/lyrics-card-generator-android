@@ -3,7 +3,14 @@ import { DEFAULT_RENDER_SPEC } from "./defaultSpec";
 import { ExportRenderError } from "./export";
 import { extractPaletteFromAsset, PaletteExtractionError } from "./palette";
 import { InvalidRenderSpecError, parseRenderSpec } from "./spec";
-import { blobToBase64Chunks, createEnvelope, parseHostEnvelope, ProtocolMessageError, readObjectPayload } from "./transport";
+import {
+  blobToBase64Chunks,
+  createEnvelope,
+  isTrustedWindowMessageOrigin,
+  parseHostEnvelope,
+  ProtocolMessageError,
+  readObjectPayload
+} from "./transport";
 import {
   RENDERER_VERSION,
   type HostEnvelope,
@@ -260,7 +267,7 @@ function installMessageListeners() {
     }
   };
   window.addEventListener("message", (event) => {
-    if (event.origin && event.origin !== "null" && event.origin !== window.location.origin) return;
+    if (!isTrustedWindowMessageOrigin(event.origin, window.location.origin)) return;
     void handleIncoming(event.data);
   });
 }

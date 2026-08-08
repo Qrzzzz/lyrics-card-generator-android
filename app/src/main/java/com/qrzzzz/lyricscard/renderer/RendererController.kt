@@ -68,6 +68,28 @@ private const val RENDERER_URL = "$TRUSTED_ORIGIN/renderer/index.html"
 private const val BRIDGE_OBJECT = "LyricsCardNative"
 private val MAX_EXPORT_CHUNKS = ((MAX_PNG_BYTES + EXPORT_CHUNK_BYTES - 1) / EXPORT_CHUNK_BYTES).toInt()
 
+internal object RendererRequestPolicy {
+    fun mayNavigate(uri: Uri): Boolean = isRendererResource(uri)
+
+    fun mayServe(method: String, uri: Uri): Boolean =
+        method.equals("GET", ignoreCase = true) && (isRendererResource(uri) || isMediaResource(uri))
+
+    fun isRendererResource(uri: Uri): Boolean = hasTrustedOrigin(uri) && hasSafePath(uri, "/renderer/")
+
+    fun isMediaResource(uri: Uri): Boolean = hasTrustedOrigin(uri) && hasSafePath(uri, "/media/")
+
+    private fun hasTrustedOrigin(uri: Uri): Boolean =
+        uri.scheme.equals("https", ignoreCase = true) &&
+            uri.encodedAuthority.equals(APP_ASSET_HOST, ignoreCase = true)
+
+    private fun hasSafePath(uri: Uri, prefix: String): Boolean {
+        val path = uri.path ?: return false
+        return path.startsWith(prefix) &&
+            '\\' !in path &&
+            path.split('/').none { segment -> segment == "." || segment == ".." }
+    }
+}
+
 @Serializable
 data class RendererEnvelope(
     val protocolVersion: Int = 1,
@@ -360,6 +382,12 @@ class RendererController private constructor(
                 RendererException("导出已取消", cause),
             )
             throw cause
+        } catch (cause: Throwable) {
+            val failure = if (cause is RendererException) cause else {
+                RendererException(cause.message ?: "导出失败", cause)
+            }
+            recoverRendererSession(sessionId, "导出失败，正在恢复渲染器…", failure)
+            throw failure
         }
     }
 
@@ -535,7 +563,7 @@ class RendererController private constructor(
                 if (pendingSpec != null) schedulePreviewUpdate(delayMillis = 0)
             }
             "specApplied" -> {
-                pending.remove(envelope.requestId)?.complete(envelope)
+                completePending(envelope)
             }
             "exportStarted" -> {
                 if (exportAssemblies.containsKey(envelope.requestId)) {
@@ -578,9 +606,15 @@ class RendererController private constructor(
                 }
             }
             "exportCompleted", "measured", "paletteExtracted", "pong" -> {
-                pending.remove(envelope.requestId)?.complete(envelope)
+                completePending(envelope)
             }
         }
+    }
+
+    private fun completePending(envelope: RendererEnvelope) {
+        val result = pending.remove(envelope.requestId) ?: return
+        recoveryAttempts = 0
+        result.complete(envelope)
     }
 
     private fun createExportAssembly(spec: RenderSpec): ExportAssembly {
@@ -658,14 +692,14 @@ class RendererController private constructor(
         sessionId: Long,
     ) = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-            !isAllowedRendererUrl(request.url)
+            !RendererRequestPolicy.mayNavigate(request.url)
 
         override fun shouldInterceptRequest(
             view: WebView,
             request: WebResourceRequest,
         ): WebResourceResponse {
             val url = request.url
-            if (isAllowedRendererUrl(url) || isAllowedMediaUrl(url)) {
+            if (RendererRequestPolicy.mayServe(request.method, url)) {
                 assetLoader.shouldInterceptRequest(url)?.let { return it }
             }
             return blockedResponse()
@@ -813,12 +847,6 @@ class RendererController private constructor(
         mapOf("Cache-Control" to "no-store"),
         ByteArrayInputStream("Blocked by Lyrics Card renderer policy".toByteArray()),
     )
-
-    private fun isAllowedRendererUrl(uri: Uri): Boolean =
-        uri.scheme == "https" && uri.host == APP_ASSET_HOST && uri.path?.startsWith("/renderer/") == true
-
-    private fun isAllowedMediaUrl(uri: Uri): Boolean =
-        uri.scheme == "https" && uri.host == APP_ASSET_HOST && uri.path?.startsWith("/media/") == true
 
     private fun CoroutineScope.launchSafely(block: suspend CoroutineScope.() -> Unit): Job =
         launch {

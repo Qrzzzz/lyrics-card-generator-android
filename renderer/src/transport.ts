@@ -98,6 +98,10 @@ export function readObjectPayload(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
+export function isTrustedWindowMessageOrigin(sourceOrigin: string, documentOrigin: string) {
+  return sourceOrigin === documentOrigin;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

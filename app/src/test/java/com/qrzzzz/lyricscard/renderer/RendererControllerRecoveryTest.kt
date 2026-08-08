@@ -26,6 +26,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -194,6 +195,101 @@ class RendererControllerRecoveryTest {
         }
     }
 
+    @Test
+    fun `successful work resets consecutive process recovery budget`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val bridge = FakeRendererBridge(successPng()).apply { mode = FakeRendererBridge.Mode.SUCCESS }
+        val controller = RendererController(context, ProjectAssetStore(context), TEST_TIMEOUT_MS, bridge)
+
+        try {
+            repeat(3) { index ->
+                val view = controller.acquireWebView(context, Any())
+                controller.updateSpec(TEST_SPEC.copy(song = TEST_SPEC.song.copy(title = "stable-$index")))
+                advanceTimeBy(41)
+                runCurrent()
+
+                assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+                assertTrue(controller.handleRenderProcessGone(view, didCrash = false))
+                assertEquals(RendererStatus.Phase.STARTING, controller.status.value.phase)
+                assertEquals(index + 1, controller.generation.value)
+            }
+        } finally {
+            controller.close()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `preview pump skips superseded specs and applies the latest value`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val bridge = FakeRendererBridge(ByteArray(0)).apply { mode = FakeRendererBridge.Mode.HANG_SET_SPEC }
+        val controller = RendererController(context, ProjectAssetStore(context), TEST_TIMEOUT_MS, bridge)
+
+        try {
+            controller.acquireWebView(context, Any())
+            controller.updateSpec(TEST_SPEC.copy(song = TEST_SPEC.song.copy(title = "first")))
+            advanceTimeBy(41)
+            runCurrent()
+            assertEquals(listOf("first"), bridge.appliedSpecTitles)
+
+            controller.updateSpec(TEST_SPEC.copy(song = TEST_SPEC.song.copy(title = "superseded")))
+            controller.updateSpec(TEST_SPEC.copy(song = TEST_SPEC.song.copy(title = "latest")))
+            advanceTimeBy(41)
+            runCurrent()
+            assertEquals(listOf("first"), bridge.appliedSpecTitles)
+
+            bridge.completePendingSpec()
+            runCurrent()
+            assertEquals(listOf("first", "latest"), bridge.appliedSpecTitles)
+
+            bridge.completePendingSpec()
+            runCurrent()
+            assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+        } finally {
+            controller.close()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `invalid PNG is never published cleans part and a rebuilt session can retry`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val exportDir = File(context.cacheDir, "exports")
+        deletePartFiles(exportDir)
+        val existingFinals = finalFiles(exportDir).map(File::getName).toSet()
+        val bridge = FakeRendererBridge(ByteArray(64) { it.toByte() }).apply {
+            mode = FakeRendererBridge.Mode.SUCCESS
+        }
+        val controller = RendererController(context, ProjectAssetStore(context), TEST_TIMEOUT_MS, bridge)
+
+        try {
+            controller.acquireWebView(context, Any())
+            val failure = runCatching { controller.exportPng(TEST_SPEC, 1) }.exceptionOrNull()
+
+            assertTrue(failure is RendererException)
+            assertEquals(RendererStatus.Phase.STARTING, controller.status.value.phase)
+            assertEquals(1, controller.generation.value)
+            assertTrue(partFiles(exportDir).isEmpty())
+            assertEquals(existingFinals, finalFiles(exportDir).map(File::getName).toSet())
+
+            bridge.pngBytes = successPng()
+            controller.acquireWebView(context, Any())
+            val image = controller.exportPng(TEST_SPEC, 1)
+
+            assertTrue(image.file.isFile)
+            assertTrue(partFiles(exportDir).isEmpty())
+            assertFalse(image.file.name.endsWith(".part"))
+            image.file.delete()
+        } finally {
+            controller.close()
+            deletePartFiles(exportDir)
+            Dispatchers.resetMain()
+        }
+    }
+
     private fun successPng(): ByteArray {
         val bitmap = Bitmap.createBitmap(
             TEST_SPEC.canvas.width,
@@ -213,6 +309,11 @@ class RendererControllerRecoveryTest {
             ?.filter { it.name.endsWith(".part") }
             .orEmpty()
 
+    private fun finalFiles(exportDir: File): List<File> =
+        exportDir.listFiles()
+            ?.filter { it.name.endsWith(".png") }
+            .orEmpty()
+
     private fun deletePartFiles(exportDir: File) {
         partFiles(exportDir).forEach { assertTrue(it.delete()) }
     }
@@ -220,9 +321,9 @@ class RendererControllerRecoveryTest {
 }
 
 private class FakeRendererBridge(
-    private val pngBytes: ByteArray,
+    var pngBytes: ByteArray,
 ) : RendererBridge {
-    enum class Mode { HANG_AFTER_CHUNK, SUCCESS }
+    enum class Mode { HANG_AFTER_CHUNK, HANG_SET_SPEC, SUCCESS }
 
     data class Attempt(
         val session: Session,
@@ -235,8 +336,10 @@ private class FakeRendererBridge(
     )
 
     var mode = Mode.HANG_AFTER_CHUNK
+    val appliedSpecTitles = mutableListOf<String>()
     private val sessions = mutableListOf<Session>()
     private var nextExport = CompletableDeferred<Attempt>()
+    private var pendingSpec: Attempt? = null
 
     override fun attach(view: WebView, onMessage: (String) -> Unit): Boolean {
         val session = Session(view, onMessage)
@@ -254,7 +357,16 @@ private class FakeRendererBridge(
     override fun send(view: WebView, envelope: RendererEnvelope) {
         val session = sessions.last { it.view === view }
         when (envelope.type) {
-            "setSpec" -> emit(session, RendererEnvelope(requestId = envelope.requestId, type = "specApplied"))
+            "setSpec" -> {
+                val spec = RenderSpecJson.format.decodeFromJsonElement(RenderSpec.serializer(), envelope.payload)
+                appliedSpecTitles += spec.song.title
+                if (mode == Mode.HANG_SET_SPEC) {
+                    check(pendingSpec == null) { "Only one setSpec request may be in flight" }
+                    pendingSpec = Attempt(session, envelope.requestId)
+                } else {
+                    emit(session, RendererEnvelope(requestId = envelope.requestId, type = "specApplied"))
+                }
+            }
             "measure" -> emit(
                 session,
                 RendererEnvelope(
@@ -290,6 +402,15 @@ private class FakeRendererBridge(
 
     fun observeNextExport(): CompletableDeferred<Attempt> =
         CompletableDeferred<Attempt>().also { nextExport = it }
+
+    fun completePendingSpec() {
+        val attempt = checkNotNull(pendingSpec) { "No setSpec request is pending" }
+        pendingSpec = null
+        emit(
+            attempt.session,
+            RendererEnvelope(requestId = attempt.requestId, type = "specApplied"),
+        )
+    }
 
     fun emitLateExportMessages(attempt: Attempt) {
         emit(

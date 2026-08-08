@@ -3,6 +3,7 @@ import {
   blobToBase64Chunks,
   createEnvelope,
   EXPORT_CHUNK_BYTES,
+  isTrustedWindowMessageOrigin,
   parseHostEnvelope,
   ProtocolMessageError
 } from "../src/transport";
@@ -29,6 +30,18 @@ describe("renderer protocol", () => {
     expect(() =>
       parseHostEnvelope({ protocolVersion: 1, requestId: "../request", type: "ping", payload: {} })
     ).toThrow(/requestId/);
+  });
+
+  it("accepts window messages only from the document's exact origin", () => {
+    const appassetsOrigin = "https://appassets.androidplatform.net";
+    expect(isTrustedWindowMessageOrigin(appassetsOrigin, appassetsOrigin)).toBe(true);
+    expect(isTrustedWindowMessageOrigin("https://attacker.invalid", appassetsOrigin)).toBe(false);
+    expect(isTrustedWindowMessageOrigin("null", appassetsOrigin)).toBe(false);
+    expect(isTrustedWindowMessageOrigin("", appassetsOrigin)).toBe(false);
+
+    // Keep direct-file developer harnesses working without making a trusted HTTPS
+    // document accept opaque-origin messages.
+    expect(isTrustedWindowMessageOrigin("null", "null")).toBe(true);
   });
 
   it("streams export bytes as bounded independently decodable chunks", async () => {
