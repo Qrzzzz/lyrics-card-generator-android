@@ -116,7 +116,8 @@ fun SettingsScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .widthIn(max = SETTINGS_CONTENT_MAX_WIDTH),
+                    .widthIn(max = SETTINGS_CONTENT_MAX_WIDTH)
+                    .testTag(SETTINGS_LIST_TAG),
                 contentPadding = PaddingValues(
                     start = horizontalPadding,
                     top = LyricsCardSpacing.large,
@@ -474,6 +475,7 @@ internal const val SETTINGS_SCHEMA_TAG = "settings-schema"
 internal const val SETTINGS_PROTOCOL_TAG = "settings-protocol"
 internal const val SETTINGS_RENDERER_SOURCE_TAG = "settings-renderer-source"
 internal const val SETTINGS_WEBVIEW_TAG = "settings-webview"
+internal const val SETTINGS_LIST_TAG = "settings-list"
 
 private val SETTINGS_CONTENT_MAX_WIDTH = 760.dp
 private const val DIAGNOSTIC_HASH_LENGTH = 12

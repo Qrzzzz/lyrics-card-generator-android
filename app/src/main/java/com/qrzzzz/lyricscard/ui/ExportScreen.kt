@@ -265,7 +265,7 @@ internal fun ExportControls(
     val actionEnabled = !state.isBusy && !resultPending
 
     LazyColumn(
-        modifier = modifier,
+        modifier = modifier.testTag(EXPORT_OPTIONS_LIST_TAG),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -430,7 +430,10 @@ internal fun ExportControls(
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
                         onClick = onSave,
-                        modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 52.dp)
+                            .testTag(EXPORT_SAVE_ACTION_TAG),
                         enabled = actionEnabled,
                     ) {
                         Icon(Icons.Rounded.Download, contentDescription = null)
@@ -443,7 +446,10 @@ internal fun ExportControls(
                     }
                     OutlinedButton(
                         onClick = onShare,
-                        modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 52.dp)
+                            .testTag(EXPORT_SHARE_ACTION_TAG),
                         enabled = actionEnabled,
                     ) {
                         Icon(Icons.Rounded.Share, contentDescription = null)
@@ -551,3 +557,6 @@ internal const val EXPORT_COMPACT_LAYOUT_TAG = "export-compact-layout"
 internal const val EXPORT_MEDIUM_LAYOUT_TAG = "export-medium-layout"
 internal const val EXPORT_EXPANDED_LAYOUT_TAG = "export-expanded-layout"
 internal const val EXPORT_FILE_NAME_TAG = "export-file-name"
+internal const val EXPORT_OPTIONS_LIST_TAG = "export-options-list"
+internal const val EXPORT_SAVE_ACTION_TAG = "export-save-action"
+internal const val EXPORT_SHARE_ACTION_TAG = "export-share-action"

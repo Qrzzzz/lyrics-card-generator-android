@@ -35,9 +35,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -72,7 +74,9 @@ internal fun ChooseSongPanel(
                 searchDraft = next.take(SEARCH_QUERY_MAX_LENGTH + 1)
                 if (next.length <= SEARCH_QUERY_MAX_LENGTH) actions.onSearchQueryChange(next)
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(EDITOR_NETEASE_QUERY_FIELD_TAG),
             label = { Text(stringResource(R.string.editor_netease_query_label)) },
             placeholder = { Text(stringResource(R.string.editor_netease_query_example)) },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
@@ -119,9 +123,18 @@ internal fun ChooseSongPanel(
         if (netease.results.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 netease.results.forEach { result ->
+                    val details = listOf(result.artist, result.album)
+                        .filter(String::isNotBlank)
+                        .joinToString(stringResource(R.string.middle_dot_separator))
+                    val accessibilityLabel = listOf(result.title, details)
+                        .filter(String::isNotBlank)
+                        .joinToString(stringResource(R.string.middle_dot_separator))
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = accessibilityLabel
+                            }
                             .clickable(
                                 enabled = !lookupBusy,
                                 role = Role.Button,
@@ -135,9 +148,6 @@ internal fun ChooseSongPanel(
                                 Text(result.title, fontWeight = FontWeight.Bold)
                             },
                             supportingContent = {
-                                val details = listOf(result.artist, result.album)
-                                    .filter(String::isNotBlank)
-                                    .joinToString(stringResource(R.string.middle_dot_separator))
                                 if (details.isNotBlank()) Text(details)
                             },
                             leadingContent = {
@@ -324,3 +334,5 @@ internal fun songSourceLabel(source: SongSource) = stringResource(
 private const val SEARCH_QUERY_MAX_LENGTH = 120
 private const val PROJECT_NAME_MAX_LENGTH = 120
 private const val SONG_FIELD_MAX_LENGTH = 240
+
+internal const val EDITOR_NETEASE_QUERY_FIELD_TAG = "editor-netease-query-field"

@@ -65,6 +65,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -542,6 +543,7 @@ private fun RenameProjectDialog(
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    var fieldPlaced by remember { mutableStateOf(false) }
     val normalizedName = name.trim()
     val isBlank = normalizedName.isEmpty()
     val canConfirm = enabled && !isBlank && normalizedName != projectName
@@ -552,9 +554,11 @@ private fun RenameProjectDialog(
         }
     }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-        keyboardController?.show()
+    LaunchedEffect(fieldPlaced) {
+        if (fieldPlaced) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
     }
 
     AlertDialog(
@@ -567,6 +571,7 @@ private fun RenameProjectDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
+                    .onGloballyPositioned { fieldPlaced = true }
                     .testTag(HOME_RENAME_FIELD_TAG),
                 singleLine = true,
                 label = { Text(stringResource(R.string.home_project_name)) },
