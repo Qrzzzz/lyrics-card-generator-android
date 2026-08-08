@@ -27,8 +27,6 @@
     <string name="brand_generated_watermark" translatable="false">Generated watermark</string>
     <string name="file_png" translatable="false">PNG</string>
     <string name="file_extension_png" translatable="false">.png</string>
-    <string name="renderer_manifest_label" translatable="false">Renderer manifest</string>
-
     <string name="home_title">歌词卡片</string>
     <string name="home_settings_description">设置</string>
     <string name="home_create_heading">新建项目</string>
