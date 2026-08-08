@@ -21,6 +21,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -422,9 +423,70 @@ class QualityStressTest {
             if (mainThreadTimedOut) {
                 Log.w(QUALITY_TAG, "scenario close skipped after bounded main-thread timeout")
             } else {
-                scenario.close()
+                closeScenarioWithinTimeout(scenario)
             }
         }
+    }
+
+    private fun closeScenarioWithinTimeout(scenario: ActivityScenario<ComponentActivity>) {
+        val startedAt = SystemClock.elapsedRealtime()
+        val deadline = startedAt + MAIN_THREAD_TIMEOUT_MS
+        val destroyed = CountDownLatch(1)
+        val activity = runOnMainThread(remainingCleanupTime(deadline)) {
+            ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .filterIsInstance<ComponentActivity>()
+                .singleOrNull()
+        }
+
+        Log.i(QUALITY_TAG, "scenario-cleanup-begin hasResumedActivity=${activity != null}")
+        if (activity != null) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_DESTROY) destroyed.countDown()
+            }
+            runOnMainThread(remainingCleanupTime(deadline)) {
+                activity.lifecycle.addObserver(observer)
+                if (activity.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                    destroyed.countDown()
+                } else {
+                    activity.finishAndRemoveTask()
+                }
+            }
+            if (!destroyed.await(remainingCleanupTime(deadline), TimeUnit.MILLISECONDS)) {
+                throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+            }
+            Log.i(
+                QUALITY_TAG,
+                "scenario-cleanup-activity-destroyed elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
+            )
+        }
+
+        val closeResult = AtomicReference<Result<Unit>?>(null)
+        val closeCompleted = CountDownLatch(1)
+        Thread(
+            {
+                closeResult.set(runCatching { scenario.close() })
+                closeCompleted.countDown()
+            },
+            "quality-scenario-close",
+        ).apply {
+            isDaemon = true
+            start()
+        }
+        if (!closeCompleted.await(remainingCleanupTime(deadline), TimeUnit.MILLISECONDS)) {
+            throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+        }
+        checkNotNull(closeResult.get()) { "scenario close completed without a result" }.getOrThrow()
+        Log.i(
+            QUALITY_TAG,
+            "scenario-cleanup-complete elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
+        )
+    }
+
+    private fun remainingCleanupTime(deadline: Long): Long {
+        val remaining = deadline - SystemClock.elapsedRealtime()
+        if (remaining <= 0L) throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+        return remaining
     }
 
     private fun releaseStressSpec(): RenderSpec = RenderSpec().copy(
@@ -604,7 +666,10 @@ class QualityStressTest {
         }
     }
 
-    private fun <T> runOnMainThread(block: () -> T): T {
+    private fun <T> runOnMainThread(
+        timeoutMs: Long = MAIN_THREAD_TIMEOUT_MS,
+        block: () -> T,
+    ): T {
         if (Looper.myLooper() == Looper.getMainLooper()) return block()
         val result = AtomicReference<Result<T>?>(null)
         val completed = CountDownLatch(1)
@@ -615,9 +680,9 @@ class QualityStressTest {
         }
         val posted = handler.post(action)
         assertTrue("failed to enqueue quality action on the main thread", posted)
-        if (!completed.await(MAIN_THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+        if (!completed.await(timeoutMs, TimeUnit.MILLISECONDS)) {
             handler.removeCallbacks(action)
-            throw MainThreadActionTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+            throw MainThreadActionTimeoutException(timeoutMs)
         }
         return checkNotNull(result.get()) { "main-thread quality action completed without a result" }.getOrThrow()
     }
@@ -669,6 +734,9 @@ class QualityStressTest {
     private class MainThreadActionTimeoutException(timeoutMs: Long) :
         AssertionError("main-thread quality action timed out after $timeoutMs ms")
 
+    private class ActivityCleanupTimeoutException(timeoutMs: Long) :
+        AssertionError("activity cleanup timed out after $timeoutMs ms")
+
     private inner class RendererBinding(
         private val controller: RendererController,
     ) {
@@ -701,7 +769,7 @@ class QualityStressTest {
             view = null
         }
 
-        fun close() = runCatching { detach() }.getOrNull()
+        fun close() = detach()
     }
 
     private companion object {
