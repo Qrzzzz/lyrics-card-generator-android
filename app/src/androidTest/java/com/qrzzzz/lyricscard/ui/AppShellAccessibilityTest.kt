@@ -266,6 +266,9 @@ class AppShellAccessibilityTest {
 
             compose.runOnIdle { showExport.value = true }
             assertDisplayedInsideViewport(text(R.string.export_title))
+            compose.onNodeWithText(text(R.string.export_file_name)).performClick()
+            compose.waitUntil(timeoutMillis = 5_000) { imeBottomPx.intValue > 0 }
+            assertTrue("IME inset was not visible over Export", imeBottomPx.intValue > 0)
             compose.onAllNodesWithText(text(R.string.common_save)).onFirst()
                 .performScrollTo()
                 .assertIsDisplayed()
