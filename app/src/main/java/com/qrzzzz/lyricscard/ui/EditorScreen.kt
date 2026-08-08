@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -12,10 +13,13 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,6 +39,8 @@ import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +53,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -55,7 +62,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +75,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -96,6 +107,8 @@ private enum class EditorStep(val label: String, val description: String) {
     VISUAL("视觉", "设置配色、背景、网格与品牌信息"),
     EXPORT("导出", "确认卡片内容并进入 PNG 输出"),
 }
+
+private const val MOBILE_SHEET_EXPANDED_FRACTION = 0.88f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -157,44 +170,6 @@ fun EditorScreen(
             )
         },
         snackbarHost = snackbarHost,
-        bottomBar = {
-            Surface(shadowElevation = 10.dp) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = { selectedStep = (selectedStep - 1).coerceAtLeast(0) },
-                        enabled = selectedStep > 0,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = RoundedCornerShape(18.dp),
-                    ) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
-                        Text("上一步", modifier = Modifier.padding(start = 6.dp))
-                    }
-                    Button(
-                        onClick = {
-                            if (selectedStep == EditorStep.entries.lastIndex) onExport()
-                            else selectedStep += 1
-                        },
-                        modifier = Modifier.weight(1.5f).height(52.dp),
-                        shape = RoundedCornerShape(18.dp),
-                    ) {
-                        Icon(
-                            if (selectedStep == EditorStep.entries.lastIndex) Icons.Rounded.FileUpload else Icons.AutoMirrored.Rounded.NavigateNext,
-                            contentDescription = null,
-                        )
-                        Text(
-                            if (selectedStep == EditorStep.entries.lastIndex) "导出 PNG" else "下一步",
-                            modifier = Modifier.padding(start = 8.dp),
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            }
-        },
     ) { padding ->
         BoxWithConstraints(
             modifier = Modifier
@@ -204,82 +179,216 @@ fun EditorScreen(
             val wide = maxWidth >= 840.dp
             val showPreview = selectedStep >= EditorStep.LAYOUT.ordinal
             if (wide) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    if (showPreview) {
-                        RendererPreview(
-                            spec = project.spec,
-                            controller = renderer,
-                            onMeasuredHeight = onMeasuredHeight,
-                            showSafeArea = showSafeArea,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                        )
-                    }
-                    EditorProperties(
-                        project = project,
-                        selectedStep = selectedStep,
-                        onSelectedStep = { selectedStep = it },
-                        netease = netease,
-                        onProjectNameChange = onProjectNameChange,
-                        onSpecChange = onSpecChange,
-                        onPickCover = { coverPicker.launch("image/*") },
-                        onRemoveCover = onRemoveCover,
-                        renderer = renderer,
-                        onPaletteExtracted = onPaletteExtracted,
-                        onSearchNetease = onSearchNetease,
-                        onResolveNeteaseSong = onResolveNeteaseSong,
-                        onResolveNeteaseLink = onResolveNeteaseLink,
-                        modifier = if (showPreview) Modifier.width(420.dp) else Modifier.fillMaxSize(),
-                    )
-                }
+                WideEditorLayout(
+                    project = project,
+                    selectedStep = selectedStep,
+                    onSelectedStep = { selectedStep = it },
+                    showPreview = showPreview,
+                    showSafeArea = showSafeArea,
+                    renderer = renderer,
+                    netease = netease,
+                    onProjectNameChange = onProjectNameChange,
+                    onSpecChange = onSpecChange,
+                    onMeasuredHeight = onMeasuredHeight,
+                    onPaletteExtracted = onPaletteExtracted,
+                    onPickCover = { coverPicker.launch("image/*") },
+                    onRemoveCover = onRemoveCover,
+                    onSearchNetease = onSearchNetease,
+                    onResolveNeteaseSong = onResolveNeteaseSong,
+                    onResolveNeteaseLink = onResolveNeteaseLink,
+                    onPrevious = { selectedStep = (selectedStep - 1).coerceAtLeast(0) },
+                    onNext = {
+                        if (selectedStep == EditorStep.entries.lastIndex) onExport()
+                        else selectedStep += 1
+                    },
+                )
+            } else if (showPreview) {
+                MobileEditorBottomSheet(
+                    project = project,
+                    selectedStep = selectedStep,
+                    onSelectedStep = { selectedStep = it },
+                    showSafeArea = showSafeArea,
+                    renderer = renderer,
+                    netease = netease,
+                    onProjectNameChange = onProjectNameChange,
+                    onSpecChange = onSpecChange,
+                    onMeasuredHeight = onMeasuredHeight,
+                    onPaletteExtracted = onPaletteExtracted,
+                    onPickCover = { coverPicker.launch("image/*") },
+                    onRemoveCover = onRemoveCover,
+                    onSearchNetease = onSearchNetease,
+                    onResolveNeteaseSong = onResolveNeteaseSong,
+                    onResolveNeteaseLink = onResolveNeteaseLink,
+                    onPrevious = { selectedStep = (selectedStep - 1).coerceAtLeast(0) },
+                    onNext = {
+                        if (selectedStep == EditorStep.entries.lastIndex) onExport()
+                        else selectedStep += 1
+                    },
+                )
             } else {
-                Column(
+                EditorProperties(
+                    project = project,
+                    selectedStep = selectedStep,
+                    onSelectedStep = { selectedStep = it },
+                    netease = netease,
+                    onProjectNameChange = onProjectNameChange,
+                    onSpecChange = onSpecChange,
+                    onPickCover = { coverPicker.launch("image/*") },
+                    onRemoveCover = onRemoveCover,
+                    renderer = renderer,
+                    onPaletteExtracted = onPaletteExtracted,
+                    onSearchNetease = onSearchNetease,
+                    onResolveNeteaseSong = onResolveNeteaseSong,
+                    onResolveNeteaseLink = onResolveNeteaseLink,
+                    onPrevious = { selectedStep = (selectedStep - 1).coerceAtLeast(0) },
+                    onNext = { selectedStep += 1 },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (showPreview) {
-                        RendererPreview(
-                            spec = project.spec,
-                            controller = renderer,
-                            onMeasuredHeight = onMeasuredHeight,
-                            showSafeArea = showSafeArea,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(0.42f),
-                        )
-                    }
-                    EditorProperties(
-                        project = project,
-                        selectedStep = selectedStep,
-                        onSelectedStep = { selectedStep = it },
-                        netease = netease,
-                        onProjectNameChange = onProjectNameChange,
-                        onSpecChange = onSpecChange,
-                        onPickCover = { coverPicker.launch("image/*") },
-                        onRemoveCover = onRemoveCover,
-                        renderer = renderer,
-                        onPaletteExtracted = onPaletteExtracted,
-                        onSearchNetease = onSearchNetease,
-                        onResolveNeteaseSong = onResolveNeteaseSong,
-                        onResolveNeteaseLink = onResolveNeteaseLink,
-                        modifier = if (showPreview) {
-                            Modifier
-                                .fillMaxWidth()
-                                .weight(0.58f)
-                        } else {
-                            Modifier.fillMaxSize()
-                        },
-                    )
-                }
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun WideEditorLayout(
+    project: Project,
+    selectedStep: Int,
+    onSelectedStep: (Int) -> Unit,
+    showPreview: Boolean,
+    showSafeArea: Boolean,
+    renderer: RendererController,
+    netease: NeteaseLookupUiState,
+    onProjectNameChange: (String) -> Unit,
+    onSpecChange: (RenderSpec) -> Unit,
+    onMeasuredHeight: (Int) -> Unit,
+    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onPickCover: () -> Unit,
+    onRemoveCover: () -> Unit,
+    onSearchNetease: (String) -> Unit,
+    onResolveNeteaseSong: (String) -> Unit,
+    onResolveNeteaseLink: (String) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (showPreview) {
+            RendererPreview(
+                spec = project.spec,
+                controller = renderer,
+                onMeasuredHeight = onMeasuredHeight,
+                showSafeArea = showSafeArea,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+            )
+        }
+        EditorProperties(
+            project = project,
+            selectedStep = selectedStep,
+            onSelectedStep = onSelectedStep,
+            netease = netease,
+            onProjectNameChange = onProjectNameChange,
+            onSpecChange = onSpecChange,
+            onPickCover = onPickCover,
+            onRemoveCover = onRemoveCover,
+            renderer = renderer,
+            onPaletteExtracted = onPaletteExtracted,
+            onSearchNetease = onSearchNetease,
+            onResolveNeteaseSong = onResolveNeteaseSong,
+            onResolveNeteaseLink = onResolveNeteaseLink,
+            onPrevious = onPrevious,
+            onNext = onNext,
+            modifier = if (showPreview) Modifier.width(420.dp) else Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MobileEditorBottomSheet(
+    project: Project,
+    selectedStep: Int,
+    onSelectedStep: (Int) -> Unit,
+    showSafeArea: Boolean,
+    renderer: RendererController,
+    netease: NeteaseLookupUiState,
+    onProjectNameChange: (String) -> Unit,
+    onSpecChange: (RenderSpec) -> Unit,
+    onMeasuredHeight: (Int) -> Unit,
+    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onPickCover: () -> Unit,
+    onRemoveCover: () -> Unit,
+    onSearchNetease: (String) -> Unit,
+    onResolveNeteaseSong: (String) -> Unit,
+    onResolveNeteaseLink: (String) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    val sheetState = rememberStandardBottomSheetState(
+        initialValue = SheetValue.Expanded,
+        skipHiddenState = true,
+    )
+    val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
+    val density = LocalDensity.current
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+
+    LaunchedEffect(imeVisible, sheetState.currentValue) {
+        if (imeVisible && sheetState.currentValue != SheetValue.Expanded) {
+            sheetState.expand()
+        }
+    }
+
+    BottomSheetScaffold(
+        modifier = Modifier.fillMaxSize(),
+        scaffoldState = scaffoldState,
+        sheetPeekHeight = 112.dp,
+        sheetMaxWidth = 840.dp,
+        sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        sheetDragHandle = { BottomSheetDefaults.DragHandle() },
+        sheetContent = {
+            EditorPanelContent(
+                project = project,
+                selectedStep = selectedStep,
+                onSelectedStep = onSelectedStep,
+                netease = netease,
+                onProjectNameChange = onProjectNameChange,
+                onSpecChange = onSpecChange,
+                onPickCover = onPickCover,
+                onRemoveCover = onRemoveCover,
+                renderer = renderer,
+                onPaletteExtracted = onPaletteExtracted,
+                onSearchNetease = onSearchNetease,
+                onResolveNeteaseSong = onResolveNeteaseSong,
+                onResolveNeteaseLink = onResolveNeteaseLink,
+                onPrevious = onPrevious,
+                onNext = onNext,
+                modifier = Modifier
+                    .fillMaxHeight(MOBILE_SHEET_EXPANDED_FRACTION)
+                    .imePadding(),
+            )
+        },
+    ) {
+        // The preview always uses the full scaffold viewport. The sheet moves over it,
+        // so dragging the sheet only changes placement and never the WebView's constraints.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+        ) {
+            RendererPreview(
+                spec = project.spec,
+                controller = renderer,
+                onMeasuredHeight = onMeasuredHeight,
+                showSafeArea = showSafeArea,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -299,62 +408,203 @@ private fun EditorProperties(
     onSearchNetease: (String) -> Unit,
     onResolveNeteaseSong: (String) -> Unit,
     onResolveNeteaseLink: (String) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier, shape = RoundedCornerShape(22.dp), tonalElevation = 2.dp) {
-        Column {
-            ScrollableTabRow(
-                selectedTabIndex = selectedStep,
-                edgePadding = 8.dp,
-                divider = {},
-            ) {
-                EditorStep.entries.forEachIndexed { index, step ->
-                    Tab(
-                        selected = index == selectedStep,
-                        onClick = { onSelectedStep(index) },
-                        text = {
-                            Text(
-                                "${index + 1}. ${step.label}",
-                                fontWeight = if (index == selectedStep) FontWeight.Bold else null,
-                            )
-                        },
+        EditorPanelContent(
+            project = project,
+            selectedStep = selectedStep,
+            onSelectedStep = onSelectedStep,
+            netease = netease,
+            onProjectNameChange = onProjectNameChange,
+            onSpecChange = onSpecChange,
+            onPickCover = onPickCover,
+            onRemoveCover = onRemoveCover,
+            renderer = renderer,
+            onPaletteExtracted = onPaletteExtracted,
+            onSearchNetease = onSearchNetease,
+            onResolveNeteaseSong = onResolveNeteaseSong,
+            onResolveNeteaseLink = onResolveNeteaseLink,
+            onPrevious = onPrevious,
+            onNext = onNext,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun EditorPanelContent(
+    project: Project,
+    selectedStep: Int,
+    onSelectedStep: (Int) -> Unit,
+    netease: NeteaseLookupUiState,
+    onProjectNameChange: (String) -> Unit,
+    onSpecChange: (RenderSpec) -> Unit,
+    onPickCover: () -> Unit,
+    onRemoveCover: () -> Unit,
+    renderer: RendererController,
+    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onSearchNetease: (String) -> Unit,
+    onResolveNeteaseSong: (String) -> Unit,
+    onResolveNeteaseLink: (String) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        EditorStepTabs(
+            selectedStep = selectedStep,
+            onSelectedStep = onSelectedStep,
+        )
+        Text(
+            EditorStep.entries[selectedStep].description,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        EditorStepContent(
+            project = project,
+            selectedStep = selectedStep,
+            netease = netease,
+            onProjectNameChange = onProjectNameChange,
+            onSpecChange = onSpecChange,
+            onPickCover = onPickCover,
+            onRemoveCover = onRemoveCover,
+            renderer = renderer,
+            onPaletteExtracted = onPaletteExtracted,
+            onSearchNetease = onSearchNetease,
+            onResolveNeteaseSong = onResolveNeteaseSong,
+            onResolveNeteaseLink = onResolveNeteaseLink,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        )
+        EditorNavigationBar(
+            selectedStep = selectedStep,
+            onPrevious = onPrevious,
+            onNext = onNext,
+        )
+    }
+}
+
+@Composable
+private fun EditorStepTabs(
+    selectedStep: Int,
+    onSelectedStep: (Int) -> Unit,
+) {
+    ScrollableTabRow(
+        selectedTabIndex = selectedStep,
+        edgePadding = 8.dp,
+        divider = {},
+    ) {
+        EditorStep.entries.forEachIndexed { index, step ->
+            Tab(
+                selected = index == selectedStep,
+                onClick = { onSelectedStep(index) },
+                text = {
+                    Text(
+                        "${index + 1}. ${step.label}",
+                        fontWeight = if (index == selectedStep) FontWeight.Bold else null,
                     )
-                }
-            }
-            Text(
-                EditorStep.entries[selectedStep].description,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
+                },
             )
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                item {
-                    when (EditorStep.entries[selectedStep]) {
-                        EditorStep.CHOOSE_SONG -> ChooseSongPanel(
-                            project = project,
-                            netease = netease,
-                            onProjectNameChange = onProjectNameChange,
-                            onSpecChange = onSpecChange,
-                            onPickCover = onPickCover,
-                            onRemoveCover = onRemoveCover,
-                            onSearchNetease = onSearchNetease,
-                            onResolveNeteaseSong = onResolveNeteaseSong,
-                            onResolveNeteaseLink = onResolveNeteaseLink,
-                        )
-                        EditorStep.LYRICS -> LyricsPanel(project.spec, onSpecChange)
-                        EditorStep.LAYOUT -> LayoutPanel(project.spec, onSpecChange)
-                        EditorStep.FONT -> TypographyPanel(project.spec, onSpecChange)
-                        EditorStep.VISUAL -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            StylePanel(project.spec, renderer, onSpecChange, onPaletteExtracted)
-                            BrandingPanel(project.spec, onSpecChange)
-                        }
-                        EditorStep.EXPORT -> ExportStepPanel(project)
-                    }
+        }
+    }
+}
+
+@Composable
+private fun EditorStepContent(
+    project: Project,
+    selectedStep: Int,
+    netease: NeteaseLookupUiState,
+    onProjectNameChange: (String) -> Unit,
+    onSpecChange: (RenderSpec) -> Unit,
+    onPickCover: () -> Unit,
+    onRemoveCover: () -> Unit,
+    renderer: RendererController,
+    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onSearchNetease: (String) -> Unit,
+    onResolveNeteaseSong: (String) -> Unit,
+    onResolveNeteaseLink: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            when (EditorStep.entries[selectedStep]) {
+                EditorStep.CHOOSE_SONG -> ChooseSongPanel(
+                    project = project,
+                    netease = netease,
+                    onProjectNameChange = onProjectNameChange,
+                    onSpecChange = onSpecChange,
+                    onPickCover = onPickCover,
+                    onRemoveCover = onRemoveCover,
+                    onSearchNetease = onSearchNetease,
+                    onResolveNeteaseSong = onResolveNeteaseSong,
+                    onResolveNeteaseLink = onResolveNeteaseLink,
+                )
+                EditorStep.LYRICS -> LyricsPanel(project.spec, onSpecChange)
+                EditorStep.LAYOUT -> LayoutPanel(project.spec, onSpecChange)
+                EditorStep.FONT -> TypographyPanel(project.spec, onSpecChange)
+                EditorStep.VISUAL -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    StylePanel(project.spec, renderer, onSpecChange, onPaletteExtracted)
+                    BrandingPanel(project.spec, onSpecChange)
                 }
+                EditorStep.EXPORT -> ExportStepPanel(project)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditorNavigationBar(
+    selectedStep: Int,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Surface(shadowElevation = 10.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            OutlinedButton(
+                onClick = onPrevious,
+                enabled = selectedStep > 0,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(18.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+                Text("上一步", modifier = Modifier.padding(start = 6.dp))
+            }
+            Button(
+                onClick = onNext,
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(18.dp),
+            ) {
+                Icon(
+                    if (selectedStep == EditorStep.entries.lastIndex) {
+                        Icons.Rounded.FileUpload
+                    } else {
+                        Icons.AutoMirrored.Rounded.NavigateNext
+                    },
+                    contentDescription = null,
+                )
+                Text(
+                    if (selectedStep == EditorStep.entries.lastIndex) "导出 PNG" else "下一步",
+                    modifier = Modifier.padding(start = 8.dp),
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }

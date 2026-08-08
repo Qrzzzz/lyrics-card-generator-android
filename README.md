@@ -2,7 +2,7 @@
 
 歌词卡片生成器 Android Alpha 工程。原生界面使用 Jetpack Compose，最终预览与 PNG 继续由 APK 内的 React/CSS 渲染器完成；卡片编辑与导出离线可用，网易云选歌与链接解析按需联网。
 
-当前版本：`0.2.0-alpha02`
+当前版本：`0.2.0-alpha03`
 
 Windows 版基准：[`Qrzzzz/lyrics-card-generator`](https://github.com/Qrzzzz/lyrics-card-generator) `b894db9e121848122a16ddcdaaab1283ffab1e27`（package `4.3.8`）。本仓库不修改相邻的 Windows 工作树；基准提交、字体散列和 Schema 都记录在 `renderer/renderer-manifest.json`。
 
