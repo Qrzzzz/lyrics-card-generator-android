@@ -85,6 +85,16 @@ class EditorViewModel(
     private val messages: EditorMessageResolver,
     private val sessions: EditorSessionRegistry,
 ) : ViewModel(), EditorAutosaveSession {
+    private data class EditorMutationSnapshot(
+        val project: Project,
+        val undoHistory: List<RenderSpec>,
+        val redoHistory: List<RenderSpec>,
+        val editRevision: Long,
+        val savedRevision: Long,
+        val autosaveStatus: AutosaveStatus,
+        val errorMessage: String?,
+    )
+
     private val projectId: String = checkNotNull(savedStateHandle[PROJECT_ID_KEY]) {
         "Editor route requires projectId"
     }
@@ -434,6 +444,7 @@ class EditorViewModel(
         neteaseResolveJob = viewModelScope.launch {
             var importedCoverId: String? = null
             var coverWarning: String? = null
+            var mutationSnapshot: EditorMutationSnapshot? = null
             try {
                 val resolved = block()
                 val importedLineCount = LyricTextLimits.countPhysicalLines(resolved.lyrics)
@@ -472,6 +483,7 @@ class EditorViewModel(
                 val nextTitle = resolved.title.take(240)
                 val nextArtist = resolved.artist.take(240)
                 val nextAlbum = resolved.album.take(240)
+                mutationSnapshot = captureEditorMutationSnapshot()
                 updateSpec { spec ->
                     spec.copy(
                         song = spec.song.copy(
@@ -498,7 +510,14 @@ class EditorViewModel(
                 check(appliedSong?.title == nextTitle && (nextCoverId == null || appliedSong.coverAssetId == nextCoverId)) {
                     "无法应用网易云歌曲信息"
                 }
+                if (!flushAutosave()) {
+                    val message = _uiState.value.errorMessage ?: "无法保存网易云导入结果"
+                    restoreEditorMutation(checkNotNull(mutationSnapshot), message, restartPendingAutosave = false)
+                    mutationSnapshot = null
+                    error(message)
+                }
                 importedCoverId = null
+                mutationSnapshot = null
                 val imported = buildList {
                     add("歌曲信息")
                     if (resolved.lyrics.isNotBlank()) add("歌词")
@@ -509,17 +528,64 @@ class EditorViewModel(
                     coverWarning?.let { append("；封面未导入：$it") }
                 }
                 updateNetease { it.copy(isResolving = false, message = resultMessage) }
-                flushAutosave()
             } catch (cause: CancellationException) {
+                mutationSnapshot?.let {
+                    restoreEditorMutation(it, failureMessage = null, restartPendingAutosave = true)
+                }
                 importedCoverId?.let { cleanupPendingCover(it, cause) }
                 throw cause
             } catch (cause: Throwable) {
+                mutationSnapshot?.let {
+                    restoreEditorMutation(
+                        it,
+                        failureMessage = cause.message ?: "网易云解析失败",
+                        restartPendingAutosave = true,
+                    )
+                }
                 importedCoverId?.let { cleanupPendingCover(it, cause) }
                 if (_uiState.value.currentProject?.id == projectId) {
                     updateNetease { it.copy(isResolving = false, message = cause.message ?: "网易云解析失败") }
                 }
             }
         }
+    }
+
+    private fun captureEditorMutationSnapshot(): EditorMutationSnapshot {
+        val state = _uiState.value
+        return EditorMutationSnapshot(
+            project = checkNotNull(state.currentProject),
+            undoHistory = undoStack.toList(),
+            redoHistory = redoStack.toList(),
+            editRevision = editRevision,
+            savedRevision = savedRevision,
+            autosaveStatus = state.autosaveStatus,
+            errorMessage = state.errorMessage,
+        )
+    }
+
+    private fun restoreEditorMutation(
+        snapshot: EditorMutationSnapshot,
+        failureMessage: String?,
+        restartPendingAutosave: Boolean,
+    ) {
+        autosaveJob?.cancel()
+        autosaveJob = null
+        undoStack.clear()
+        undoStack.addAll(snapshot.undoHistory)
+        redoStack.clear()
+        redoStack.addAll(snapshot.redoHistory)
+        editRevision = snapshot.editRevision
+        savedRevision = snapshot.savedRevision
+        _uiState.update {
+            it.copy(
+                currentProject = snapshot.project,
+                autosaveStatus = if (failureMessage == null) snapshot.autosaveStatus else AutosaveStatus.FAILED,
+                errorMessage = failureMessage ?: snapshot.errorMessage,
+                canUndo = undoStack.isNotEmpty(),
+                canRedo = redoStack.isNotEmpty(),
+            )
+        }
+        if (restartPendingAutosave && editRevision > savedRevision) scheduleAutosave()
     }
 
     private suspend fun cleanupPendingCover(id: String, primaryFailure: Throwable? = null) {

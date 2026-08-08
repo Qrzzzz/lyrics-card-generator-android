@@ -360,6 +360,54 @@ class EditorViewModelTest {
             assertFalse(viewModel.uiState.value.netease.message.startsWith("已从网易云导入"))
         }
 
+    @Test
+    fun failedNeteaseAutosaveRollsBackAppliedSongAndCleansPendingCover() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val stored = project("project-netease-save-failure")
+            val store = FakeProjectStore(listOf(stored)).apply {
+                saveFailure = IllegalStateException("room write failed")
+            }
+            val cleanupFinished = CompletableDeferred<Unit>()
+            val assets = FakeProjectAssets().apply {
+                importBytesBlock = { "pending-cover-save-failure" }
+                deleteBlock = { cleanupFinished.complete(Unit) }
+            }
+            val netease = FakeNeteaseClient().apply {
+                resolveSongBlock = {
+                    ResolvedNeteaseSong(
+                        id = it,
+                        title = "Must roll back",
+                        artist = "Artist",
+                        album = "Album",
+                        lyrics = "Imported line",
+                        coverUrl = "https://p1.music.126.net/cover.jpg",
+                    )
+                }
+                downloadCoverBlock = { byteArrayOf(1, 2, 3) }
+            }
+            val viewModel = editorViewModel(
+                store = store,
+                handle = SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to stored.id)),
+                projectAssets = assets,
+                neteaseClient = netease,
+            )
+            runCurrent()
+
+            viewModel.resolveNeteaseSong("save-failure")
+            runCurrent()
+            cleanupFinished.await()
+            advanceUntilIdle()
+            withTimeout(5_000L) { viewModel.uiState.first { !it.netease.isResolving } }
+
+            assertEquals(listOf("pending-cover-save-failure"), assets.deleted)
+            assertTrue(assets.deleteContextWasActive.all { it })
+            assertEquals(stored.spec, viewModel.uiState.value.currentProject?.spec)
+            assertEquals(AutosaveStatus.FAILED, viewModel.uiState.value.autosaveStatus)
+            assertTrue(viewModel.uiState.value.errorMessage.orEmpty().contains("room write failed"))
+            assertTrue(viewModel.uiState.value.netease.message.contains("room write failed"))
+            assertFalse(viewModel.uiState.value.netease.message.startsWith("已从网易云导入"))
+        }
+
     private fun editorViewModel(
         store: FakeProjectStore,
         handle: SavedStateHandle,
