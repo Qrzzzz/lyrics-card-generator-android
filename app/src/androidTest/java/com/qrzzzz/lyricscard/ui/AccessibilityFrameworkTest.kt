@@ -1,24 +1,25 @@
 package com.qrzzzz.lyricscard.ui
 
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.accessibility.disableAccessibilityChecks
+import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.test.espresso.accessibility.AccessibilityChecks
-import androidx.test.espresso.Espresso.onView
-import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qrzzzz.lyricscard.MainActivity
 import com.qrzzzz.lyricscard.R
-import org.junit.After
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,16 +28,6 @@ import org.junit.runner.RunWith
 class AccessibilityFrameworkTest {
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
-
-    @Before
-    fun enableAccessibilityTestFramework() {
-        AccessibilityChecks.enable().setRunChecksFromRootView(true)
-    }
-
-    @After
-    fun disableAccessibilityTestFramework() {
-        AccessibilityChecks.disable()
-    }
 
     @Test
     fun coreHomeEditorExportAndSettingsActionsPassAccessibilityTestFramework() {
@@ -82,10 +73,23 @@ class AccessibilityFrameworkTest {
         compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle)).assertExists()
     }
 
+    @OptIn(ExperimentalTestApi::class)
     private fun assertAtf(stage: String) {
         compose.waitForIdle()
-        onView(isRoot()).check(AccessibilityChecks.accessibilityAssertion())
-        Log.i(ATF_TAG, "stage=$stage assertion=pass")
+        if (Build.VERSION.SDK_INT < COMPOSE_ATF_MIN_SDK) {
+            Log.i(
+                ATF_TAG,
+                "stage=$stage engine=compose-atf assertion=unsupported sdk=${Build.VERSION.SDK_INT} min=$COMPOSE_ATF_MIN_SDK",
+            )
+            return
+        }
+        compose.enableAccessibilityChecks()
+        try {
+            compose.onRoot().tryPerformAccessibilityChecks()
+            Log.i(ATF_TAG, "stage=$stage engine=compose-atf assertion=pass")
+        } finally {
+            compose.disableAccessibilityChecks()
+        }
     }
 
     private fun waitForText(value: String, substring: Boolean = false) {
@@ -110,6 +114,7 @@ class AccessibilityFrameworkTest {
         const val UI_TIMEOUT_MS = 20_000L
         const val POLL_FRAME_MILLIS = 100L
         const val NAVIGATION_SETTLE_MS = 1_000L
+        const val COMPOSE_ATF_MIN_SDK = 34
         const val ATF_TAG = "LCG_ATF"
     }
 }

@@ -3,6 +3,7 @@ agp = "8.13.2"
 kotlin = "2.3.21"
 ksp = "2.3.8"
 compose-bom = "2024.10.01"
+compose-ui-test-accessibility = "1.8.3"
 activity-compose = "1.9.3"
 core-ktx = "1.15.0"
 core-splashscreen = "1.2.0"
@@ -31,6 +32,7 @@ androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-compose-ui-test-junit4-accessibility = { module = "androidx.compose.ui:ui-test-junit4-accessibility", version.ref = "compose-ui-test-accessibility" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-material3-window-size = { module = "androidx.compose.material3:material3-window-size-class" }
