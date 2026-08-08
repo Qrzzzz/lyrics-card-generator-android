@@ -1,0 +1,430 @@
+package com.qrzzzz.lyricscard.quality
+
+import android.app.Activity
+import android.content.Context
+import android.content.pm.ActivityInfo
+import android.os.Debug
+import android.os.StrictMode
+import android.os.SystemClock
+import android.util.Log
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.test.core.app.ActivityScenario
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
+import com.qrzzzz.lyricscard.LyricsCardApplication
+import com.qrzzzz.lyricscard.RendererOperations
+import com.qrzzzz.lyricscard.model.GridDensity
+import com.qrzzzz.lyricscard.model.PaletteSpec
+import com.qrzzzz.lyricscard.model.RenderSpec
+import com.qrzzzz.lyricscard.model.TextAlignment
+import com.qrzzzz.lyricscard.renderer.ExportedImage
+import com.qrzzzz.lyricscard.renderer.ProjectAssetStore
+import com.qrzzzz.lyricscard.renderer.RendererController
+import com.qrzzzz.lyricscard.renderer.RendererStatus
+import com.qrzzzz.lyricscard.ui.EditorViewModel
+import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.ceil
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.FixMethodOrder
+import org.junit.Test
+import org.junit.runners.MethodSorters
+import org.junit.runner.RunWith
+
+@LargeTest
+@RunWith(AndroidJUnit4::class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+class QualityStressTest {
+    private val appContext = ApplicationProvider.getApplicationContext<Context>()
+
+    @Test
+    fun a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope() {
+        val assetStore = ProjectAssetStore(appContext)
+        val controller = RendererController(appContext, assetStore)
+        val scenario = ActivityScenario.launch(ComponentActivity::class.java)
+        val binding = RendererBinding(controller, scenario)
+        val exportDirectory = File(appContext.cacheDir, "exports")
+        val filesBefore = exportDirectory.listFiles().orEmpty().map(File::getCanonicalPath).toSet()
+        val created = mutableListOf<File>()
+        val strictModeViolations = AtomicInteger(0)
+        val violationExecutor = Executors.newSingleThreadExecutor()
+        var previousPolicy: StrictMode.ThreadPolicy? = null
+
+        try {
+            binding.attach()
+            waitForRenderer(controller)
+            val spec = releaseStressSpec()
+
+            val warmup = runBlocking { controller.exportPng(spec, 2) }
+            assertPng(warmup, spec.canvas.width * 2, spec.canvas.height * 2)
+            assertTrue("warmup export was not removed", warmup.file.delete())
+            forceIdleGc()
+
+            scenario.onActivity { activity ->
+                previousPolicy = StrictMode.getThreadPolicy()
+                StrictMode.setThreadPolicy(
+                    StrictMode.ThreadPolicy.Builder(previousPolicy)
+                        .detectDiskReads()
+                        .detectDiskWrites()
+                        .penaltyListener(violationExecutor) { violation ->
+                            if (violation.stackTrace.any { frame -> frame.className.startsWith(APP_PACKAGE_PREFIX) }) {
+                                strictModeViolations.incrementAndGet()
+                            }
+                        }
+                        .build(),
+                )
+            }
+
+            val before = memorySample("export-before", exportDirectory, filesBefore)
+            var successful = 0
+            for (attempt in 1..20) {
+                val image = runBlocking { controller.exportPng(spec, 2) }
+                assertPng(image, spec.canvas.width * 2, spec.canvas.height * 2)
+                created += image.file
+                successful += 1
+                assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+                assertFalse(
+                    "partial export remained after attempt $attempt",
+                    exportDirectory.listFiles().orEmpty().any { it.name.endsWith(".part") || it.name.endsWith(".tmp") },
+                )
+                if (attempt in setOf(5, 10, 20)) {
+                    memorySample("export-$attempt", exportDirectory, filesBefore)
+                }
+            }
+            assertEquals(20, successful)
+
+            forceIdleGc()
+            val idle = memorySample("export-idle-gc", exportDirectory, filesBefore)
+            val pssLimit = ceil(before.totalPssKb * 1.20).toInt()
+            assertTrue(
+                "PSS did not return within 20 percent of the warmed baseline: before=${before.totalPssKb} idle=${idle.totalPssKb}",
+                idle.totalPssKb <= pssLimit,
+            )
+            assertEquals("app main-thread disk I/O violations", 0, strictModeViolations.get())
+            Log.i(QUALITY_TAG, "export-summary success=$successful rendererErrors=0 partialFiles=0")
+        } finally {
+            previousPolicy?.let { policy -> scenario.onActivity { StrictMode.setThreadPolicy(policy) } }
+            violationExecutor.shutdownNow()
+            created.forEach { file ->
+                if (file.exists()) assertTrue("stress export cleanup failed", file.delete())
+            }
+            binding.close()
+            scenario.close()
+            controller.close()
+        }
+    }
+
+    @Test
+    fun b_thirtyMinuteEditingEndurancePreservesAutosaveRendererAndRestorationState() {
+        val application = appContext as LyricsCardApplication
+        val container = application.container
+        val controller = RendererController(appContext, ProjectAssetStore(appContext))
+        val renderer = object : RendererOperations {
+            override suspend fun exportPng(project: com.qrzzzz.lyricscard.model.Project, multiplier: Int): ExportedImage =
+                controller.exportPng(project.spec, multiplier)
+
+            override suspend fun extractPalette(assetId: String): PaletteSpec = controller.extractPalette(assetId)
+            override fun retry() = controller.retry()
+        }
+        val project = runBlocking { container.projects.createBlank() }
+        val store = ViewModelStore()
+        val factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = EditorViewModel(
+                savedStateHandle = SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to project.id)),
+                projects = container.projects,
+                projectAssets = container.projectAssets,
+                neteaseClient = container.netease,
+                renderer = renderer,
+                sessions = container.editorSessions,
+            ) as T
+        }
+        val editor = ViewModelProvider(store, factory)[EditorViewModel::class.java]
+        val scenario = ActivityScenario.launch(ComponentActivity::class.java)
+        val binding = RendererBinding(controller, scenario)
+        val strictModeViolations = AtomicInteger(0)
+        val violationExecutor = Executors.newSingleThreadExecutor()
+        var previousPolicy: StrictMode.ThreadPolicy? = null
+
+        try {
+            binding.attach()
+            waitForRenderer(controller)
+            waitUntil(20_000) { !editor.uiState.value.isLoading && editor.uiState.value.currentProject != null }
+            scenario.onActivity { activity ->
+                previousPolicy = StrictMode.getThreadPolicy()
+                StrictMode.setThreadPolicy(
+                    StrictMode.ThreadPolicy.Builder(previousPolicy)
+                        .detectDiskReads()
+                        .detectDiskWrites()
+                        .penaltyListener(violationExecutor) { violation ->
+                            if (violation.stackTrace.any { frame -> frame.className.startsWith(APP_PACKAGE_PREFIX) }) {
+                                strictModeViolations.incrementAndGet()
+                            }
+                        }
+                        .build(),
+                )
+            }
+
+            forceIdleGc()
+            val startMemory = memorySample("edit-start")
+            var peakPssKb = startMemory.totalPssKb
+            var operations = 0L
+            var recreations = 0
+            var backgroundCycles = 0
+            var lastMemoryCheckpoint = 0L
+            var lastRecreation = 0L
+            var lastBackground = 0L
+            val startedAt = SystemClock.elapsedRealtime()
+
+            while (SystemClock.elapsedRealtime() - startedAt < EDITING_DURATION_MS) {
+                val phase = operations.toInt()
+                editor.selectStep(phase % 6)
+                editor.updateSearchQuery("quality-edit-${phase % 1000}")
+                editor.updateProjectName("质量耐久项目 ${phase % 97}")
+                editor.updateSpec { spec -> mutateForEndurance(spec, phase) }
+
+                val current = checkNotNull(editor.uiState.value.currentProject).spec
+                repeat(3) { pulse ->
+                    controller.updateSpec(
+                        current.copy(
+                            typography = current.typography.copy(
+                                lyricSize = 42 + ((phase + pulse) % 15),
+                            ),
+                        ),
+                    )
+                }
+                if (phase % 4 == 0) editor.undo()
+                if (phase % 4 == 1) editor.redo()
+
+                val elapsed = SystemClock.elapsedRealtime() - startedAt
+                if (elapsed - lastBackground >= BACKGROUND_INTERVAL_MS) {
+                    scenario.moveToState(Lifecycle.State.CREATED)
+                    SystemClock.sleep(350)
+                    scenario.moveToState(Lifecycle.State.RESUMED)
+                    backgroundCycles += 1
+                    lastBackground = elapsed
+                }
+                if (elapsed - lastRecreation >= RECREATION_INTERVAL_MS) {
+                    binding.detach()
+                    scenario.onActivity { activity ->
+                        activity.requestedOrientation = if (recreations % 2 == 0) {
+                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                        } else {
+                            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        }
+                    }
+                    SystemClock.sleep(800)
+                    binding.attach()
+                    waitForRenderer(controller)
+                    recreations += 1
+                    lastRecreation = elapsed
+                }
+                if (elapsed - lastMemoryCheckpoint >= MEMORY_INTERVAL_MS) {
+                    val sample = memorySample("edit-${elapsed / 60_000}m")
+                    peakPssKb = maxOf(peakPssKb, sample.totalPssKb)
+                    lastMemoryCheckpoint = elapsed
+                }
+
+                operations += 1
+                SystemClock.sleep(if (phase % 8 == 0) 650 else 35)
+            }
+
+            val duration = SystemClock.elapsedRealtime() - startedAt
+            assertTrue("endurance run was shorter than 30 minutes: $duration", duration >= EDITING_DURATION_MS)
+            assertTrue("final autosave failed", runBlocking { editor.flushAutosave() })
+            val expected = checkNotNull(editor.uiState.value.currentProject)
+            val persisted = runBlocking { container.projects.getProject(project.id) }
+            assertNotNull(persisted)
+            assertEquals(expected.name, persisted?.name)
+            assertEquals(expected.spec, persisted?.spec)
+
+            controller.updateSpec(expected.spec)
+            waitForRenderer(controller)
+            forceIdleGc()
+            val endMemory = memorySample("edit-idle-gc")
+            peakPssKb = maxOf(peakPssKb, endMemory.totalPssKb)
+            val pssLimit = ceil(startMemory.totalPssKb * 1.20).toInt()
+            assertTrue(
+                "editing PSS did not return within 20 percent: start=${startMemory.totalPssKb} end=${endMemory.totalPssKb}",
+                endMemory.totalPssKb <= pssLimit,
+            )
+            assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+            assertEquals("app main-thread disk I/O violations", 0, strictModeViolations.get())
+            Log.i(
+                QUALITY_TAG,
+                "edit-summary durationMs=$duration operations=$operations recreations=$recreations " +
+                    "backgroundCycles=$backgroundCycles startPssKb=${startMemory.totalPssKb} " +
+                    "peakPssKb=$peakPssKb endPssKb=${endMemory.totalPssKb} rendererErrors=0 autosave=consistent",
+            )
+        } finally {
+            previousPolicy?.let { policy -> scenario.onActivity { StrictMode.setThreadPolicy(policy) } }
+            violationExecutor.shutdownNow()
+            binding.close()
+            scenario.close()
+            controller.close()
+            store.clear()
+            runBlocking { container.projects.delete(project.id) }
+        }
+    }
+
+    private fun releaseStressSpec(): RenderSpec = RenderSpec().copy(
+        content = RenderSpec().content.copy(
+            lyrics = (1..16).joinToString("\n") { index -> "耐久导出行 $index" },
+            translationEnabled = true,
+            translation = (1..16).joinToString("\n") { index -> "Stress export line $index" },
+        ),
+        canvas = RenderSpec().canvas.copy(pixelRatio = 2),
+    )
+
+    private fun mutateForEndurance(spec: RenderSpec, phase: Int): RenderSpec = spec.copy(
+        content = spec.content.copy(
+            lyrics = "耐久编辑 ${phase % 101}\n第二行保持稳定\nThird line remains deterministic",
+            translationEnabled = phase % 2 == 0,
+            translation = if (phase % 2 == 0) "Endurance ${phase % 101}\nSecond translated line\n第三行译文" else "",
+        ),
+        typography = spec.typography.copy(
+            lyricSize = 42 + (phase % 15),
+            alignment = TextAlignment.entries[phase % TextAlignment.entries.size],
+        ),
+        visual = spec.visual.copy(
+            gridEnabled = phase % 3 != 0,
+            gridDensity = GridDensity.entries[phase % GridDensity.entries.size],
+            gridOpacity = 0.08 + (phase % 5) * 0.02,
+        ),
+    )
+
+    private fun assertPng(image: ExportedImage, width: Int, height: Int) {
+        assertTrue("export file missing", image.file.isFile)
+        assertEquals("image/png", image.mimeType)
+        assertEquals(width, image.width)
+        assertEquals(height, image.height)
+        val signature = image.file.inputStream().use { input -> ByteArray(8).also { assertEquals(8, input.read(it)) } }
+        assertTrue("invalid PNG signature", signature.contentEquals(PNG_SIGNATURE))
+    }
+
+    private fun waitForRenderer(controller: RendererController) {
+        waitUntil(30_000) {
+            controller.status.value.phase == RendererStatus.Phase.READY
+        }
+        assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+    }
+
+    private fun waitUntil(timeoutMs: Long, condition: () -> Boolean) {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
+        while (!condition() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(50)
+        assertTrue("condition timed out after $timeoutMs ms", condition())
+    }
+
+    private fun forceIdleGc() {
+        repeat(3) {
+            Runtime.getRuntime().gc()
+            System.runFinalization()
+            SystemClock.sleep(1_000)
+        }
+    }
+
+    private fun memorySample(
+        stage: String,
+        exportDirectory: File? = null,
+        filesBefore: Set<String> = emptySet(),
+    ): MemorySample {
+        val memory = Debug.MemoryInfo()
+        Debug.getMemoryInfo(memory)
+        val sample = MemorySample(
+            totalPssKb = memory.totalPss,
+            javaPssKb = memory.getMemoryStat("summary.java-heap").toIntOrNull() ?: -1,
+            nativePssKb = memory.getMemoryStat("summary.native-heap").toIntOrNull() ?: -1,
+            graphicsPssKb = memory.getMemoryStat("summary.graphics").toIntOrNull() ?: -1,
+            rssKb = processRssKb(),
+        )
+        val current = exportDirectory?.listFiles().orEmpty()
+            .filterNot { it.getCanonicalPath() in filesBefore }
+        val partials = current.count { it.name.endsWith(".part") || it.name.endsWith(".tmp") }
+        Log.i(
+            QUALITY_TAG,
+            "memory stage=$stage totalPssKb=${sample.totalPssKb} rssKb=${sample.rssKb} " +
+                "javaPssKb=${sample.javaPssKb} nativePssKb=${sample.nativePssKb} " +
+                "graphicsPssKb=${sample.graphicsPssKb} exportFiles=${current.size} partialFiles=$partials",
+        )
+        return sample
+    }
+
+    private fun processRssKb(): Int = runCatching {
+        File("/proc/self/status").useLines { lines ->
+            lines.first { it.startsWith("VmRSS:") }
+                .substringAfter(':')
+                .trim()
+                .substringBefore(' ')
+                .toInt()
+        }
+    }.getOrDefault(-1)
+
+    private data class MemorySample(
+        val totalPssKb: Int,
+        val javaPssKb: Int,
+        val nativePssKb: Int,
+        val graphicsPssKb: Int,
+        val rssKb: Int,
+    )
+
+    private class RendererBinding(
+        private val controller: RendererController,
+        private val scenario: ActivityScenario<ComponentActivity>,
+    ) {
+        private var owner: Any? = null
+        private var view: android.webkit.WebView? = null
+
+        fun attach() {
+            val nextOwner = Any()
+            scenario.onActivity { activity ->
+                val root = FrameLayout(activity)
+                activity.setContentView(root)
+                val nextView = controller.acquireWebView(activity, nextOwner)
+                root.addView(
+                    nextView,
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                owner = nextOwner
+                view = nextView
+            }
+        }
+
+        fun detach() {
+            val currentOwner = owner ?: return
+            val currentView = view ?: return
+            scenario.onActivity { controller.releaseWebView(currentOwner, currentView) }
+            owner = null
+            view = null
+        }
+
+        fun close() = runCatching { detach() }.getOrNull()
+    }
+
+    private companion object {
+        const val QUALITY_TAG = "LCG_QUALITY"
+        const val APP_PACKAGE_PREFIX = "com.qrzzzz.lyricscard"
+        const val EDITING_DURATION_MS = 30L * 60L * 1_000L
+        const val BACKGROUND_INTERVAL_MS = 90L * 1_000L
+        const val RECREATION_INTERVAL_MS = 3L * 60L * 1_000L
+        const val MEMORY_INTERVAL_MS = 5L * 60L * 1_000L
+        val PNG_SIGNATURE = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        )
+    }
+}
