@@ -412,8 +412,19 @@ class QualityStressTest {
         controller: RendererController,
     ) {
         binding.close()
-        runOnMainThread { controller.close() }
-        scenario.close()
+        var mainThreadTimedOut = false
+        try {
+            runOnMainThread { controller.close() }
+        } catch (timeout: MainThreadActionTimeoutException) {
+            mainThreadTimedOut = true
+            throw timeout
+        } finally {
+            if (mainThreadTimedOut) {
+                Log.w(QUALITY_TAG, "scenario close skipped after bounded main-thread timeout")
+            } else {
+                scenario.close()
+            }
+        }
     }
 
     private fun releaseStressSpec(): RenderSpec = RenderSpec().copy(
@@ -597,15 +608,17 @@ class QualityStressTest {
         if (Looper.myLooper() == Looper.getMainLooper()) return block()
         val result = AtomicReference<Result<T>?>(null)
         val completed = CountDownLatch(1)
-        val posted = Handler(Looper.getMainLooper()).post {
+        val handler = Handler(Looper.getMainLooper())
+        val action = Runnable {
             result.set(runCatching(block))
             completed.countDown()
         }
+        val posted = handler.post(action)
         assertTrue("failed to enqueue quality action on the main thread", posted)
-        assertTrue(
-            "main-thread quality action timed out after $MAIN_THREAD_TIMEOUT_MS ms",
-            completed.await(MAIN_THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS),
-        )
+        if (!completed.await(MAIN_THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            handler.removeCallbacks(action)
+            throw MainThreadActionTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+        }
         return checkNotNull(result.get()) { "main-thread quality action completed without a result" }.getOrThrow()
     }
 
@@ -652,6 +665,9 @@ class QualityStressTest {
         val graphicsPssKb: Int,
         val rssKb: Int,
     )
+
+    private class MainThreadActionTimeoutException(timeoutMs: Long) :
+        AssertionError("main-thread quality action timed out after $timeoutMs ms")
 
     private inner class RendererBinding(
         private val controller: RendererController,
