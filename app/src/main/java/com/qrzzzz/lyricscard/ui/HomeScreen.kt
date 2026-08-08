@@ -74,6 +74,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -106,6 +107,7 @@ fun HomeScreen(
     thumbnailLoader: ThumbnailLoader = FileThumbnailLoader,
 ) {
     val configuration = LocalConfiguration.current
+    val screenTitle = stringResource(R.string.home_title)
     val dateFormatter = remember(configuration.locales) {
         DateFormat.getDateTimeInstance(
             DateFormat.SHORT,
@@ -115,10 +117,11 @@ fun HomeScreen(
     }
 
     Scaffold(
+        modifier = Modifier.semantics { paneTitle = screenTitle },
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.home_title)) },
+                    title = { Text(screenTitle) },
                     actions = {
                         IconButton(
                             onClick = onSettings,

@@ -59,6 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -92,6 +93,7 @@ fun ExportScreen(
     val context = LocalContext.current
     val windowWidth = currentLyricsWindowWidth(windowWidthSizeClass)
     val defaultFileName = stringResource(R.string.export_default_file_name)
+    val screenTitle = stringResource(R.string.export_title)
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/png"),
     ) { uri ->
@@ -134,11 +136,12 @@ fun ExportScreen(
     }
 
     Scaffold(
+        modifier = Modifier.semantics { paneTitle = screenTitle },
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        stringResource(R.string.export_title),
+                        screenTitle,
                         modifier = Modifier.semantics { heading() },
                         fontWeight = FontWeight.Bold,
                     )

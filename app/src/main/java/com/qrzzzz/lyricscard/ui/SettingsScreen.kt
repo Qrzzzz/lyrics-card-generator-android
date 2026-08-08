@@ -49,6 +49,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -71,6 +72,7 @@ fun SettingsScreen(
     onMessageShown: () -> Unit = {},
 ) {
     val snackbar = remember { SnackbarHostState() }
+    val screenTitle = stringResource(R.string.settings_title)
     val message = state.errorMessage ?: state.cacheStatus
     val messageText = message?.asString()
     LaunchedEffect(messageText) {
@@ -81,9 +83,10 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        modifier = Modifier.semantics { paneTitle = screenTitle },
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.settings_title)) },
+                title = { Text(screenTitle) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
