@@ -329,7 +329,11 @@ private fun WideEditorLayout(
             onResolveNeteaseLink = onResolveNeteaseLink,
             onPrevious = onPrevious,
             onNext = onNext,
-            modifier = if (showPreview) Modifier.width(420.dp) else Modifier.fillMaxSize(),
+            modifier = if (showPreview) {
+                Modifier.width(LyricsCardLayout.propertiesPaneWidth)
+            } else {
+                Modifier.fillMaxSize()
+            },
         )
     }
 }
@@ -374,7 +378,7 @@ private fun MobileEditorBottomSheet(
         modifier = Modifier.fillMaxSize(),
         scaffoldState = scaffoldState,
         sheetPeekHeight = 112.dp,
-        sheetMaxWidth = 840.dp,
+        sheetMaxWidth = LyricsCardLayout.wideBreakpoint,
         sheetShape = LyricsCardShapeTokens.topSheet,
         sheetDragHandle = { BottomSheetDefaults.DragHandle() },
         sheetContent = {

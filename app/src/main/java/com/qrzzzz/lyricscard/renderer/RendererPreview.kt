@@ -44,7 +44,7 @@ fun RendererPreview(
 ) {
     val status by controller.status.collectAsStateWithLifecycle()
     val generation by controller.generation.collectAsStateWithLifecycle()
-    val localizedStatus = stringResource(rendererStatusResource(status.phase))
+    val localizedStatus = stringResource(rendererStatusResource(status.uiMessageKey()))
     val previewKey = if (spec.canvas.autoHeight) {
         spec.copy(canvas = spec.canvas.copy(height = 0, pixelRatio = 1))
     } else {
@@ -112,12 +112,18 @@ fun RendererPreview(
 private const val AUTO_HEIGHT_MEASURE_DEBOUNCE_MS = 220L
 
 @StringRes
-private fun rendererStatusResource(phase: RendererStatus.Phase): Int = when (phase) {
-    RendererStatus.Phase.STARTING -> R.string.renderer_starting
-    RendererStatus.Phase.READY -> R.string.renderer_ready
-    RendererStatus.Phase.RENDERING -> R.string.renderer_rendering
-    RendererStatus.Phase.EXPORTING -> R.string.renderer_exporting
-    RendererStatus.Phase.ERROR -> R.string.renderer_error
+private fun rendererStatusResource(key: RendererUiMessageKey): Int = when (key) {
+    RendererUiMessageKey.STARTING -> R.string.renderer_starting
+    RendererUiMessageKey.RECOVERING -> R.string.renderer_recovering
+    RendererUiMessageKey.READY -> R.string.renderer_ready
+    RendererUiMessageKey.RENDERING -> R.string.renderer_rendering
+    RendererUiMessageKey.EXPORTING -> R.string.renderer_exporting
+    RendererUiMessageKey.WEBVIEW_UNSUPPORTED -> R.string.renderer_error_webview_unsupported
+    RendererUiMessageKey.PROTOCOL_INCOMPATIBLE -> R.string.renderer_error_protocol_incompatible
+    RendererUiMessageKey.PROCESS_UNSTABLE -> R.string.renderer_error_process_unstable
+    RendererUiMessageKey.INVALID_RESPONSE -> R.string.renderer_error_invalid_response
+    RendererUiMessageKey.LOAD_FAILED -> R.string.renderer_error_load_failed
+    RendererUiMessageKey.GENERIC_ERROR -> R.string.renderer_error
 }
 
 @Composable
