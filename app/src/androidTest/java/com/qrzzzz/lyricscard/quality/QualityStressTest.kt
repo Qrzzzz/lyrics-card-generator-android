@@ -202,6 +202,24 @@ class QualityStressTest {
                 )
             }
 
+            val backgroundProbeCycles = InstrumentationRegistry.getArguments()
+                .getString(BACKGROUND_PROBE_CYCLES_ARGUMENT)
+                ?.toIntOrNull()
+            if (backgroundProbeCycles != null) {
+                require(backgroundProbeCycles in 1..MAX_BACKGROUND_PROBE_CYCLES) {
+                    "$BACKGROUND_PROBE_CYCLES_ARGUMENT must be between 1 and $MAX_BACKGROUND_PROBE_CYCLES"
+                }
+                repeat(backgroundProbeCycles) { cycleIndex ->
+                    backgroundAndResume(scenario, cycleIndex)
+                }
+                Log.i(
+                    QUALITY_TAG,
+                    "background-probe-summary cycles=$backgroundProbeCycles pass=$backgroundProbeCycles " +
+                        "sameManagedInstance=true",
+                )
+                return
+            }
+
             forceIdleGc()
             val startMemory = memorySample("edit-start")
             var peakPssKb = startMemory.totalPssKb
@@ -235,7 +253,7 @@ class QualityStressTest {
 
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
                 if (elapsed - lastBackground >= BACKGROUND_INTERVAL_MS) {
-                    backgroundAndResume(scenario)
+                    backgroundAndResume(scenario, backgroundCycles)
                     backgroundCycles += 1
                     lastBackground = elapsed
                 }
@@ -617,30 +635,46 @@ class QualityStressTest {
         }
     }
 
-    private fun backgroundAndResume(scenario: ActivityScenario<ComponentActivity>) {
+    private fun backgroundAndResume(
+        scenario: ActivityScenario<ComponentActivity>,
+        cycleIndex: Int,
+    ) {
         val activity = checkNotNull(currentResumedActivity()) {
             "no resumed host before background cycle"
         }
-        val resumeIntent = Intent(activity.intent).apply {
+        val resumeIntent = Intent(Intent.ACTION_MAIN).apply {
             component = activity.componentName
+            addCategory(Intent.CATEGORY_LAUNCHER)
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP,
             )
         }
+        val cycleStartedAt = SystemClock.elapsedRealtime()
         InstrumentationRegistry.getInstrumentation().uiAutomation
             .executeShellCommand("input keyevent KEYCODE_HOME")
             .close()
         waitUntil(BACKGROUND_TIMEOUT_MS) {
-            activity.lifecycle.currentState == Lifecycle.State.CREATED
+            scenario.state == Lifecycle.State.CREATED &&
+                activity.lifecycle.currentState == Lifecycle.State.CREATED &&
+                !activity.hasWindowFocus()
         }
+        val backgroundElapsedMs = SystemClock.elapsedRealtime() - cycleStartedAt
         SystemClock.sleep(350)
         appContext.startActivity(resumeIntent)
         waitUntil(BACKGROUND_TIMEOUT_MS) {
-            activity.lifecycle.currentState == Lifecycle.State.RESUMED &&
+            scenario.state == Lifecycle.State.RESUMED &&
+                activity.lifecycle.currentState == Lifecycle.State.RESUMED &&
+                currentResumedActivity() === activity &&
                 activity.hasWindowFocus()
         }
+        Log.i(
+            QUALITY_TAG,
+            "background-cycle index=$cycleIndex backgroundMs=$backgroundElapsedMs " +
+                "resumedFocusedMs=${SystemClock.elapsedRealtime() - cycleStartedAt} " +
+                "sameManagedInstance=true",
+        )
     }
 
     private fun waitForStableOrientation(requestedOrientation: Int) {
@@ -803,6 +837,8 @@ class QualityStressTest {
         const val STABLE_ACTIVITY_CHECKS = 10
         const val REATTACH_REGRESSION_CYCLES = 12
         const val DETACHED_SPEC_TIMEOUT_CROSSING_MS = 8_500L
+        const val BACKGROUND_PROBE_CYCLES_ARGUMENT = "qualityHomeResumeProbeCycles"
+        const val MAX_BACKGROUND_PROBE_CYCLES = 50
         const val RECREATION_INTERVAL_MS = 3L * 60L * 1_000L
         const val MEMORY_INTERVAL_MS = 5L * 60L * 1_000L
         const val LARGE_COVER_EDGE = 4_096
