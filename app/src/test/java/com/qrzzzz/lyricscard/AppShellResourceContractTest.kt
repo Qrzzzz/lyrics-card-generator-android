@@ -74,12 +74,20 @@ class AppShellResourceContractTest {
     fun `compact landscape and IME shell paths remain explicit`() {
         val editor = appFile("src/main/java/com/qrzzzz/lyricscard/ui/EditorScreen.kt").readText()
         val export = appFile("src/main/java/com/qrzzzz/lyricscard/ui/ExportScreen.kt").readText()
+        val adaptive = appFile("src/main/java/com/qrzzzz/lyricscard/ui/WindowAdaptive.kt").readText()
 
-        assertTrue(editor.contains("maxWidth >= LyricsCardLayout.wideBreakpoint"))
-        assertTrue(editor.contains("MobileEditorBottomSheet"))
+        assertTrue(adaptive.contains("calculateWindowSizeClass"))
+        assertTrue(adaptive.contains("WindowWidthSizeClass.Medium"))
+        assertTrue(adaptive.contains("WindowWidthSizeClass.Expanded"))
+        assertTrue(editor.contains("CompactEditorBottomSheet"))
+        assertTrue(editor.contains("LyricsWindowWidth.MEDIUM"))
+        assertTrue(editor.contains("LyricsWindowWidth.EXPANDED"))
         assertTrue(editor.contains("WindowInsets.ime"))
         assertTrue(editor.contains("imePadding()"))
-        assertTrue(export.contains("maxWidth >= LyricsCardLayout.wideBreakpoint"))
+        assertTrue(export.contains("LyricsWindowWidth.MEDIUM"))
+        assertTrue(export.contains("LyricsWindowWidth.EXPANDED"))
+        assertFalse(editor.contains("LyricsCardLayout.wideBreakpoint"))
+        assertFalse(export.contains("LyricsCardLayout.propertiesPaneWidth"))
     }
 
     private fun appFile(relative: String, required: Boolean = true): File {

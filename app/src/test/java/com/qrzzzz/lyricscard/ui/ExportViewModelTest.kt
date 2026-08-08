@@ -1,5 +1,6 @@
 package com.qrzzzz.lyricscard.ui
 
+import android.graphics.Bitmap
 import com.qrzzzz.lyricscard.R
 import androidx.lifecycle.SavedStateHandle
 import com.qrzzzz.lyricscard.data.UserPreferences
@@ -7,9 +8,11 @@ import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.ProjectTemplates
 import com.qrzzzz.lyricscard.renderer.ExportedImage
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -45,7 +48,7 @@ class ExportViewModelTest {
         runCurrent()
 
         assertEquals(1, renderer.exportCalls)
-        assertEquals(ExportOperationState.RUNNING, viewModel.uiState.value.operation)
+        assertEquals(ExportOperationState.RENDERING, viewModel.uiState.value.operation)
 
         completion.complete(image())
         advanceUntilIdle()
@@ -120,7 +123,15 @@ class ExportViewModelTest {
         val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
         val exportFiles = FakeExportFiles()
         val handle = SavedStateHandle(mapOf(ExportViewModel.PROJECT_ID_KEY to project.id))
-        val first = ExportViewModel(handle, store, preferences, renderer, exportFiles, clock = { 0L })
+        val first = ExportViewModel(
+            handle,
+            store,
+            preferences,
+            renderer,
+            exportFiles,
+            clock = { 0L },
+            previewDecoder = successfulPreviewDecoder(),
+        )
         runCurrent()
 
         first.setMultiplier(2)
@@ -154,6 +165,7 @@ class ExportViewModelTest {
             restoredRenderer,
             FakeExportFiles(),
             clock = { 0L },
+            previewDecoder = successfulPreviewDecoder(),
         )
         runCurrent()
 
@@ -179,7 +191,11 @@ class ExportViewModelTest {
             ),
         )
 
-        val viewModel = exportViewModel(project, handle = handle)
+        val viewModel = exportViewModel(
+            project,
+            handle = handle,
+            previewDecoder = ExportPreviewDecoder { ExportPreviewDecodeResult.Missing },
+        )
         runCurrent()
 
         assertEquals(ExportOperationState.FAILURE, viewModel.uiState.value.operation)
@@ -350,6 +366,7 @@ class ExportViewModelTest {
         renderer: FakeRendererOperations = FakeRendererOperations(),
         exportFiles: FakeExportFiles = FakeExportFiles(),
         handle: SavedStateHandle = SavedStateHandle(mapOf(ExportViewModel.PROJECT_ID_KEY to project.id)),
+        previewDecoder: ExportPreviewDecoder = successfulPreviewDecoder(),
     ) = ExportViewModel(
         savedStateHandle = handle,
         projects = store,
@@ -357,6 +374,7 @@ class ExportViewModelTest {
         renderer = renderer,
         exportFiles = exportFiles,
         clock = { 0L },
+        previewDecoder = previewDecoder,
     )
 
     private fun project(id: String): Project = ProjectTemplates.blank(id = id, now = 1L)
@@ -367,5 +385,138 @@ class ExportViewModelTest {
             deleteOnExit()
         }
         return ExportedImage(file = file, width = 1080, height = 1350)
+    }
+
+    @Test
+    fun multiplierIsRestrictedToOneOrTwoAndInvalidValuesCannotAddAThirdMode() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val project = project("export-scale-contract")
+            val viewModel = exportViewModel(project)
+            runCurrent()
+
+            viewModel.setMultiplier(-20)
+            assertEquals(1, viewModel.uiState.value.multiplier)
+            viewModel.setMultiplier(20)
+            assertEquals(2, viewModel.uiState.value.multiplier)
+        }
+
+    @Test
+    fun cancelledSafDestinationKeepsResultAndPublishesUnderstandableStatus() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val project = project("export-saf-cancel")
+            val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+            val viewModel = exportViewModel(project, renderer = renderer)
+            runCurrent()
+
+            viewModel.retry()
+            advanceUntilIdle()
+            val exported = viewModel.uiState.value.exported
+
+            viewModel.saveTo(null)
+
+            assertEquals(exported, viewModel.uiState.value.exported)
+            assertEquals(UiText.resource(R.string.export_save_cancelled), viewModel.uiState.value.status)
+            assertNull(viewModel.uiState.value.errorMessage)
+        }
+
+    @Test
+    fun safWriteFailureKeepsGeneratedResultAndNeverExposesExceptionOrDestination() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val project = project("export-saf-failure")
+            val exportFiles = FakeExportFiles().apply {
+                copyFailure = SecurityException("content://private/secret and raw storage detail")
+            }
+            val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+            val viewModel = exportViewModel(project, renderer = renderer, exportFiles = exportFiles)
+            runCurrent()
+
+            viewModel.retry()
+            advanceUntilIdle()
+            val exported = viewModel.uiState.value.exported
+            viewModel.saveTo(android.net.Uri.parse("content://private/secret"))
+            advanceUntilIdle()
+
+            assertEquals(exported, viewModel.uiState.value.exported)
+            assertEquals(
+                UiText.resource(R.string.export_save_failed_retryable),
+                viewModel.uiState.value.errorMessage,
+            )
+        }
+
+    @Test
+    fun replacingResultCancelsStalePreviewAndRecyclesPreviousBitmap() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val project = project("export-preview-replace")
+            val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+            val firstStarted = CompletableDeferred<Unit>()
+            val firstCancelled = AtomicBoolean(false)
+            var decodeCalls = 0
+            val readyBitmap = Bitmap.createBitmap(6, 6, Bitmap.Config.ARGB_8888)
+            val decoder = ExportPreviewDecoder {
+                decodeCalls += 1
+                if (decodeCalls == 1) {
+                    firstStarted.complete(Unit)
+                    try {
+                        awaitCancellation()
+                    } catch (cause: CancellationException) {
+                        firstCancelled.set(true)
+                        throw cause
+                    }
+                }
+                ExportPreviewDecodeResult.Success(readyBitmap)
+            }
+            val viewModel = exportViewModel(
+                project,
+                renderer = renderer,
+                previewDecoder = decoder,
+            )
+            runCurrent()
+
+            viewModel.retry()
+            runCurrent()
+            assertTrue(firstStarted.isCompleted)
+            assertEquals(ExportPreviewPhase.LOADING, viewModel.uiState.value.preview.phase)
+
+            viewModel.setMultiplier(1)
+            runCurrent()
+            assertTrue(firstCancelled.get())
+            assertNull(viewModel.uiState.value.exported)
+            assertEquals(ExportPreviewPhase.EMPTY, viewModel.uiState.value.preview.phase)
+
+            viewModel.retry()
+            advanceUntilIdle()
+            assertEquals(ExportPreviewPhase.READY, viewModel.uiState.value.preview.phase)
+            assertEquals(readyBitmap, viewModel.uiState.value.preview.bitmap)
+
+            viewModel.setMultiplier(2)
+            assertTrue(readyBitmap.isRecycled)
+        }
+
+    @Test
+    fun corruptPngPreviewInvalidatesSuccessWithoutDispatchingExternalAction() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val project = project("export-corrupt-preview")
+            val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+            val viewModel = exportViewModel(
+                project,
+                renderer = renderer,
+                previewDecoder = ExportPreviewDecoder { ExportPreviewDecodeResult.InvalidPng },
+            )
+            runCurrent()
+
+            viewModel.share()
+            advanceUntilIdle()
+
+            assertEquals(ExportOperationState.FAILURE, viewModel.uiState.value.operation)
+            assertNull(viewModel.uiState.value.exported)
+            assertEquals(ExportPreviewPhase.ERROR, viewModel.uiState.value.preview.phase)
+            assertEquals(UiText.resource(R.string.export_result_invalid_png), viewModel.uiState.value.errorMessage)
+            assertNull(viewModel.uiState.value.effect)
+        }
+
+    private fun successfulPreviewDecoder() = ExportPreviewDecoder {
+        ExportPreviewDecodeResult.Success(
+            Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888),
+        )
     }
 }

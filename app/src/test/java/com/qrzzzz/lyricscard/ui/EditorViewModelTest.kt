@@ -3,6 +3,7 @@ package com.qrzzzz.lyricscard.ui
 import com.qrzzzz.lyricscard.R
 import androidx.lifecycle.SavedStateHandle
 import com.qrzzzz.lyricscard.EditorSessionRegistry
+import com.qrzzzz.lyricscard.data.NeteaseSongSearchResult
 import com.qrzzzz.lyricscard.data.ResolvedNeteaseSong
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.PaletteSpec
@@ -49,7 +50,7 @@ class EditorViewModelTest {
         val first = editorViewModel(store, firstHandle)
         runCurrent()
 
-        first.selectStep(3)
+        first.selectStep(4)
         first.updateSearchQuery("晴天 周杰伦")
         first.updateLinkInput("https://music.163.com/song?id=1")
         first.updateProjectName("恢复中的项目")
@@ -67,7 +68,7 @@ class EditorViewModelTest {
         val restored = editorViewModel(store, restoredHandle)
         runCurrent()
 
-        assertEquals(3, restored.uiState.value.selectedStep)
+        assertEquals(4, restored.uiState.value.selectedStep)
         assertEquals("晴天 周杰伦", restored.uiState.value.drafts.searchQuery)
         assertEquals("https://music.163.com/song?id=1", restored.uiState.value.drafts.linkInput)
         assertEquals("恢复中的项目", restored.uiState.value.drafts.projectName)
@@ -92,6 +93,61 @@ class EditorViewModelTest {
         assertEquals(stored.name, viewModel.uiState.value.currentProject?.name)
         assertEquals(AutosaveStatus.SAVED, viewModel.uiState.value.autosaveStatus)
     }
+
+    @Test
+    fun neteaseSearchPublishesLoadingResultsEmptyAndErrorStatesWithoutStaleRows() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val stored = project("project-search-states")
+            val searchResult = NeteaseSongSearchResult(
+                id = "42",
+                title = "晴天",
+                artist = "周杰伦",
+                album = "叶惠美",
+            )
+            val firstResponse = CompletableDeferred<List<NeteaseSongSearchResult>>()
+            val netease = FakeNeteaseClient().apply {
+                searchBlock = { firstResponse.await() }
+            }
+            val viewModel = editorViewModel(
+                store = FakeProjectStore(listOf(stored)),
+                handle = SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to stored.id)),
+                neteaseClient = netease,
+            )
+            runCurrent()
+
+            viewModel.searchNetease("晴天")
+            runCurrent()
+            assertEquals(NeteaseLookupPhase.SEARCHING, viewModel.uiState.value.netease.phase)
+            assertTrue(viewModel.uiState.value.netease.results.isEmpty())
+
+            viewModel.updateSearchQuery("晴天 live")
+            runCurrent()
+            assertEquals(NeteaseLookupPhase.IDLE, viewModel.uiState.value.netease.phase)
+            assertFalse(viewModel.uiState.value.netease.isSearching)
+
+            viewModel.searchNetease("晴天")
+            runCurrent()
+
+            firstResponse.complete(listOf(searchResult))
+            advanceUntilIdle()
+            assertEquals(NeteaseLookupPhase.RESULTS, viewModel.uiState.value.netease.phase)
+            assertEquals(listOf(searchResult), viewModel.uiState.value.netease.results)
+
+            netease.searchBlock = { emptyList() }
+            viewModel.searchNetease("不存在的歌")
+            advanceUntilIdle()
+            assertEquals(NeteaseLookupPhase.EMPTY, viewModel.uiState.value.netease.phase)
+            assertTrue(viewModel.uiState.value.netease.results.isEmpty())
+
+            netease.searchBlock = { error("private transport detail") }
+            viewModel.searchNetease("网络失败")
+            advanceUntilIdle()
+            assertEquals(NeteaseLookupPhase.ERROR, viewModel.uiState.value.netease.phase)
+            assertTrue(viewModel.uiState.value.netease.results.isEmpty())
+
+            viewModel.searchNetease("  ")
+            assertEquals(NeteaseLookupPhase.IDLE, viewModel.uiState.value.netease.phase)
+        }
 
     @Test
     fun autosaveUsesFiveHundredMillisecondDebounceAndLatestSnapshot() = runTest(mainDispatcherRule.dispatcher) {

@@ -81,8 +81,7 @@ class ThemeContractTest {
             LyricsCardSpacing.section,
         )
         assertEquals(spacing.sortedBy { it.value }, spacing)
-        assertEquals(840f, LyricsCardLayout.wideBreakpoint.value)
-        assertEquals(420f, LyricsCardLayout.propertiesPaneWidth.value)
+        assertTrue(spacing.zipWithNext().all { (first, second) -> first < second })
     }
 
     private fun assertCompleteScheme(name: String, colors: androidx.compose.material3.ColorScheme) {

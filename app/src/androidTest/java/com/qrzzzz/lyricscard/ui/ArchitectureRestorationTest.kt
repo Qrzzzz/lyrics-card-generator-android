@@ -19,15 +19,15 @@ class ArchitectureRestorationTest {
     @Test
     fun editorRouteStepAndSearchDraftSurviveActivityRecreation() {
         composeRule.onNodeWithText("空白项目").performClick()
-        waitForText("1/6", substring = true)
+        waitForText("第 1 步，共 6 步，选择歌曲", substring = false)
 
         composeRule.onNodeWithText("歌曲名或歌手").performTextInput("rotation-query")
         composeRule.onNodeWithText("4. 字体方案").performScrollTo().performClick()
-        waitForText("4/6", substring = true)
+        waitForText("第 4 步，共 6 步，字体方案", substring = false)
 
         composeRule.activityRule.scenario.recreate()
 
-        waitForText("4/6", substring = true)
+        waitForText("第 4 步，共 6 步，字体方案", substring = false)
         composeRule.onNodeWithText("1. 选择歌曲").performScrollTo().performClick()
         composeRule.onNodeWithText("rotation-query", substring = true).fetchSemanticsNode()
     }
