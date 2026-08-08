@@ -2,6 +2,7 @@ package com.qrzzzz.lyricscard.ui
 
 import android.content.ClipData
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,6 +46,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -83,6 +85,7 @@ fun ExportScreen(
     onSaveDestination: (android.net.Uri?) -> Unit,
     onEffectConsumed: (Long) -> Unit,
     onExternalActionError: (UiText) -> Unit,
+    onPreviewBitmapReleased: (Bitmap) -> Unit = {},
     windowWidthSizeClass: WindowWidthSizeClass? = null,
 ) {
     val project = checkNotNull(state.project)
@@ -103,11 +106,11 @@ fun ExportScreen(
                     saveLauncher.launch(ensurePng(state.fileName, defaultFileName))
                 }
                 ExportPendingAction.SHARE -> {
-                    val image = state.exported
-                    if (image == null || !state.isResultReady) {
-                        onExternalActionError(UiText.resource(R.string.export_result_missing_error))
+                    val readinessError = shareReadinessError(state)
+                    if (readinessError != null) {
+                        onExternalActionError(readinessError)
                     } else {
-                        shareImage(context, image)
+                        shareImage(context, checkNotNull(state.exported))?.let(onExternalActionError)
                     }
                 }
             }
@@ -184,6 +187,7 @@ fun ExportScreen(
                     onShare = onShare,
                     onCancel = onCancel,
                     onRetry = onRetry,
+                    onPreviewBitmapReleased = onPreviewBitmapReleased,
                     modifier = Modifier.fillMaxWidth().weight(0.58f),
                 )
             }
@@ -223,6 +227,7 @@ fun ExportScreen(
                     onShare = onShare,
                     onCancel = onCancel,
                     onRetry = onRetry,
+                    onPreviewBitmapReleased = onPreviewBitmapReleased,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
@@ -246,6 +251,7 @@ internal fun ExportControls(
     onShare: () -> Unit,
     onCancel: () -> Unit,
     onRetry: () -> Unit,
+    onPreviewBitmapReleased: (Bitmap) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val finalWidth = project.spec.canvas.width * state.multiplier
@@ -351,6 +357,9 @@ internal fun ExportControls(
             }
             ExportPreviewPhase.READY -> state.preview.bitmap?.let { bitmap ->
                 item {
+                    DisposableEffect(bitmap) {
+                        onDispose { onPreviewBitmapReleased(bitmap) }
+                    }
                     val imageBitmap = remember(bitmap) { bitmap.asImageBitmap() }
                     Card(shape = MaterialTheme.shapes.large) {
                         Column(
@@ -486,9 +495,18 @@ private fun ExportOperationStatus(state: ExportUiState) {
     )
 }
 
-private fun shareImage(context: android.content.Context, image: ExportedImage) {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", image.file)
-    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+internal fun shareReadinessError(state: ExportUiState): UiText? =
+    if (state.exported == null || !state.isResultReady) {
+        UiText.resource(R.string.export_result_missing_error)
+    } else {
+        null
+    }
+
+internal fun buildShareIntent(
+    context: android.content.Context,
+    image: ExportedImage,
+    uri: android.net.Uri,
+): Intent = Intent(Intent.ACTION_SEND).apply {
         type = image.mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
         clipData = ClipData.newUri(
@@ -498,9 +516,18 @@ private fun shareImage(context: android.content.Context, image: ExportedImage) {
         )
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
+
+internal fun shareImage(context: android.content.Context, image: ExportedImage): UiText? = try {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", image.file)
     context.startActivity(
-        Intent.createChooser(sendIntent, context.getString(R.string.export_share_chooser)),
+        Intent.createChooser(
+            buildShareIntent(context, image, uri),
+            context.getString(R.string.export_share_chooser),
+        ),
     )
+    null
+} catch (_: Throwable) {
+    UiText.resource(R.string.export_error_open_share_sheet)
 }
 
 internal fun ensurePng(value: String, fallbackName: String): String {

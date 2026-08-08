@@ -3,19 +3,25 @@ package com.qrzzzz.lyricscard.ui
 import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -29,6 +35,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qrzzzz.lyricscard.R
@@ -84,8 +91,16 @@ class EditorExportProductionTest {
                 EDITOR_STEP_COUNT,
                 compose.activity.getString(step.label),
             )
-            compose.onNodeWithContentDescription(description).assertExists()
+            assertEquals(
+                index.toFloat(),
+                compose.onNodeWithContentDescription(description)
+                    .assertExists()
+                    .fetchSemanticsNode()
+                    .config[SemanticsProperties.TraversalIndex],
+            )
         }
+        compose.onNodeWithText(text(EditorStep.CHOOSE_SONG.description))
+            .assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
         compose.onNodeWithContentDescription("第 1 步，共 6 步，选择歌曲").assertIsSelected()
 
         compose.onNodeWithContentDescription("第 4 步，共 6 步，字体方案")
@@ -194,7 +209,11 @@ class EditorExportProductionTest {
 
         compose.onNodeWithTag(EDITOR_LYRICS_FIELD_TAG).performTextReplacement("第一行\n第二行")
         compose.runOnIdle { assertEquals("第一行\n第二行", spec.value.content.lyrics) }
-        compose.onNodeWithText(text(R.string.editor_show_translation)).performScrollTo().performClick()
+        val translationToggle = compose.onNode(
+            hasText(text(R.string.editor_show_translation)) and hasClickAction(),
+        ).performScrollTo()
+        assertMinTouchHeight(translationToggle, "translation setting row")
+        translationToggle.performClick()
         compose.runOnIdle { assertTrue(spec.value.content.translationEnabled) }
 
         compose.runOnIdle {
@@ -275,6 +294,7 @@ class EditorExportProductionTest {
             ),
         )
         val retries = mutableIntStateOf(0)
+        var releasedBitmap: Bitmap? = null
         compose.setContent {
             LyricsCardTheme {
                 Box(Modifier.requiredSize(width = 360.dp, height = 640.dp)) {
@@ -287,6 +307,7 @@ class EditorExportProductionTest {
                         onShare = {},
                         onCancel = {},
                         onRetry = { retries.intValue += 1 },
+                        onPreviewBitmapReleased = { releasedBitmap = it },
                         modifier = Modifier.testTag("export-controls"),
                     )
                 }
@@ -304,6 +325,7 @@ class EditorExportProductionTest {
             state.value = state.value.copy(operation = ExportOperationState.PREPARING)
         }
         compose.onNodeWithText(text(R.string.common_cancel)).performScrollTo().assertIsEnabled()
+            .also { assertMinTouchHeight(it, "export cancel") }
 
         compose.runOnIdle {
             state.value = state.value.copy(operation = ExportOperationState.FINALIZING)
@@ -329,10 +351,13 @@ class EditorExportProductionTest {
             )
         }
         compose.onNodeWithText(text(R.string.common_save)).performScrollTo().assertIsEnabled()
+            .also { assertMinTouchHeight(it, "export save") }
         compose.onNodeWithText(text(R.string.common_share)).performScrollTo().assertIsEnabled()
+            .also { assertMinTouchHeight(it, "export share") }
         compose.runOnIdle { state.value = state.value.copy(preview = ExportPreviewUiState()) }
         compose.waitForIdle()
-        bitmap.recycle()
+        assertTrue("Compose did not release the replaced preview bitmap", releasedBitmap === bitmap)
+        if (!bitmap.isRecycled) bitmap.recycle()
     }
 
     @Test
@@ -422,6 +447,94 @@ class EditorExportProductionTest {
         }
     }
 
+    @Test
+    fun compactBottomSheetKeepsPreviewReserveAndNextAboveImeAtTwoXFontScale() {
+        val context = compose.activity.applicationContext
+        val controller = RendererController(context, ProjectAssetStore(context))
+        val project = project("compact-font-ime")
+        val imeBottomPx = mutableIntStateOf(0)
+        try {
+            compose.setContent {
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density = 1f, fontScale = 2f),
+                ) {
+                    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+                    SideEffect { imeBottomPx.intValue = imeBottom }
+                    LyricsCardTheme {
+                        Box(
+                            Modifier
+                                .requiredSize(width = 360.dp, height = 640.dp)
+                                .testTag(COMPACT_IME_VIEWPORT_TAG),
+                        ) {
+                            EditorScreen(
+                                state = EditorUiState(
+                                    projectId = project.id,
+                                    currentProject = project.copy(
+                                        spec = project.spec.copy(
+                                            canvas = project.spec.canvas.copy(ratio = CanvasRatio.CUSTOM),
+                                        ),
+                                    ),
+                                    isLoading = false,
+                                    selectedStep = EditorStep.LAYOUT.ordinal,
+                                ),
+                                showSafeArea = true,
+                                renderer = controller,
+                                snackbarHost = {},
+                                onBack = {},
+                                onSelectedStep = {},
+                                onSearchQueryChange = {},
+                                onLinkInputChange = {},
+                                onProjectNameChange = {},
+                                onSpecChange = {},
+                                onMeasuredHeight = {},
+                                onExtractPalette = {},
+                                onUndo = {},
+                                onRedo = {},
+                                onSelectCover = {},
+                                onRemoveCover = {},
+                                onSearchNetease = {},
+                                onResolveNeteaseSong = {},
+                                onResolveNeteaseLink = {},
+                                onExport = {},
+                                windowWidthSizeClass = WindowWidthSizeClass.Compact,
+                            )
+                        }
+                    }
+                }
+            }
+
+            compose.onNodeWithTag(EDITOR_WIDTH_FIELD_TAG)
+                .performScrollTo()
+                .performClick()
+                .performTextReplacement("900")
+            compose.waitUntil(timeoutMillis = 5_000) { imeBottomPx.intValue > 0 }
+
+            val screen = compose.onNodeWithTag(EDITOR_SCREEN_TAG).fetchSemanticsNode().boundsInRoot
+            val handle = compose.onNodeWithTag(EDITOR_COMPACT_SHEET_HANDLE_TAG)
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+            assertTrue(
+                "compact preview reserve was ${handle.top - screen.top}px",
+                handle.top - screen.top >= 72f,
+            )
+
+            val viewport = compose.onNodeWithTag(COMPACT_IME_VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
+            val next = compose.onNodeWithText(text(R.string.editor_next_step))
+                .assertIsDisplayed()
+                .fetchSemanticsNode()
+                .boundsInRoot
+            assertTrue("Next starts outside the compact viewport", next.top >= viewport.top)
+            assertTrue(
+                "Next is obscured by the IME",
+                next.bottom <= viewport.bottom - imeBottomPx.intValue,
+            )
+            assertTrue("Next height was ${next.height}px", next.height >= 48f)
+        } finally {
+            compose.runOnIdle { controller.close() }
+        }
+    }
+
     private fun actions(
         onSelectedStep: (Int) -> Unit = {},
         onResolveNeteaseSong: (String) -> Unit = {},
@@ -444,5 +557,17 @@ class EditorExportProductionTest {
 
     private fun text(resource: Int): String = compose.activity.getString(resource)
 
+    private fun assertMinTouchHeight(
+        node: androidx.compose.ui.test.SemanticsNodeInteraction,
+        label: String,
+    ) {
+        val height = node.fetchSemanticsNode().boundsInRoot.height
+        assertTrue("$label height was $height", height >= 48f)
+    }
+
     private enum class PanelHarness { LYRICS, LAYOUT, TYPOGRAPHY }
+
+    private companion object {
+        const val COMPACT_IME_VIEWPORT_TAG = "compact-ime-viewport"
+    }
 }

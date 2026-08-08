@@ -489,6 +489,8 @@ class ExportViewModelTest {
             assertEquals(readyBitmap, viewModel.uiState.value.preview.bitmap)
 
             viewModel.setMultiplier(2)
+            assertFalse(readyBitmap.isRecycled)
+            viewModel.releasePreviewBitmap(readyBitmap)
             assertTrue(readyBitmap.isRecycled)
         }
 

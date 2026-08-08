@@ -44,6 +44,7 @@ internal fun ExportRouteContent(
             onSaveDestination = exportViewModel::saveTo,
             onEffectConsumed = exportViewModel::consumeEffect,
             onExternalActionError = exportViewModel::reportExternalActionError,
+            onPreviewBitmapReleased = exportViewModel::releasePreviewBitmap,
         )
     }
 }

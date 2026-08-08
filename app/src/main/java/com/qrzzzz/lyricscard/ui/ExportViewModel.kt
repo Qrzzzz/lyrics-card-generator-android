@@ -1,5 +1,6 @@
 package com.qrzzzz.lyricscard.ui
 
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -13,7 +14,9 @@ import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.renderer.ExportedImage
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Collections
 import java.util.Date
+import java.util.IdentityHashMap
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -165,6 +168,9 @@ class ExportViewModel internal constructor(
     private var previewGeneration = 0L
     private var pendingPreviewAction: ExportPendingAction? = null
     private var nextEffectId = 0L
+    private val retiredPreviewBitmaps = Collections.newSetFromMap(
+        IdentityHashMap<Bitmap, Boolean>(),
+    )
 
     init {
         savedStateHandle[PROJECT_ID_KEY] = projectId
@@ -270,9 +276,16 @@ class ExportViewModel internal constructor(
         persistMessages(_uiState.value.status, message)
     }
 
+    internal fun releasePreviewBitmap(bitmap: Bitmap) {
+        if (_uiState.value.preview.bitmap === bitmap) return
+        if (retiredPreviewBitmaps.remove(bitmap)) recycle(bitmap)
+    }
+
     override fun onCleared() {
         exportJob?.cancel()
         previewJob?.cancel()
+        retiredPreviewBitmaps.forEach(::recycle)
+        retiredPreviewBitmaps.clear()
         recycle(_uiState.value.preview.bitmap)
         super.onCleared()
     }
@@ -549,8 +562,12 @@ class ExportViewModel internal constructor(
 
     private fun replacePreview(next: ExportPreviewUiState) {
         val previous = _uiState.value.preview.bitmap
-        if (previous !== next.bitmap) recycle(previous)
         _uiState.update { it.copy(preview = next) }
+        if (previous !== next.bitmap) retirePreviewBitmap(previous)
+    }
+
+    private fun retirePreviewBitmap(bitmap: Bitmap?) {
+        if (bitmap == null || bitmap.isRecycled || !retiredPreviewBitmaps.add(bitmap)) return
     }
 
     private fun persistOperation(value: ExportOperationState) {
@@ -629,5 +646,6 @@ class ExportViewModel internal constructor(
         private fun recycle(bitmap: android.graphics.Bitmap?) {
             if (bitmap != null && !bitmap.isRecycled) bitmap.recycle()
         }
+
     }
 }

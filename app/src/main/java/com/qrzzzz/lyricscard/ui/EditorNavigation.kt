@@ -31,7 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qrzzzz.lyricscard.R
@@ -116,6 +118,7 @@ internal fun EditorStepNavigation(
 ) {
     ScrollableTabRow(
         selectedTabIndex = selectedStep,
+        modifier = Modifier.semantics { isTraversalGroup = true },
         edgePadding = 8.dp,
         divider = {},
     ) {
@@ -130,7 +133,10 @@ internal fun EditorStepNavigation(
             Tab(
                 selected = index == selectedStep,
                 onClick = { onSelectedStep(index) },
-                modifier = Modifier.semantics { contentDescription = talkBackLabel },
+                modifier = Modifier.semantics {
+                    contentDescription = talkBackLabel
+                    traversalIndex = index.toFloat()
+                },
                 text = {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),

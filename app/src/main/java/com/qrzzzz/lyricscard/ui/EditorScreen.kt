@@ -22,7 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Redo
 import androidx.compose.material.icons.automirrored.rounded.Undo
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -311,10 +310,9 @@ private fun CompactEditorBottomSheet(
             maxHeight < 720.dp -> 96.dp
             else -> 120.dp
         }
-        val sheetHeight = (maxHeight - reservedPreviewHeight)
-            .coerceAtLeast(240.dp)
-            .coerceAtMost(720.dp)
-            .coerceAtMost(maxHeight)
+        val sheetHeight = (maxHeight - reservedPreviewHeight - COMPACT_SHEET_HANDLE_HEIGHT)
+            .coerceAtLeast(1.dp)
+            .coerceAtMost(COMPACT_SHEET_MAX_CONTENT_HEIGHT)
         val peekHeight = if (maxHeight < 520.dp) 88.dp else 112.dp
         val sheetState = rememberStandardBottomSheetState(
             initialValue = SheetValue.Expanded,
@@ -335,7 +333,7 @@ private fun CompactEditorBottomSheet(
             scaffoldState = scaffoldState,
             sheetPeekHeight = peekHeight,
             sheetShape = LyricsCardShapeTokens.topSheet,
-            sheetDragHandle = { BottomSheetDefaults.DragHandle() },
+            sheetDragHandle = { CompactSheetDragHandle() },
             sheetContent = {
                 EditorPanelContent(
                     state = state,
@@ -364,6 +362,23 @@ private fun CompactEditorBottomSheet(
 }
 
 @Composable
+private fun CompactSheetDragHandle() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(COMPACT_SHEET_HANDLE_HEIGHT)
+            .testTag(EDITOR_COMPACT_SHEET_HANDLE_TAG),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            modifier = Modifier.size(width = 32.dp, height = 4.dp),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+        ) {}
+    }
+}
+
+@Composable
 private fun EditorProperties(
     state: EditorUiState,
     actions: EditorScreenActions,
@@ -384,5 +399,8 @@ private fun EditorProperties(
 
 internal const val EDITOR_SCREEN_TAG = "editor-screen"
 internal const val EDITOR_COMPACT_SHEET_TAG = "editor-compact-sheet"
+internal const val EDITOR_COMPACT_SHEET_HANDLE_TAG = "editor-compact-sheet-handle"
 internal const val EDITOR_MEDIUM_LAYOUT_TAG = "editor-medium-layout"
 internal const val EDITOR_EXPANDED_LAYOUT_TAG = "editor-expanded-layout"
+private val COMPACT_SHEET_HANDLE_HEIGHT = 32.dp
+private val COMPACT_SHEET_MAX_CONTENT_HEIGHT = 688.dp
