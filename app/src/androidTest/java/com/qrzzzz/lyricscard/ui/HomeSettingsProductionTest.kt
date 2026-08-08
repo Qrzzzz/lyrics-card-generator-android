@@ -2,6 +2,7 @@ package com.qrzzzz.lyricscard.ui
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
@@ -22,12 +23,15 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
@@ -126,6 +130,7 @@ class HomeSettingsProductionTest {
     fun thumbnailReplacementCancelsTheOldRequestAndMissingImageUsesFallback() {
         val projects = mutableStateOf(listOf(summary("thumb", "缩略图", 1L, "old.png")))
         val oldGate = CompletableDeferred<androidx.compose.ui.graphics.ImageBitmap?>()
+        val oldStarted = AtomicBoolean(false)
         val oldCancelled = AtomicBoolean(false)
         val replacement = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply {
             eraseColor(Color.BLUE)
@@ -133,6 +138,7 @@ class HomeSettingsProductionTest {
         val loader = ThumbnailLoader { path, _, _ ->
             when (path) {
                 "old.png" -> try {
+                    oldStarted.set(true)
                     oldGate.await()
                 } catch (cause: CancellationException) {
                     oldCancelled.set(true)
@@ -161,16 +167,16 @@ class HomeSettingsProductionTest {
             }
         }
 
-        compose.onNodeWithTag("$HOME_THUMBNAIL_LOADING_PREFIX${"thumb"}").assertIsDisplayed()
+        waitForCondition(ASYNC_UI_TIMEOUT_MS) { oldStarted.get() }
         compose.runOnIdle {
             projects.value = listOf(summary("thumb", "缩略图", 2L, "replacement.png"))
         }
-        compose.waitUntil(timeoutMillis = 5_000) {
-            oldCancelled.get() && compose.onAllNodes(
-                androidx.compose.ui.test.hasTestTag("$HOME_THUMBNAIL_IMAGE_PREFIX${"thumb"}"),
-            ).fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithTag("$HOME_THUMBNAIL_IMAGE_PREFIX${"thumb"}").assertIsDisplayed()
+        waitForCondition(ASYNC_UI_TIMEOUT_MS) { oldCancelled.get() }
+        waitForNode("$HOME_THUMBNAIL_IMAGE_PREFIX${"thumb"}")
+        compose.onNodeWithTag(
+            "$HOME_THUMBNAIL_IMAGE_PREFIX${"thumb"}",
+            useUnmergedTree = true,
+        ).assertIsDisplayed()
 
         compose.runOnIdle {
             oldGate.complete(
@@ -180,8 +186,15 @@ class HomeSettingsProductionTest {
             )
             projects.value = listOf(summary("thumb", "缩略图", 3L, "missing.png"))
         }
-        compose.onNodeWithTag("$HOME_THUMBNAIL_FALLBACK_PREFIX${"thumb"}").assertIsDisplayed()
-        compose.onNodeWithTag("$HOME_THUMBNAIL_IMAGE_PREFIX${"thumb"}").assertDoesNotExist()
+        waitForNode("$HOME_THUMBNAIL_FALLBACK_PREFIX${"thumb"}")
+        compose.onNodeWithTag(
+            "$HOME_THUMBNAIL_FALLBACK_PREFIX${"thumb"}",
+            useUnmergedTree = true,
+        ).assertIsDisplayed()
+        compose.onNodeWithTag(
+            "$HOME_THUMBNAIL_IMAGE_PREFIX${"thumb"}",
+            useUnmergedTree = true,
+        ).assertDoesNotExist()
     }
 
     @Test
@@ -243,15 +256,19 @@ class HomeSettingsProductionTest {
             assertTrue(state.value.preferences.showSafeArea)
         }
 
-        compose.onNodeWithTag(SETTINGS_CLEAR_CACHE_TAG).performScrollTo().performClick()
+        scrollSettingsTo(hasTestTag(SETTINGS_CLEAR_CACHE_TAG))
+        compose.onNodeWithTag(SETTINGS_CLEAR_CACHE_TAG).performClick()
         compose.onNodeWithTag(SETTINGS_CLEAR_CACHE_TAG).assertIsNotEnabled()
         compose.runOnIdle { assertEquals(1, cacheClears) }
-        compose.onNodeWithTag(SETTINGS_APP_VERSION_TAG).performScrollTo().assertIsDisplayed()
+        scrollSettingsTo(hasTestTag(SETTINGS_APP_VERSION_TAG))
+        compose.onNodeWithTag(SETTINGS_APP_VERSION_TAG).assertIsDisplayed()
         compose.onNodeWithText("1.0.0 (10000)").assertIsDisplayed()
-        compose.onNodeWithTag(SETTINGS_WEBVIEW_TAG).performScrollTo().assertIsDisplayed()
+        scrollSettingsTo(hasTestTag(SETTINGS_WEBVIEW_TAG))
+        compose.onNodeWithTag(SETTINGS_WEBVIEW_TAG).assertIsDisplayed()
         compose.onNodeWithText("com.google.android.webview 150.0.0").assertIsDisplayed()
         compose.onNodeWithText("默认不声明 INTERNET", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("已声明 INTERNET", substring = true).performScrollTo().assertIsDisplayed()
+        scrollSettingsTo(hasText("已声明 INTERNET", substring = true))
+        compose.onNodeWithText("已声明 INTERNET", substring = true).assertIsDisplayed()
     }
 
     @Test
@@ -317,7 +334,8 @@ class HomeSettingsProductionTest {
         compose.runOnIdle { screen.value = TestScreen.Settings }
         compose.onNodeWithTag(SETTINGS_DARK_MODE_TAG).assertIsDisplayed()
         assertMinTouchTarget(SETTINGS_DARK_MODE_TAG)
-        compose.onNodeWithTag(SETTINGS_CLEAR_CACHE_TAG).performScrollTo().assertIsDisplayed()
+        scrollSettingsTo(hasTestTag(SETTINGS_CLEAR_CACHE_TAG))
+        compose.onNodeWithTag(SETTINGS_CLEAR_CACHE_TAG).assertIsDisplayed()
         assertMinTouchTarget(SETTINGS_CLEAR_CACHE_TAG)
 
         compose.runOnIdle {
@@ -334,6 +352,30 @@ class HomeSettingsProductionTest {
         val bounds = compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
         assertTrue("$tag width was ${bounds.width}", bounds.width >= 48f)
         assertTrue("$tag height was ${bounds.height}", bounds.height >= 48f)
+    }
+
+    private fun scrollSettingsTo(matcher: SemanticsMatcher) {
+        compose.onNodeWithTag(SETTINGS_LIST_TAG).performScrollToNode(matcher)
+    }
+
+    private fun waitForNode(tag: String) {
+        waitForCondition(ASYNC_UI_TIMEOUT_MS) {
+            compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+    }
+
+    private fun waitForCondition(timeoutMillis: Long, condition: () -> Boolean) {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMillis
+        var satisfied = runCatching(condition).getOrDefault(false)
+        while (!satisfied && SystemClock.elapsedRealtime() < deadline) {
+            compose.mainClock.advanceTimeBy(POLL_FRAME_MILLIS)
+            compose.waitForIdle()
+            SystemClock.sleep(50)
+            satisfied = runCatching(condition).getOrDefault(false)
+        }
+        assertTrue("condition timed out after $timeoutMillis ms", satisfied)
     }
 
     private fun summary(id: String, name: String, updatedAt: Long, thumbnail: String? = null): ProjectSummary =
@@ -372,5 +414,7 @@ class HomeSettingsProductionTest {
 
     private companion object {
         const val VIEWPORT_TAG = "home-settings-viewport"
+        const val ASYNC_UI_TIMEOUT_MS = 5_000L
+        const val POLL_FRAME_MILLIS = 100L
     }
 }

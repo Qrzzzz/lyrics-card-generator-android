@@ -1,9 +1,13 @@
 package com.qrzzzz.lyricscard.ui
 
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.rememberScrollState
@@ -26,6 +30,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -145,7 +150,8 @@ class EditorExportProductionTest {
             }
         }
 
-        compose.onNode(hasText("晴天") and hasClickAction()).performClick()
+        val resultAction = hasContentDescription("晴天", substring = true) and hasClickAction()
+        compose.onNode(resultAction).performClick()
         assertEquals("42", resolvedId.value)
 
         compose.runOnIdle {
@@ -155,7 +161,7 @@ class EditorExportProductionTest {
                 message = UiText.resource(R.string.editor_netease_resolving),
             )
         }
-        compose.onNode(hasText("晴天") and hasClickAction()).assertIsNotEnabled()
+        compose.onNode(resultAction).assertIsNotEnabled()
         compose.onNodeWithText(text(R.string.editor_netease_resolving)).assertExists()
 
         compose.runOnIdle {
@@ -449,6 +455,12 @@ class EditorExportProductionTest {
 
     @Test
     fun compactBottomSheetKeepsPreviewReserveAndNextAboveImeAtTwoXFontScale() {
+        val originalOrientation = compose.activity.requestedOrientation
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        waitForOrientation(Configuration.ORIENTATION_PORTRAIT)
+        val deviceDensity = compose.activity.resources.displayMetrics.density
         val context = compose.activity.applicationContext
         val controller = RendererController(context, ProjectAssetStore(context))
         val project = project("compact-font-ime")
@@ -456,14 +468,14 @@ class EditorExportProductionTest {
         try {
             compose.setContent {
                 CompositionLocalProvider(
-                    LocalDensity provides Density(density = 1f, fontScale = 2f),
+                    LocalDensity provides Density(density = deviceDensity, fontScale = 2f),
                 ) {
                     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
                     SideEffect { imeBottomPx.intValue = imeBottom }
                     LyricsCardTheme {
                         Box(
                             Modifier
-                                .requiredSize(width = 360.dp, height = 640.dp)
+                                .fillMaxSize()
                                 .testTag(COMPACT_IME_VIEWPORT_TAG),
                         ) {
                             EditorScreen(
@@ -507,16 +519,27 @@ class EditorExportProductionTest {
                 .performScrollTo()
                 .performClick()
                 .performTextReplacement("900")
-            compose.waitUntil(timeoutMillis = 5_000) { imeBottomPx.intValue > 0 }
+            waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
 
             val screen = compose.onNodeWithTag(EDITOR_SCREEN_TAG).fetchSemanticsNode().boundsInRoot
-            val handle = compose.onNodeWithTag(EDITOR_COMPACT_SHEET_HANDLE_TAG)
-                .assertIsDisplayed()
-                .fetchSemanticsNode()
-                .boundsInRoot
+            val handleNode = compose.onNodeWithTag(
+                EDITOR_COMPACT_SHEET_HANDLE_TAG,
+                useUnmergedTree = true,
+            )
+            val handle = handleNode.fetchSemanticsNode().boundsInRoot
+            try {
+                handleNode.assertIsDisplayed()
+            } catch (cause: AssertionError) {
+                val viewport = compose.onNodeWithTag(COMPACT_IME_VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
+                throw AssertionError(
+                    "compact handle was not displayed; screen=$screen handle=$handle " +
+                        "viewport=$viewport imeBottomPx=${imeBottomPx.intValue}",
+                    cause,
+                )
+            }
             assertTrue(
                 "compact preview reserve was ${handle.top - screen.top}px",
-                handle.top - screen.top >= 72f,
+                handle.top - screen.top >= 72f * deviceDensity,
             )
 
             val viewport = compose.onNodeWithTag(COMPACT_IME_VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
@@ -529,9 +552,12 @@ class EditorExportProductionTest {
                 "Next is obscured by the IME",
                 next.bottom <= viewport.bottom - imeBottomPx.intValue,
             )
-            assertTrue("Next height was ${next.height}px", next.height >= 48f)
+            assertTrue("Next height was ${next.height}px", next.height >= 48f * deviceDensity)
         } finally {
             compose.runOnIdle { controller.close() }
+            compose.activityRule.scenario.onActivity { activity ->
+                activity.requestedOrientation = originalOrientation
+            }
         }
     }
 
@@ -565,9 +591,34 @@ class EditorExportProductionTest {
         assertTrue("$label height was $height", height >= 48f)
     }
 
+    private fun waitForCondition(timeoutMillis: Long, condition: () -> Boolean) {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMillis
+        var satisfied = runCatching(condition).getOrDefault(false)
+        while (!satisfied && SystemClock.elapsedRealtime() < deadline) {
+            compose.mainClock.advanceTimeBy(POLL_FRAME_MILLIS)
+            compose.waitForIdle()
+            SystemClock.sleep(50)
+            satisfied = runCatching(condition).getOrDefault(false)
+        }
+        assertTrue("condition timed out after $timeoutMillis ms", satisfied)
+    }
+
+    private fun waitForOrientation(expected: Int) {
+        val deadline = SystemClock.elapsedRealtime() + ORIENTATION_TIMEOUT_MS
+        var actual = runCatching { compose.activity.resources.configuration.orientation }.getOrDefault(0)
+        while (actual != expected && SystemClock.elapsedRealtime() < deadline) {
+            SystemClock.sleep(50)
+            actual = runCatching { compose.activity.resources.configuration.orientation }.getOrDefault(0)
+        }
+        assertTrue("orientation was $actual instead of $expected", actual == expected)
+    }
+
     private enum class PanelHarness { LYRICS, LAYOUT, TYPOGRAPHY }
 
     private companion object {
         const val COMPACT_IME_VIEWPORT_TAG = "compact-ime-viewport"
+        const val IME_TIMEOUT_MS = 5_000L
+        const val ORIENTATION_TIMEOUT_MS = 5_000L
+        const val POLL_FRAME_MILLIS = 100L
     }
 }

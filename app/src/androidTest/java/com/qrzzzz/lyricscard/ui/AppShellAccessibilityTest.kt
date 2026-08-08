@@ -1,8 +1,12 @@
 package com.qrzzzz.lyricscard.ui
 
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -15,13 +19,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -152,23 +156,24 @@ class AppShellAccessibilityTest {
                             assertDisplayedInsideViewport(text(R.string.home_blank_project))
                         }
                         HarnessScreen.EDITOR -> {
-                            compose.onNodeWithText(text(R.string.editor_netease_query_label))
+                            compose.onNodeWithTag(EDITOR_NETEASE_QUERY_FIELD_TAG)
                                 .performScrollTo()
                                 .assertIsDisplayed()
                             compose.onNodeWithText(text(R.string.editor_next_step))
-                                .performScrollTo()
                                 .assertIsDisplayed()
                         }
                         HarnessScreen.EXPORT -> {
                             assertDisplayedInsideViewport(text(R.string.export_title))
-                            compose.onAllNodesWithText(text(R.string.common_save)).onFirst()
-                                .performScrollTo()
+                            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                                .performScrollToNode(hasTestTag(EXPORT_SAVE_ACTION_TAG))
+                            compose.onNodeWithTag(EXPORT_SAVE_ACTION_TAG)
                                 .assertIsDisplayed()
                         }
                         HarnessScreen.SETTINGS -> {
                             assertDisplayedInsideViewport(text(R.string.settings_title))
-                            compose.onNodeWithText(text(R.string.settings_clear_export_cache))
-                                .performScrollTo()
+                            compose.onNodeWithTag(SETTINGS_LIST_TAG)
+                                .performScrollToNode(hasTestTag(SETTINGS_CLEAR_CACHE_TAG))
+                            compose.onNodeWithTag(SETTINGS_CLEAR_CACHE_TAG)
                                 .assertIsDisplayed()
                         }
                     }
@@ -181,6 +186,12 @@ class AppShellAccessibilityTest {
 
     @Test
     fun landscapeEditorAndExportKeepActionsReachableAfterImeFocus() {
+        val originalOrientation = compose.activity.requestedOrientation
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+        waitForOrientation(Configuration.ORIENTATION_LANDSCAPE)
+        val deviceDensity = compose.activity.resources.displayMetrics.density
         val context = compose.activity.applicationContext
         val controller = RendererController(context, ProjectAssetStore(context))
         val project = ProjectTemplates.blank(id = "landscape-shell", now = 1L)
@@ -190,7 +201,7 @@ class AppShellAccessibilityTest {
         try {
             compose.setContent {
                 CompositionLocalProvider(
-                    LocalDensity provides Density(density = 1f, fontScale = 2f),
+                    LocalDensity provides Density(density = deviceDensity, fontScale = 2f),
                     LocalLayoutDirection provides LayoutDirection.Ltr,
                 ) {
                     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
@@ -198,7 +209,7 @@ class AppShellAccessibilityTest {
                     LyricsCardTheme {
                         Box(
                             Modifier
-                                .requiredSize(width = 840.dp, height = 420.dp)
+                                .fillMaxSize()
                                 .testTag(VIEWPORT_TAG),
                         ) {
                             if (showExport.value) {
@@ -256,24 +267,32 @@ class AppShellAccessibilityTest {
                 }
             }
 
-            compose.onNodeWithText(text(R.string.editor_netease_query_label))
+            compose.onNodeWithTag(EDITOR_NETEASE_QUERY_FIELD_TAG)
+                .performScrollTo()
                 .performClick()
-            compose.waitUntil(timeoutMillis = 5_000) { imeBottomPx.intValue > 0 }
-            assertTrue("IME inset did not become visible", imeBottomPx.intValue > 0)
-            compose.onNodeWithText(text(R.string.editor_netease_query_label))
                 .performTextInput("landscape query")
+            waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
+            assertTrue("IME inset did not become visible", imeBottomPx.intValue > 0)
             assertDisplayedInsideViewport(text(R.string.editor_next_step))
 
             compose.runOnIdle { showExport.value = true }
             assertDisplayedInsideViewport(text(R.string.export_title))
-            compose.onNodeWithText(text(R.string.export_file_name)).performClick()
-            compose.waitUntil(timeoutMillis = 5_000) { imeBottomPx.intValue > 0 }
+            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                .performScrollToNode(hasTestTag(EXPORT_FILE_NAME_TAG))
+            compose.onNodeWithTag(EXPORT_FILE_NAME_TAG)
+                .performClick()
+                .performTextInput("x")
+            waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
             assertTrue("IME inset was not visible over Export", imeBottomPx.intValue > 0)
-            compose.onAllNodesWithText(text(R.string.common_save)).onFirst()
-                .performScrollTo()
+            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                .performScrollToNode(hasTestTag(EXPORT_SAVE_ACTION_TAG))
+            compose.onNodeWithTag(EXPORT_SAVE_ACTION_TAG)
                 .assertIsDisplayed()
         } finally {
             compose.runOnIdle { controller.close() }
+            compose.activityRule.scenario.onActivity { activity ->
+                activity.requestedOrientation = originalOrientation
+            }
         }
     }
 
@@ -285,11 +304,36 @@ class AppShellAccessibilityTest {
         assertTrue("$value ends outside viewport", bounds.right <= viewport.right && bounds.bottom <= viewport.bottom)
     }
 
+    private fun waitForCondition(timeoutMillis: Long, condition: () -> Boolean) {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMillis
+        var satisfied = runCatching(condition).getOrDefault(false)
+        while (!satisfied && SystemClock.elapsedRealtime() < deadline) {
+            compose.mainClock.advanceTimeBy(POLL_FRAME_MILLIS)
+            compose.waitForIdle()
+            SystemClock.sleep(50)
+            satisfied = runCatching(condition).getOrDefault(false)
+        }
+        assertTrue("condition timed out after $timeoutMillis ms", satisfied)
+    }
+
+    private fun waitForOrientation(expected: Int) {
+        val deadline = SystemClock.elapsedRealtime() + ORIENTATION_TIMEOUT_MS
+        var actual = runCatching { compose.activity.resources.configuration.orientation }.getOrDefault(0)
+        while (actual != expected && SystemClock.elapsedRealtime() < deadline) {
+            SystemClock.sleep(50)
+            actual = runCatching { compose.activity.resources.configuration.orientation }.getOrDefault(0)
+        }
+        assertTrue("orientation was $actual instead of $expected", actual == expected)
+    }
+
     private fun text(resource: Int): String = compose.activity.getString(resource)
 
     private enum class HarnessScreen { HOME, EDITOR, EXPORT, SETTINGS }
 
     private companion object {
         const val VIEWPORT_TAG = "app-shell-viewport"
+        const val IME_TIMEOUT_MS = 5_000L
+        const val ORIENTATION_TIMEOUT_MS = 5_000L
+        const val POLL_FRAME_MILLIS = 100L
     }
 }
