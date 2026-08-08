@@ -67,10 +67,8 @@ import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,7 +85,6 @@ import com.qrzzzz.lyricscard.model.FontScheme
 import com.qrzzzz.lyricscard.model.GridDensity
 import com.qrzzzz.lyricscard.model.LayoutMode
 import com.qrzzzz.lyricscard.model.LyricTextCleaner
-import com.qrzzzz.lyricscard.model.PaletteSpec
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.RenderSpec
 import com.qrzzzz.lyricscard.model.SongSource
@@ -96,7 +93,6 @@ import com.qrzzzz.lyricscard.model.TextColorMode
 import com.qrzzzz.lyricscard.model.TextColorPreset
 import com.qrzzzz.lyricscard.renderer.RendererController
 import com.qrzzzz.lyricscard.renderer.RendererPreview
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private enum class EditorStep(val label: String, val description: String) {
@@ -113,19 +109,18 @@ private const val MOBILE_SHEET_EXPANDED_FRACTION = 0.88f
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(
-    project: Project,
-    isSaving: Boolean,
-    canUndo: Boolean,
-    canRedo: Boolean,
+    state: EditorUiState,
     showSafeArea: Boolean,
     renderer: RendererController,
-    netease: NeteaseLookupUiState,
     snackbarHost: @Composable () -> Unit,
     onBack: () -> Unit,
+    onSelectedStep: (Int) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onLinkInputChange: (String) -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onMeasuredHeight: (Int) -> Unit,
-    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onExtractPalette: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onSelectCover: (Uri) -> Unit,
@@ -135,7 +130,8 @@ fun EditorScreen(
     onResolveNeteaseLink: (String) -> Unit,
     onExport: () -> Unit,
 ) {
-    var selectedStep by remember(project.id) { mutableIntStateOf(0) }
+    val project = checkNotNull(state.currentProject)
+    val selectedStep = state.selectedStep
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(onSelectCover)
     }
@@ -147,22 +143,30 @@ fun EditorScreen(
                     Column {
                         Text(project.name, maxLines = 1, fontWeight = FontWeight.Bold)
                         Text(
-                            "${selectedStep + 1}/${EditorStep.entries.size} · ${if (isSaving) "正在自动保存…" else "已自动保存"}",
+                            "${selectedStep + 1}/${EditorStep.entries.size} · ${if (state.isLeaving) {
+                                "正在保存并离开…"
+                            } else {
+                                when (state.autosaveStatus) {
+                                    AutosaveStatus.SAVED -> "已自动保存"
+                                    AutosaveStatus.SAVING -> "正在自动保存…"
+                                    AutosaveStatus.FAILED -> "自动保存失败"
+                                }
+                            }}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, enabled = !state.isLeaving) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
-                    IconButton(onClick = onUndo, enabled = canUndo) {
+                    IconButton(onClick = onUndo, enabled = state.canUndo && !state.isLeaving) {
                         Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = "撤销")
                     }
-                    IconButton(onClick = onRedo, enabled = canRedo) {
+                    IconButton(onClick = onRedo, enabled = state.canRedo && !state.isLeaving) {
                         Icon(Icons.AutoMirrored.Rounded.Redo, contentDescription = "重做")
                     }
                 },
@@ -180,68 +184,67 @@ fun EditorScreen(
             val showPreview = selectedStep >= EditorStep.LAYOUT.ordinal
             if (wide) {
                 WideEditorLayout(
-                    project = project,
-                    selectedStep = selectedStep,
-                    onSelectedStep = { selectedStep = it },
+                    state = state,
+                    onSelectedStep = onSelectedStep,
                     showPreview = showPreview,
                     showSafeArea = showSafeArea,
                     renderer = renderer,
-                    netease = netease,
+                    onSearchQueryChange = onSearchQueryChange,
+                    onLinkInputChange = onLinkInputChange,
                     onProjectNameChange = onProjectNameChange,
                     onSpecChange = onSpecChange,
                     onMeasuredHeight = onMeasuredHeight,
-                    onPaletteExtracted = onPaletteExtracted,
+                    onExtractPalette = onExtractPalette,
                     onPickCover = { coverPicker.launch("image/*") },
                     onRemoveCover = onRemoveCover,
                     onSearchNetease = onSearchNetease,
                     onResolveNeteaseSong = onResolveNeteaseSong,
                     onResolveNeteaseLink = onResolveNeteaseLink,
-                    onPrevious = { selectedStep = (selectedStep - 1).coerceAtLeast(0) },
+                    onPrevious = { onSelectedStep((selectedStep - 1).coerceAtLeast(0)) },
                     onNext = {
                         if (selectedStep == EditorStep.entries.lastIndex) onExport()
-                        else selectedStep += 1
+                        else onSelectedStep(selectedStep + 1)
                     },
                 )
             } else if (showPreview) {
                 MobileEditorBottomSheet(
-                    project = project,
-                    selectedStep = selectedStep,
-                    onSelectedStep = { selectedStep = it },
+                    state = state,
+                    onSelectedStep = onSelectedStep,
                     showSafeArea = showSafeArea,
                     renderer = renderer,
-                    netease = netease,
+                    onSearchQueryChange = onSearchQueryChange,
+                    onLinkInputChange = onLinkInputChange,
                     onProjectNameChange = onProjectNameChange,
                     onSpecChange = onSpecChange,
                     onMeasuredHeight = onMeasuredHeight,
-                    onPaletteExtracted = onPaletteExtracted,
+                    onExtractPalette = onExtractPalette,
                     onPickCover = { coverPicker.launch("image/*") },
                     onRemoveCover = onRemoveCover,
                     onSearchNetease = onSearchNetease,
                     onResolveNeteaseSong = onResolveNeteaseSong,
                     onResolveNeteaseLink = onResolveNeteaseLink,
-                    onPrevious = { selectedStep = (selectedStep - 1).coerceAtLeast(0) },
+                    onPrevious = { onSelectedStep((selectedStep - 1).coerceAtLeast(0)) },
                     onNext = {
                         if (selectedStep == EditorStep.entries.lastIndex) onExport()
-                        else selectedStep += 1
+                        else onSelectedStep(selectedStep + 1)
                     },
                 )
             } else {
                 EditorProperties(
-                    project = project,
-                    selectedStep = selectedStep,
-                    onSelectedStep = { selectedStep = it },
-                    netease = netease,
+                    state = state,
+                    onSelectedStep = onSelectedStep,
+                    onSearchQueryChange = onSearchQueryChange,
+                    onLinkInputChange = onLinkInputChange,
                     onProjectNameChange = onProjectNameChange,
                     onSpecChange = onSpecChange,
                     onPickCover = { coverPicker.launch("image/*") },
                     onRemoveCover = onRemoveCover,
-                    renderer = renderer,
-                    onPaletteExtracted = onPaletteExtracted,
+                    onExtractPalette = onExtractPalette,
                     onSearchNetease = onSearchNetease,
                     onResolveNeteaseSong = onResolveNeteaseSong,
                     onResolveNeteaseLink = onResolveNeteaseLink,
-                    onPrevious = { selectedStep = (selectedStep - 1).coerceAtLeast(0) },
-                    onNext = { selectedStep += 1 },
+                    onPrevious = { onSelectedStep((selectedStep - 1).coerceAtLeast(0)) },
+                    onNext = { onSelectedStep(selectedStep + 1) },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 12.dp),
@@ -253,17 +256,17 @@ fun EditorScreen(
 
 @Composable
 private fun WideEditorLayout(
-    project: Project,
-    selectedStep: Int,
+    state: EditorUiState,
     onSelectedStep: (Int) -> Unit,
     showPreview: Boolean,
     showSafeArea: Boolean,
     renderer: RendererController,
-    netease: NeteaseLookupUiState,
+    onSearchQueryChange: (String) -> Unit,
+    onLinkInputChange: (String) -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onMeasuredHeight: (Int) -> Unit,
-    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onExtractPalette: () -> Unit,
     onPickCover: () -> Unit,
     onRemoveCover: () -> Unit,
     onSearchNetease: (String) -> Unit,
@@ -272,6 +275,7 @@ private fun WideEditorLayout(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
+    val project = checkNotNull(state.currentProject)
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -290,16 +294,15 @@ private fun WideEditorLayout(
             )
         }
         EditorProperties(
-            project = project,
-            selectedStep = selectedStep,
+            state = state,
             onSelectedStep = onSelectedStep,
-            netease = netease,
+            onSearchQueryChange = onSearchQueryChange,
+            onLinkInputChange = onLinkInputChange,
             onProjectNameChange = onProjectNameChange,
             onSpecChange = onSpecChange,
             onPickCover = onPickCover,
             onRemoveCover = onRemoveCover,
-            renderer = renderer,
-            onPaletteExtracted = onPaletteExtracted,
+            onExtractPalette = onExtractPalette,
             onSearchNetease = onSearchNetease,
             onResolveNeteaseSong = onResolveNeteaseSong,
             onResolveNeteaseLink = onResolveNeteaseLink,
@@ -313,16 +316,16 @@ private fun WideEditorLayout(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MobileEditorBottomSheet(
-    project: Project,
-    selectedStep: Int,
+    state: EditorUiState,
     onSelectedStep: (Int) -> Unit,
     showSafeArea: Boolean,
     renderer: RendererController,
-    netease: NeteaseLookupUiState,
+    onSearchQueryChange: (String) -> Unit,
+    onLinkInputChange: (String) -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onMeasuredHeight: (Int) -> Unit,
-    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onExtractPalette: () -> Unit,
     onPickCover: () -> Unit,
     onRemoveCover: () -> Unit,
     onSearchNetease: (String) -> Unit,
@@ -331,6 +334,7 @@ private fun MobileEditorBottomSheet(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
+    val project = checkNotNull(state.currentProject)
     val sheetState = rememberStandardBottomSheetState(
         initialValue = SheetValue.Expanded,
         skipHiddenState = true,
@@ -354,16 +358,15 @@ private fun MobileEditorBottomSheet(
         sheetDragHandle = { BottomSheetDefaults.DragHandle() },
         sheetContent = {
             EditorPanelContent(
-                project = project,
-                selectedStep = selectedStep,
+                state = state,
                 onSelectedStep = onSelectedStep,
-                netease = netease,
+                onSearchQueryChange = onSearchQueryChange,
+                onLinkInputChange = onLinkInputChange,
                 onProjectNameChange = onProjectNameChange,
                 onSpecChange = onSpecChange,
                 onPickCover = onPickCover,
                 onRemoveCover = onRemoveCover,
-                renderer = renderer,
-                onPaletteExtracted = onPaletteExtracted,
+                onExtractPalette = onExtractPalette,
                 onSearchNetease = onSearchNetease,
                 onResolveNeteaseSong = onResolveNeteaseSong,
                 onResolveNeteaseLink = onResolveNeteaseLink,
@@ -395,16 +398,15 @@ private fun MobileEditorBottomSheet(
 
 @Composable
 private fun EditorProperties(
-    project: Project,
-    selectedStep: Int,
+    state: EditorUiState,
     onSelectedStep: (Int) -> Unit,
-    netease: NeteaseLookupUiState,
+    onSearchQueryChange: (String) -> Unit,
+    onLinkInputChange: (String) -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onPickCover: () -> Unit,
     onRemoveCover: () -> Unit,
-    renderer: RendererController,
-    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onExtractPalette: () -> Unit,
     onSearchNetease: (String) -> Unit,
     onResolveNeteaseSong: (String) -> Unit,
     onResolveNeteaseLink: (String) -> Unit,
@@ -414,16 +416,15 @@ private fun EditorProperties(
 ) {
     Surface(modifier = modifier, shape = RoundedCornerShape(22.dp), tonalElevation = 2.dp) {
         EditorPanelContent(
-            project = project,
-            selectedStep = selectedStep,
+            state = state,
             onSelectedStep = onSelectedStep,
-            netease = netease,
+            onSearchQueryChange = onSearchQueryChange,
+            onLinkInputChange = onLinkInputChange,
             onProjectNameChange = onProjectNameChange,
             onSpecChange = onSpecChange,
             onPickCover = onPickCover,
             onRemoveCover = onRemoveCover,
-            renderer = renderer,
-            onPaletteExtracted = onPaletteExtracted,
+            onExtractPalette = onExtractPalette,
             onSearchNetease = onSearchNetease,
             onResolveNeteaseSong = onResolveNeteaseSong,
             onResolveNeteaseLink = onResolveNeteaseLink,
@@ -436,16 +437,15 @@ private fun EditorProperties(
 
 @Composable
 private fun EditorPanelContent(
-    project: Project,
-    selectedStep: Int,
+    state: EditorUiState,
     onSelectedStep: (Int) -> Unit,
-    netease: NeteaseLookupUiState,
+    onSearchQueryChange: (String) -> Unit,
+    onLinkInputChange: (String) -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onPickCover: () -> Unit,
     onRemoveCover: () -> Unit,
-    renderer: RendererController,
-    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onExtractPalette: () -> Unit,
     onSearchNetease: (String) -> Unit,
     onResolveNeteaseSong: (String) -> Unit,
     onResolveNeteaseLink: (String) -> Unit,
@@ -453,6 +453,7 @@ private fun EditorPanelContent(
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val selectedStep = state.selectedStep
     Column(modifier = modifier) {
         EditorStepTabs(
             selectedStep = selectedStep,
@@ -465,15 +466,14 @@ private fun EditorPanelContent(
             style = MaterialTheme.typography.bodySmall,
         )
         EditorStepContent(
-            project = project,
-            selectedStep = selectedStep,
-            netease = netease,
+            state = state,
+            onSearchQueryChange = onSearchQueryChange,
+            onLinkInputChange = onLinkInputChange,
             onProjectNameChange = onProjectNameChange,
             onSpecChange = onSpecChange,
             onPickCover = onPickCover,
             onRemoveCover = onRemoveCover,
-            renderer = renderer,
-            onPaletteExtracted = onPaletteExtracted,
+            onExtractPalette = onExtractPalette,
             onSearchNetease = onSearchNetease,
             onResolveNeteaseSong = onResolveNeteaseSong,
             onResolveNeteaseLink = onResolveNeteaseLink,
@@ -483,6 +483,7 @@ private fun EditorPanelContent(
         )
         EditorNavigationBar(
             selectedStep = selectedStep,
+            enabled = !state.isLeaving,
             onPrevious = onPrevious,
             onNext = onNext,
         )
@@ -516,20 +517,21 @@ private fun EditorStepTabs(
 
 @Composable
 private fun EditorStepContent(
-    project: Project,
-    selectedStep: Int,
-    netease: NeteaseLookupUiState,
+    state: EditorUiState,
+    onSearchQueryChange: (String) -> Unit,
+    onLinkInputChange: (String) -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onPickCover: () -> Unit,
     onRemoveCover: () -> Unit,
-    renderer: RendererController,
-    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onExtractPalette: () -> Unit,
     onSearchNetease: (String) -> Unit,
     onResolveNeteaseSong: (String) -> Unit,
     onResolveNeteaseLink: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val project = checkNotNull(state.currentProject)
+    val selectedStep = state.selectedStep
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(16.dp),
@@ -539,7 +541,10 @@ private fun EditorStepContent(
             when (EditorStep.entries[selectedStep]) {
                 EditorStep.CHOOSE_SONG -> ChooseSongPanel(
                     project = project,
-                    netease = netease,
+                    drafts = state.drafts,
+                    netease = state.netease,
+                    onSearchQueryChange = onSearchQueryChange,
+                    onLinkInputChange = onLinkInputChange,
                     onProjectNameChange = onProjectNameChange,
                     onSpecChange = onSpecChange,
                     onPickCover = onPickCover,
@@ -552,7 +557,13 @@ private fun EditorStepContent(
                 EditorStep.LAYOUT -> LayoutPanel(project.spec, onSpecChange)
                 EditorStep.FONT -> TypographyPanel(project.spec, onSpecChange)
                 EditorStep.VISUAL -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    StylePanel(project.spec, renderer, onSpecChange, onPaletteExtracted)
+                    StylePanel(
+                        spec = project.spec,
+                        isExtractingPalette = state.isExtractingPalette,
+                        paletteError = state.paletteError,
+                        onSpecChange = onSpecChange,
+                        onExtractPalette = onExtractPalette,
+                    )
                     BrandingPanel(project.spec, onSpecChange)
                 }
                 EditorStep.EXPORT -> ExportStepPanel(project)
@@ -564,6 +575,7 @@ private fun EditorStepContent(
 @Composable
 private fun EditorNavigationBar(
     selectedStep: Int,
+    enabled: Boolean,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
@@ -576,7 +588,7 @@ private fun EditorNavigationBar(
         ) {
             OutlinedButton(
                 onClick = onPrevious,
-                enabled = selectedStep > 0,
+                enabled = enabled && selectedStep > 0,
                 modifier = Modifier
                     .weight(1f)
                     .height(52.dp),
@@ -587,6 +599,7 @@ private fun EditorNavigationBar(
             }
             Button(
                 onClick = onNext,
+                enabled = enabled,
                 modifier = Modifier
                     .weight(1.5f)
                     .height(52.dp),
@@ -613,7 +626,10 @@ private fun EditorNavigationBar(
 @Composable
 private fun ChooseSongPanel(
     project: Project,
+    drafts: EditorDrafts,
     netease: NeteaseLookupUiState,
+    onSearchQueryChange: (String) -> Unit,
+    onLinkInputChange: (String) -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
     onPickCover: () -> Unit,
@@ -623,9 +639,6 @@ private fun ChooseSongPanel(
     onResolveNeteaseLink: (String) -> Unit,
 ) {
     val spec = project.spec
-    var projectNameDraft by remember(project.id) { mutableStateOf(project.name) }
-    var searchQuery by remember(project.id) { mutableStateOf("") }
-    var linkInput by remember(project.id) { mutableStateOf("") }
     val clipboard = LocalClipboardManager.current
     val lookupBusy = netease.isSearching || netease.isResolving
     PanelColumn {
@@ -635,8 +648,8 @@ private fun ChooseSongPanel(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it.take(120) },
+            value = drafts.searchQuery,
+            onValueChange = onSearchQueryChange,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("歌曲名或歌手") },
             placeholder = { Text("例如：晴天 周杰伦") },
@@ -647,11 +660,11 @@ private fun ChooseSongPanel(
             singleLine = true,
             enabled = !netease.isResolving,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSearchNetease(searchQuery) }),
+            keyboardActions = KeyboardActions(onSearch = { onSearchNetease(drafts.searchQuery) }),
         )
         Button(
-            onClick = { onSearchNetease(searchQuery) },
-            enabled = searchQuery.isNotBlank() && !lookupBusy,
+            onClick = { onSearchNetease(drafts.searchQuery) },
+            enabled = drafts.searchQuery.isNotBlank() && !lookupBusy,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(Icons.Rounded.Search, contentDescription = null)
@@ -680,8 +693,8 @@ private fun ChooseSongPanel(
             }
         }
         OutlinedTextField(
-            value = linkInput,
-            onValueChange = { linkInput = it.take(8_192) },
+            value = drafts.linkInput,
+            onValueChange = onLinkInputChange,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("网易云分享文本或链接") },
             placeholder = { Text("https://music.163.com/song?id=…") },
@@ -692,7 +705,7 @@ private fun ChooseSongPanel(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
-                onClick = { clipboard.getText()?.text?.let { linkInput = it.take(8_192) } },
+                onClick = { clipboard.getText()?.text?.let(onLinkInputChange) },
                 enabled = !lookupBusy,
                 modifier = Modifier.weight(1f),
             ) {
@@ -700,8 +713,8 @@ private fun ChooseSongPanel(
                 Text("贴入", modifier = Modifier.padding(start = 6.dp))
             }
             Button(
-                onClick = { onResolveNeteaseLink(linkInput) },
-                enabled = linkInput.isNotBlank() && !lookupBusy,
+                onClick = { onResolveNeteaseLink(drafts.linkInput) },
+                enabled = drafts.linkInput.isNotBlank() && !lookupBusy,
                 modifier = Modifier.weight(1f),
             ) {
                 if (netease.isResolving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -717,11 +730,8 @@ private fun ChooseSongPanel(
 
         SectionTitle("手动补充")
         OutlinedTextField(
-            value = projectNameDraft,
-            onValueChange = { value ->
-                projectNameDraft = value.take(120)
-                if (projectNameDraft.isNotBlank()) onProjectNameChange(projectNameDraft)
-            },
+            value = drafts.projectName,
+            onValueChange = onProjectNameChange,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("项目名称") },
             singleLine = true,
@@ -913,13 +923,11 @@ private fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
 @Composable
 private fun StylePanel(
     spec: RenderSpec,
-    renderer: RendererController?,
+    isExtractingPalette: Boolean,
+    paletteError: String?,
     onSpecChange: (RenderSpec) -> Unit,
-    onPaletteExtracted: (PaletteSpec) -> Unit,
+    onExtractPalette: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    var paletteBusy by remember { mutableStateOf(false) }
-    var paletteError by remember { mutableStateOf<String?>(null) }
     PanelColumn {
         SectionTitle("背景")
         ChoiceChips(
@@ -930,22 +938,11 @@ private fun StylePanel(
         )
         val coverId = spec.song.coverAssetId
         Button(
-            onClick = {
-                if (coverId != null && renderer != null) {
-                    paletteBusy = true
-                    paletteError = null
-                    scope.launch {
-                        runCatching { renderer.extractPalette(coverId) }
-                            .onSuccess(onPaletteExtracted)
-                            .onFailure { paletteError = it.message ?: "无法提取颜色" }
-                        paletteBusy = false
-                    }
-                }
-            },
-            enabled = coverId != null && renderer != null && !paletteBusy,
+            onClick = onExtractPalette,
+            enabled = coverId != null && !isExtractingPalette,
         ) {
             Icon(Icons.Rounded.AutoAwesome, contentDescription = null)
-            Text(if (paletteBusy) "正在提取…" else "从封面提取颜色", modifier = Modifier.padding(start = 8.dp))
+            Text(if (isExtractingPalette) "正在提取…" else "从封面提取颜色", modifier = Modifier.padding(start = 8.dp))
         }
         paletteError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         ColorField("主色", spec.visual.palette.dominant) {

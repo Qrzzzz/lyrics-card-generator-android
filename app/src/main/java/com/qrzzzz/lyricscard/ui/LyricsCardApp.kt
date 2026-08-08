@@ -1,5 +1,6 @@
 package com.qrzzzz.lyricscard.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -7,155 +8,239 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavType
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
+import com.qrzzzz.lyricscard.AppContainer
 import kotlinx.coroutines.launch
 
-private object Routes {
-    const val HOME = "home"
-    const val PROJECT_ID = "projectId"
-    const val EDITOR = "editor/{$PROJECT_ID}"
-    const val EXPORT = "export/{$PROJECT_ID}"
-    const val SETTINGS = "settings"
-
-    fun editor(projectId: String) = "editor/$projectId"
-    fun export(projectId: String) = "export/$projectId"
-}
-
 @Composable
-fun LyricsCardApp(viewModel: AppViewModel) {
+fun LyricsCardApp(
+    container: AppContainer,
+    settingsViewModel: SettingsViewModel,
+) {
     val navController = rememberNavController()
-    val scope = rememberCoroutineScope()
-    val projects by viewModel.projects.collectAsState()
-    val editor by viewModel.editor.collectAsState()
-    val preferences by viewModel.preferences.collectAsState()
-    val snackbar = remember { SnackbarHostState() }
+    val factory = remember(container) { LyricsCardViewModelFactory(container) }
+    val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(editor.errorMessage) {
-        editor.errorMessage?.let {
-            snackbar.showSnackbar(it)
-            viewModel.clearError()
-        }
-    }
+    NavHost(navController = navController, startDestination = HomeRoute) {
+        composable<HomeRoute> { entry ->
+            val homeViewModel: HomeViewModel = viewModel(
+                viewModelStoreOwner = entry,
+                factory = factory,
+            )
+            val state by homeViewModel.uiState.collectAsStateWithLifecycle()
+            val scope = rememberCoroutineScope()
+            val snackbar = remember { SnackbarHostState() }
 
-    NavHost(navController = navController, startDestination = Routes.HOME) {
-        composable(Routes.HOME) {
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                homeViewModel.onNavigationResumed()
+            }
+
+            LaunchedEffect(state.errorMessage) {
+                state.errorMessage?.let {
+                    snackbar.showSnackbar(it)
+                    homeViewModel.clearError()
+                }
+            }
+
             HomeScreen(
-                projects = projects,
+                projects = state.projects,
+                isWorking = state.isWorking,
                 snackbarHost = { SnackbarHost(snackbar) },
                 onCreateBlank = {
                     scope.launch {
-                        viewModel.createBlank()?.let { navController.navigate(Routes.editor(it.id)) }
+                        homeViewModel.createBlank()?.let { id ->
+                            homeViewModel.commitNavigation {
+                                navController.navigate(EditorRoute(id))
+                            }
+                        }
                     }
                 },
                 onCreateSample = {
                     scope.launch {
-                        viewModel.createSample()?.let { navController.navigate(Routes.editor(it.id)) }
+                        homeViewModel.createSample()?.let { id ->
+                            homeViewModel.commitNavigation {
+                                navController.navigate(EditorRoute(id))
+                            }
+                        }
                     }
                 },
                 onOpen = { id ->
                     scope.launch {
-                        if (viewModel.openProject(id) != null) navController.navigate(Routes.editor(id))
+                        homeViewModel.openProject(id)?.let { projectId ->
+                            homeViewModel.commitNavigation {
+                                navController.navigate(EditorRoute(projectId))
+                            }
+                        }
                     }
                 },
-                onDuplicate = { id -> scope.launch { viewModel.duplicateProject(id) } },
-                onRename = { id, name -> scope.launch { viewModel.renameProject(id, name) } },
-                onDelete = { id -> scope.launch { viewModel.deleteProject(id) } },
-                onSettings = { navController.navigate(Routes.SETTINGS) },
+                onDuplicate = { id -> scope.launch { homeViewModel.duplicateProject(id) } },
+                onRename = { id, name -> scope.launch { homeViewModel.renameProject(id, name) } },
+                onDelete = { id -> scope.launch { homeViewModel.deleteProject(id) } },
+                onSettings = {
+                    if (homeViewModel.beginNavigation()) {
+                        homeViewModel.commitNavigation { navController.navigate(SettingsRoute) }
+                    }
+                },
             )
         }
-        composable(
-            route = Routes.EDITOR,
-            arguments = listOf(navArgument(Routes.PROJECT_ID) { type = NavType.StringType }),
-        ) { entry ->
-            val projectId = checkNotNull(entry.arguments?.getString(Routes.PROJECT_ID))
-            val project = editor.currentProject?.takeIf { it.id == projectId }
-            LaunchedEffect(projectId, project?.id) {
-                if (project == null && viewModel.openProject(projectId) == null) {
-                    if (!navController.popBackStack(Routes.HOME, inclusive = false)) {
-                        navController.navigate(Routes.HOME)
+
+        composable<EditorRoute> { entry ->
+            val editorViewModel: EditorViewModel = viewModel(
+                viewModelStoreOwner = entry,
+                factory = factory,
+            )
+            val state by editorViewModel.uiState.collectAsStateWithLifecycle()
+            val scope = rememberCoroutineScope()
+            val snackbar = remember { SnackbarHostState() }
+
+            LaunchedEffect(state.errorMessage) {
+                state.errorMessage?.let {
+                    snackbar.showSnackbar(it)
+                    editorViewModel.clearError()
+                }
+            }
+            LaunchedEffect(state.projectUnavailable) {
+                if (state.projectUnavailable) navController.returnHome()
+            }
+            LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+                editorViewModel.requestFlush()
+            }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                editorViewModel.onNavigationResumed()
+            }
+            BackHandler(enabled = state.currentProject != null) {
+                if (!state.isLeaving) {
+                    scope.launch {
+                        editorViewModel.popAfterSaving(navController)
                     }
                 }
             }
-            if (project == null) {
+
+            if (state.currentProject == null) {
                 ProjectLoading()
             } else {
                 EditorScreen(
-                    project = project,
-                    isSaving = editor.isSaving,
-                    canUndo = editor.canUndo,
-                    canRedo = editor.canRedo,
-                    showSafeArea = preferences.showSafeArea,
-                    renderer = viewModel.rendererController,
-                    netease = editor.netease,
+                    state = state,
+                    showSafeArea = settingsState.preferences.showSafeArea,
+                    renderer = container.rendererController,
                     snackbarHost = { SnackbarHost(snackbar) },
                     onBack = {
                         scope.launch {
-                            if (viewModel.flushAutosave()) navController.popBackStack()
+                            editorViewModel.popAfterSaving(navController)
                         }
                     },
-                    onProjectNameChange = viewModel::updateProjectName,
-                    onSpecChange = { next -> viewModel.updateSpec { next } },
-                    onMeasuredHeight = viewModel::updateMeasuredHeight,
-                    onPaletteExtracted = viewModel::updatePalette,
-                    onUndo = viewModel::undo,
-                    onRedo = viewModel::redo,
-                    onSelectCover = viewModel::importCover,
-                    onRemoveCover = viewModel::removeCover,
-                    onSearchNetease = viewModel::searchNetease,
-                    onResolveNeteaseSong = viewModel::resolveNeteaseSong,
-                    onResolveNeteaseLink = viewModel::resolveNeteaseLink,
+                    onSelectedStep = editorViewModel::selectStep,
+                    onSearchQueryChange = editorViewModel::updateSearchQuery,
+                    onLinkInputChange = editorViewModel::updateLinkInput,
+                    onProjectNameChange = editorViewModel::updateProjectName,
+                    onSpecChange = { next -> editorViewModel.updateSpec { next } },
+                    onMeasuredHeight = editorViewModel::updateMeasuredHeight,
+                    onExtractPalette = editorViewModel::extractPalette,
+                    onUndo = editorViewModel::undo,
+                    onRedo = editorViewModel::redo,
+                    onSelectCover = editorViewModel::importCover,
+                    onRemoveCover = editorViewModel::removeCover,
+                    onSearchNetease = editorViewModel::searchNetease,
+                    onResolveNeteaseSong = editorViewModel::resolveNeteaseSong,
+                    onResolveNeteaseLink = editorViewModel::resolveNeteaseLink,
                     onExport = {
                         scope.launch {
-                            if (viewModel.flushAutosave()) navController.navigate(Routes.export(project.id))
+                            if (editorViewModel.prepareForNavigation()) {
+                                editorViewModel.markNavigationCommitted()
+                                try {
+                                    navController.navigate(ExportRoute(state.projectId)) {
+                                        launchSingleTop = true
+                                    }
+                                } catch (cause: Throwable) {
+                                    editorViewModel.navigationFailed()
+                                    throw cause
+                                }
+                            }
                         }
                     },
                 )
             }
         }
-        composable(
-            route = Routes.EXPORT,
-            arguments = listOf(navArgument(Routes.PROJECT_ID) { type = NavType.StringType }),
-        ) { entry ->
-            val projectId = checkNotNull(entry.arguments?.getString(Routes.PROJECT_ID))
-            val project = editor.currentProject?.takeIf { it.id == projectId }
-            LaunchedEffect(projectId, project?.id) {
-                if (project == null && viewModel.openProject(projectId) == null) {
-                    if (!navController.popBackStack(Routes.HOME, inclusive = false)) {
-                        navController.navigate(Routes.HOME)
-                    }
-                }
+
+        composable<ExportRoute> { entry ->
+            val exportViewModel: ExportViewModel = viewModel(
+                viewModelStoreOwner = entry,
+                factory = factory,
+            )
+            val state by exportViewModel.uiState.collectAsStateWithLifecycle()
+
+            LaunchedEffect(state.projectUnavailable) {
+                if (state.projectUnavailable) navController.returnHome()
             }
-            if (project == null) {
+
+            if (state.project == null) {
                 ProjectLoading()
             } else {
                 ExportScreen(
-                    project = project,
-                    renderer = viewModel.rendererController,
-                    defaultMultiplier = preferences.defaultExportScale,
+                    state = state,
+                    renderer = container.rendererController,
                     onBack = { navController.popBackStack() },
-                    onExportRecorded = viewModel::recordExport,
+                    onMultiplier = exportViewModel::setMultiplier,
+                    onFileName = exportViewModel::setFileName,
+                    onMeasuredHeight = exportViewModel::setMeasuredHeight,
+                    onSave = exportViewModel::save,
+                    onShare = exportViewModel::share,
+                    onCancel = exportViewModel::cancelExport,
+                    onRetry = exportViewModel::retry,
+                    onSaveDestination = exportViewModel::saveTo,
+                    onEffectConsumed = exportViewModel::consumeEffect,
+                    onExternalActionError = exportViewModel::reportExternalActionError,
                 )
             }
         }
-        composable(Routes.SETTINGS) {
+
+        composable<SettingsRoute> {
             SettingsScreen(
-                preferences = preferences,
+                state = settingsState,
                 onBack = { navController.popBackStack() },
-                onDarkMode = viewModel::setDarkMode,
-                onDefaultExportScale = viewModel::setDefaultExportScale,
-                onShowSafeArea = viewModel::setShowSafeArea,
+                onDarkMode = settingsViewModel::setDarkMode,
+                onDefaultExportScale = settingsViewModel::setDefaultExportScale,
+                onShowSafeArea = settingsViewModel::setShowSafeArea,
+                onClearExportCache = settingsViewModel::clearExportCache,
             )
         }
+    }
+}
+
+private fun NavHostController.returnHome() {
+    if (!popBackStack()) navigate(HomeRoute) { launchSingleTop = true }
+}
+
+private inline fun HomeViewModel.commitNavigation(navigate: () -> Unit) {
+    markNavigationCommitted()
+    try {
+        navigate()
+    } catch (cause: Throwable) {
+        navigationFailed()
+        throw cause
+    }
+}
+
+private suspend fun EditorViewModel.popAfterSaving(navController: NavHostController) {
+    if (!prepareForNavigation()) return
+    markNavigationCommitted()
+    try {
+        if (!navController.popBackStack()) navigationFailed()
+    } catch (cause: Throwable) {
+        navigationFailed()
+        throw cause
     }
 }
 

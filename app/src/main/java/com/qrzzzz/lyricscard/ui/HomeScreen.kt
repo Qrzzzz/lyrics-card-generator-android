@@ -67,6 +67,7 @@ import java.util.Date
 @Composable
 fun HomeScreen(
     projects: List<ProjectSummary>,
+    isWorking: Boolean,
     snackbarHost: @Composable () -> Unit,
     onCreateBlank: () -> Unit,
     onCreateSample: () -> Unit,
@@ -90,7 +91,7 @@ fun HomeScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onSettings) {
+                    IconButton(onClick = onSettings, enabled = !isWorking) {
                         Icon(Icons.Rounded.Settings, contentDescription = "设置")
                     }
                 },
@@ -107,7 +108,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                HeroActions(onCreateBlank, onCreateSample)
+                HeroActions(onCreateBlank, onCreateSample, enabled = !isWorking)
             }
             item {
                 Spacer(Modifier.height(8.dp))
@@ -123,6 +124,7 @@ fun HomeScreen(
                 items(projects, key = ProjectSummary::id) { project ->
                     ProjectCard(
                         project = project,
+                        enabled = !isWorking,
                         onOpen = { onOpen(project.id) },
                         onDuplicate = { onDuplicate(project.id) },
                         onRename = { onRename(project.id, it) },
@@ -135,7 +137,11 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HeroActions(onCreateBlank: () -> Unit, onCreateSample: () -> Unit) {
+private fun HeroActions(
+    onCreateBlank: () -> Unit,
+    onCreateSample: () -> Unit,
+    enabled: Boolean,
+) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         shape = RoundedCornerShape(28.dp),
@@ -154,11 +160,11 @@ private fun HeroActions(onCreateBlank: () -> Unit, onCreateSample: () -> Unit) {
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onCreateBlank) {
+                Button(onClick = onCreateBlank, enabled = enabled) {
                     Icon(Icons.Rounded.Add, contentDescription = null)
                     Text("空白项目", modifier = Modifier.padding(start = 6.dp))
                 }
-                FilledTonalButton(onClick = onCreateSample) {
+                FilledTonalButton(onClick = onCreateSample, enabled = enabled) {
                     Icon(Icons.Rounded.TipsAndUpdates, contentDescription = null)
                     Text("打开示例", modifier = Modifier.padding(start = 6.dp))
                 }
@@ -190,6 +196,7 @@ private fun EmptyProjects() {
 @Composable
 private fun ProjectCard(
     project: ProjectSummary,
+    enabled: Boolean,
     onOpen: () -> Unit,
     onDuplicate: () -> Unit,
     onRename: (String) -> Unit,
@@ -209,7 +216,7 @@ private fun ProjectCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen),
+            .clickable(enabled = enabled, onClick = onOpen),
         shape = RoundedCornerShape(22.dp),
     ) {
         Row(
@@ -253,7 +260,7 @@ private fun ProjectCard(
                 )
             }
             Box {
-                IconButton(onClick = { menuOpen = true }) {
+                IconButton(onClick = { menuOpen = true }, enabled = enabled) {
                     Icon(Icons.Rounded.MoreVert, contentDescription = "项目菜单")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -292,7 +299,7 @@ private fun ProjectCard(
             confirmButton = {
                 TextButton(
                     onClick = { onRename(name.trim()); renameOpen = false },
-                    enabled = name.isNotBlank(),
+                    enabled = enabled && name.isNotBlank(),
                 ) { Text("保存") }
             },
             dismissButton = { TextButton(onClick = { renameOpen = false }) { Text("取消") } },
@@ -304,7 +311,10 @@ private fun ProjectCard(
             title = { Text("删除“${project.name}”？") },
             text = { Text("项目数据将从本机删除，此操作无法撤销。") },
             confirmButton = {
-                TextButton(onClick = { onDelete(); deleteOpen = false }) { Text("删除") }
+                TextButton(
+                    onClick = { onDelete(); deleteOpen = false },
+                    enabled = enabled,
+                ) { Text("删除") }
             },
             dismissButton = { TextButton(onClick = { deleteOpen = false }) { Text("取消") } },
         )

@@ -5,28 +5,36 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.lifecycle.lifecycleScope
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
-import com.qrzzzz.lyricscard.ui.AppViewModel
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.qrzzzz.lyricscard.ui.LyricsCardApp
+import com.qrzzzz.lyricscard.ui.LyricsCardViewModelFactory
+import com.qrzzzz.lyricscard.ui.SettingsViewModel
 import com.qrzzzz.lyricscard.ui.theme.LyricsCardTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private val viewModel: AppViewModel by viewModels()
+    private val container: AppContainer
+        get() = (application as LyricsCardApplication).container
+    private val settingsViewModel: SettingsViewModel by viewModels {
+        LyricsCardViewModelFactory(container)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val preferences by viewModel.preferences.collectAsState()
-            LyricsCardTheme(darkTheme = preferences.darkMode) {
+            val settings by settingsViewModel.uiState.collectAsStateWithLifecycle()
+            LyricsCardTheme(darkTheme = settings.preferences.darkMode) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    LyricsCardApp(viewModel)
+                    LyricsCardApp(
+                        container = container,
+                        settingsViewModel = settingsViewModel,
+                    )
                 }
             }
         }
@@ -34,6 +42,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        lifecycleScope.launch { viewModel.flushAutosave() }
+        lifecycleScope.launch { container.editorSessions.flushActive() }
     }
 }

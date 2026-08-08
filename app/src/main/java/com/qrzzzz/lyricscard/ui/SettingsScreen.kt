@@ -26,11 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,24 +34,19 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qrzzzz.lyricscard.BuildConfig
-import com.qrzzzz.lyricscard.data.UserPreferences
-import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    preferences: UserPreferences,
+    state: SettingsUiState,
     onBack: () -> Unit,
     onDarkMode: (Boolean) -> Unit,
     onDefaultExportScale: (Int) -> Unit,
     onShowSafeArea: (Boolean) -> Unit,
+    onClearExportCache: () -> Unit,
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var cacheStatus by remember { mutableStateOf<String?>(null) }
+    val preferences = state.preferences
     val webViewPackage = remember {
         WebView.getCurrentWebViewPackage()?.let { "${it.packageName} ${it.versionName}" } ?: "不可用"
     }
@@ -114,23 +105,15 @@ fun SettingsScreen(
             item { SectionHeader("本地存储") }
             item {
                 OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            val bytes = withContext(Dispatchers.IO) {
-                                val dir = File(context.cacheDir, "exports")
-                                val size = dir.walkTopDown().filter(File::isFile).sumOf(File::length)
-                                dir.deleteRecursively()
-                                size
-                            }
-                            cacheStatus = "已清理 ${"%.1f".format(bytes / 1024.0 / 1024.0)} MB 导出缓存"
-                        }
-                    },
+                    onClick = onClearExportCache,
+                    enabled = !state.isClearingCache,
                 ) {
                     Icon(Icons.Rounded.DeleteSweep, contentDescription = null)
                     Text("清理导出缓存", modifier = Modifier.padding(start = 8.dp))
                 }
             }
-            cacheStatus?.let { value -> item { Text(value, color = MaterialTheme.colorScheme.primary) } }
+            state.cacheStatus?.let { value -> item { Text(value, color = MaterialTheme.colorScheme.primary) } }
+            state.errorMessage?.let { value -> item { Text(value, color = MaterialTheme.colorScheme.error) } }
 
             item { SectionHeader("诊断信息") }
             item {

@@ -17,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -26,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qrzzzz.lyricscard.model.RenderSpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -40,8 +40,8 @@ fun RendererPreview(
     onMeasuredHeight: (Int) -> Unit = {},
     showSafeArea: Boolean = false,
 ) {
-    val status by controller.status.collectAsState()
-    val generation by controller.generation.collectAsState()
+    val status by controller.status.collectAsStateWithLifecycle()
+    val generation by controller.generation.collectAsStateWithLifecycle()
     val previewKey = if (spec.canvas.autoHeight) {
         spec.copy(canvas = spec.canvas.copy(height = 0, pixelRatio = 1))
     } else {
