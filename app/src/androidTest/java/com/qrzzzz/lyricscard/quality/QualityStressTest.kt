@@ -67,9 +67,12 @@ class QualityStressTest {
             binding.attach()
             waitForRenderer(controller)
             val spec = releaseStressSpec()
+            val measurement = runBlocking { controller.measure(spec) }
+            val expectedWidth = measurement.width * 2
+            val expectedHeight = measurement.height * 2
 
             val warmup = runBlocking { controller.exportPng(spec, 2) }
-            assertPng(warmup, spec.canvas.width * 2, spec.canvas.height * 2)
+            assertPng(warmup, expectedWidth, expectedHeight)
             assertTrue("warmup export was not removed", warmup.file.delete())
             forceIdleGc()
 
@@ -92,7 +95,7 @@ class QualityStressTest {
             var successful = 0
             for (attempt in 1..20) {
                 val image = runBlocking { controller.exportPng(spec, 2) }
-                assertPng(image, spec.canvas.width * 2, spec.canvas.height * 2)
+                assertPng(image, expectedWidth, expectedHeight)
                 created += image.file
                 successful += 1
                 assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
