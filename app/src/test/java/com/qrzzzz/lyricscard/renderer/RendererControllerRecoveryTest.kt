@@ -49,6 +49,23 @@ private val TEST_SPEC = RenderSpec(
 @Config(sdk = [35])
 class RendererControllerRecoveryTest {
     @Test
+    fun `stale finalized export cleanup leaves the caller thread`() = runTest {
+        val callerThread = Thread.currentThread()
+        var cleanupThread: Thread? = null
+        val recordingFile = object : File("stale-export.png") {
+            override fun delete(): Boolean {
+                cleanupThread = Thread.currentThread()
+                return true
+            }
+        }
+
+        deleteStaleExport(recordingFile)
+
+        assertTrue(cleanupThread != null)
+        assertNotSame(callerThread, cleanupThread)
+    }
+
+    @Test
     fun `hung export times out rebuilds session ignores late messages and immediately retries`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val context = ApplicationProvider.getApplicationContext<Context>()

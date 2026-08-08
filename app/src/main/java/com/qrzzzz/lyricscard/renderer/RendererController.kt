@@ -118,6 +118,12 @@ data class ExportedImage(
     val mimeType: String = "image/png",
 )
 
+internal suspend fun deleteStaleExport(file: File) {
+    withContext(NonCancellable + Dispatchers.IO) {
+        file.delete()
+    }
+}
+
 data class CanvasMeasurement(val width: Int, val height: Int)
 
 class RendererException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -467,7 +473,7 @@ class RendererController private constructor(
                 sessionId = sessionId,
             )
             if (!isCurrentSession(sessionId)) {
-                image.file.delete()
+                deleteStaleExport(image.file)
                 throw RendererException("导出期间渲染器会话已重建，请重试")
             }
             _status.value = RendererStatus(RendererStatus.Phase.READY, "导出完成")
