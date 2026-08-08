@@ -117,7 +117,7 @@ class AppDatabaseTest {
                         thumbnail_path, created_at, updated_at, last_exported_at
                     ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)
                     """.trimIndent(),
-                    arrayOf(
+                    arrayOf<Any?>(
                         id,
                         "Legacy ${index + 1}",
                         legacySpec.schemaVersion,
