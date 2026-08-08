@@ -6,6 +6,7 @@ import standaloneCode from "ajv/dist/standalone/index.js";
 import { _, str } from "ajv/dist/compile/codegen/index.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const checkOnly = process.argv.includes("--check");
 const schema = JSON.parse(await readFile(resolve(root, "schema/render-spec-v1.schema.json"), "utf8"));
 const lyricTextSchemas = [
   schema.properties.content.properties.lyrics,
@@ -64,6 +65,10 @@ try {
 } catch {
   // The first build creates the generated module.
 }
-if (current !== output) {
+const currentMatches = current.replace(/\r\n/g, "\n") === output;
+if (checkOnly && !currentMatches) {
+  throw new Error("Generated RenderSpec validator is stale. Run npm run generate:validator.");
+}
+if (!checkOnly && !currentMatches) {
   await writeFile(outputPath, output, "utf8");
 }

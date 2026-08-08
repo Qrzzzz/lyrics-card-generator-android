@@ -1,17 +1,18 @@
 {
   "name": "@lyrics-card/android-renderer",
-  "version": "0.2.0-alpha.2",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "generate:validator": "node scripts/generate-render-spec-validator.mjs",
+    "check:validator": "node scripts/generate-render-spec-validator.mjs --check",
     "predev": "npm run generate:validator",
-    "pretypecheck": "npm run generate:validator",
+    "pretypecheck": "npm run check:validator",
     "dev": "vite --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "npm run generate:validator",
+    "pretest": "npm run check:validator",
     "test": "vitest run",
-    "prebuild": "npm run generate:validator",
+    "prebuild": "npm run check:validator",
     "build": "vite build",
     "check": "npm run typecheck && npm run test && npm run build",
     "golden": "vitest run tests/fixtures.test.ts",
@@ -34,6 +35,11 @@
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.2.3"
+  },
+  "overrides": {
+    "fast-uri": "3.1.5",
+    "nanoid": "3.3.18",
+    "postcss": "8.5.26"
   },
   "engines": {
     "node": ">=20"
