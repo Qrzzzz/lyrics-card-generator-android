@@ -24,6 +24,7 @@ internal fun currentLyricsWindowWidth(
     return when (widthClass) {
         WindowWidthSizeClass.Compact -> LyricsWindowWidth.COMPACT
         WindowWidthSizeClass.Medium -> LyricsWindowWidth.MEDIUM
+        WindowWidthSizeClass.Expanded -> LyricsWindowWidth.EXPANDED
         else -> LyricsWindowWidth.EXPANDED
     }
 }

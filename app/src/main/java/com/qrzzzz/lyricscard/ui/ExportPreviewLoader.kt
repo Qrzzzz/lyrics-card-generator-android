@@ -53,7 +53,7 @@ internal class AndroidExportPreviewDecoder(
 
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, bounds)
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0 || bounds.outMimeType != PNG_MIME_TYPE) {
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
                 return@withContext ExportPreviewDecodeResult.InvalidPng
             }
 
@@ -91,7 +91,6 @@ internal class AndroidExportPreviewDecoder(
 
     private companion object {
         const val PREVIEW_MAX_EDGE_PX = 1_024
-        const val PNG_MIME_TYPE = "image/png"
         val PNG_SIGNATURE = byteArrayOf(
             0x89.toByte(),
             0x50,
