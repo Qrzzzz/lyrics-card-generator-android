@@ -12,8 +12,3 @@ object LyricsCardSpacing {
     val extraLarge = 24.dp
     val section = 32.dp
 }
-
-object LyricsCardLayout {
-    val wideBreakpoint = 840.dp
-    val propertiesPaneWidth = 420.dp
-}

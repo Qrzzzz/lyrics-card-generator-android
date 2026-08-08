@@ -53,10 +53,21 @@ data class EditorDrafts(
     val projectName: String = "",
 )
 
+enum class NeteaseLookupPhase {
+    IDLE,
+    SEARCHING,
+    RESULTS,
+    EMPTY,
+    RESOLVING,
+    SUCCESS,
+    ERROR,
+}
+
 data class NeteaseLookupUiState(
     val results: List<NeteaseSongSearchResult> = emptyList(),
     val isSearching: Boolean = false,
     val isResolving: Boolean = false,
+    val phase: NeteaseLookupPhase = NeteaseLookupPhase.IDLE,
     val message: UiText = UiText.resource(R.string.editor_netease_idle),
 )
 
@@ -141,6 +152,17 @@ class EditorViewModel(
 
     fun updateSearchQuery(value: String) {
         val next = value.take(MAX_SEARCH_QUERY_LENGTH)
+        if (next != _uiState.value.drafts.searchQuery && _uiState.value.netease.isSearching) {
+            neteaseSearchJob?.cancel()
+            updateNetease {
+                it.copy(
+                    results = emptyList(),
+                    isSearching = false,
+                    phase = NeteaseLookupPhase.IDLE,
+                    message = UiText.resource(R.string.editor_netease_idle),
+                )
+            }
+        }
         savedStateHandle[SEARCH_QUERY_KEY] = next
         _uiState.update { it.copy(drafts = it.drafts.copy(searchQuery = next)) }
     }
@@ -277,13 +299,19 @@ class EditorViewModel(
                 it.copy(
                     results = emptyList(),
                     isSearching = false,
+                    phase = NeteaseLookupPhase.IDLE,
                     message = UiText.resource(R.string.editor_netease_enter_query),
                 )
             }
             return
         }
         updateNetease {
-            it.copy(isSearching = true, message = UiText.resource(R.string.editor_netease_searching))
+            it.copy(
+                results = emptyList(),
+                isSearching = true,
+                phase = NeteaseLookupPhase.SEARCHING,
+                message = UiText.resource(R.string.editor_netease_searching),
+            )
         }
         neteaseSearchJob = viewModelScope.launch {
             try {
@@ -293,6 +321,7 @@ class EditorViewModel(
                     it.copy(
                         results = results,
                         isSearching = false,
+                        phase = if (results.isEmpty()) NeteaseLookupPhase.EMPTY else NeteaseLookupPhase.RESULTS,
                         message = UiText.resource(
                             if (results.isEmpty()) {
                                 R.string.editor_netease_no_results
@@ -309,6 +338,7 @@ class EditorViewModel(
                     updateNetease {
                         it.copy(
                             isSearching = false,
+                            phase = NeteaseLookupPhase.ERROR,
                             message = neteaseFailureText(cause, R.string.editor_error_netease_search),
                         )
                     }
@@ -458,7 +488,11 @@ class EditorViewModel(
         if (_uiState.value.isLeaving) return
         neteaseResolveJob?.cancel()
         updateNetease {
-            it.copy(isResolving = true, message = UiText.resource(R.string.editor_netease_resolving))
+            it.copy(
+                isResolving = true,
+                phase = NeteaseLookupPhase.RESOLVING,
+                message = UiText.resource(R.string.editor_netease_resolving),
+            )
         }
         neteaseResolveJob = viewModelScope.launch {
             var importedCoverId: String? = null
@@ -478,7 +512,13 @@ class EditorViewModel(
                         ),
                         loadingStoredProject = false,
                     )
-                    updateNetease { it.copy(isResolving = false, message = message) }
+                    updateNetease {
+                        it.copy(
+                            isResolving = false,
+                            phase = NeteaseLookupPhase.ERROR,
+                            message = message,
+                        )
+                    }
                     setError(message)
                     return@launch
                 }
@@ -556,7 +596,13 @@ class EditorViewModel(
                     },
                     imported,
                 )
-                updateNetease { it.copy(isResolving = false, message = resultMessage) }
+                updateNetease {
+                    it.copy(
+                        isResolving = false,
+                        phase = NeteaseLookupPhase.SUCCESS,
+                        message = resultMessage,
+                    )
+                }
             } catch (cause: CancellationException) {
                 mutationSnapshot?.let {
                     restoreEditorMutation(it, failureMessage = null, restartPendingAutosave = true)
@@ -579,6 +625,7 @@ class EditorViewModel(
                     updateNetease {
                         it.copy(
                             isResolving = false,
+                            phase = NeteaseLookupPhase.ERROR,
                             message = neteaseFailureText(
                                 cause,
                                 R.string.editor_error_netease_resolve,

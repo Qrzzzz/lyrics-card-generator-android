@@ -19,16 +19,22 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 enum class ExportOperationState {
     IDLE,
+    PREPARING,
+    RENDERING,
+    /** Restored only for compatibility with pre-production saved state. */
     RUNNING,
     FINALIZING,
     SUCCESS,
@@ -57,24 +63,40 @@ data class ExportUiState(
     val measuredHeight: Int = 0,
     val operation: ExportOperationState = ExportOperationState.IDLE,
     val exported: ExportedImage? = null,
+    val preview: ExportPreviewUiState = ExportPreviewUiState(),
     val status: UiText = UiText.resource(R.string.export_ready),
     val errorMessage: UiText? = null,
     val effect: ExportEffect? = null,
 ) {
     val isBusy: Boolean
-        get() = operation == ExportOperationState.RUNNING || operation == ExportOperationState.FINALIZING
+        get() = operation in setOf(
+            ExportOperationState.PREPARING,
+            ExportOperationState.RENDERING,
+            ExportOperationState.RUNNING,
+            ExportOperationState.FINALIZING,
+        )
 
     val canCancel: Boolean
-        get() = operation == ExportOperationState.RUNNING
+        get() = operation in setOf(
+            ExportOperationState.PREPARING,
+            ExportOperationState.RENDERING,
+            ExportOperationState.RUNNING,
+        )
+
+    val isResultReady: Boolean
+        get() = operation == ExportOperationState.SUCCESS &&
+            exported != null &&
+            preview.phase == ExportPreviewPhase.READY
 }
 
-class ExportViewModel(
+class ExportViewModel internal constructor(
     private val savedStateHandle: SavedStateHandle,
     private val projects: ProjectStore,
     private val preferences: UserPreferencesStore,
     private val renderer: RendererOperations,
     private val exportFiles: ExportFiles,
     private val clock: () -> Long = { System.currentTimeMillis() },
+    private val previewDecoder: ExportPreviewDecoder = AndroidExportPreviewDecoder(),
 ) : ViewModel() {
     private val projectId: String = checkNotNull(savedStateHandle[PROJECT_ID_KEY]) {
         "Export route requires projectId"
@@ -87,8 +109,12 @@ class ExportViewModel(
     private val restoredImage = restoreExportedImage(savedStateHandle)
     private val initialImage = restoredImage.takeIf { restoredOperation == ExportOperationState.SUCCESS }
     private val initialOperation = when {
-        restoredOperation == ExportOperationState.RUNNING ||
-            restoredOperation == ExportOperationState.FINALIZING -> ExportOperationState.INTERRUPTED
+        restoredOperation in setOf(
+            ExportOperationState.PREPARING,
+            ExportOperationState.RENDERING,
+            ExportOperationState.RUNNING,
+            ExportOperationState.FINALIZING,
+        ) -> ExportOperationState.INTERRUPTED
         restoredOperation == ExportOperationState.SUCCESS && initialImage == null -> ExportOperationState.FAILURE
         else -> restoredOperation
     }
@@ -123,6 +149,11 @@ class ExportViewModel(
             measuredHeight = savedStateHandle[MEASURED_HEIGHT_KEY] ?: 0,
             operation = initialOperation,
             exported = initialImage,
+            preview = if (initialImage == null) {
+                ExportPreviewUiState()
+            } else {
+                ExportPreviewUiState(phase = ExportPreviewPhase.LOADING)
+            },
             status = initialStatus,
             errorMessage = initialError,
         ),
@@ -130,6 +161,9 @@ class ExportViewModel(
     val uiState: StateFlow<ExportUiState> = _uiState.asStateFlow()
 
     private var exportJob: Job? = null
+    private var previewJob: Job? = null
+    private var previewGeneration = 0L
+    private var pendingPreviewAction: ExportPendingAction? = null
     private var nextEffectId = 0L
 
     init {
@@ -140,13 +174,16 @@ class ExportViewModel(
             persistMessages(initialStatus, initialError)
         }
         viewModelScope.launch { loadProject() }
+        initialImage?.let { beginPreviewLoad(it, action = null) }
     }
 
     fun setMultiplier(value: Int) {
         if (_uiState.value.isBusy) return
         val next = value.coerceIn(1, 2)
+        if (next == _uiState.value.multiplier) return
         savedStateHandle[MULTIPLIER_KEY] = next
         clearPersistedImage()
+        clearPreview()
         _uiState.update {
             it.copy(
                 multiplier = next,
@@ -157,7 +194,7 @@ class ExportViewModel(
                 effect = null,
             )
         }
-        savedStateHandle[OPERATION_KEY] = ExportOperationState.IDLE.name
+        persistOperation(ExportOperationState.IDLE)
         persistMessages(UiText.resource(R.string.export_ready), null)
     }
 
@@ -189,7 +226,7 @@ class ExportViewModel(
     }
 
     fun cancelExport() {
-        if (_uiState.value.operation == ExportOperationState.FINALIZING) return
+        if (!_uiState.value.canCancel) return
         val job = exportJob ?: return
         if (!job.isActive) return
         val status = UiText.resource(R.string.export_cancelling)
@@ -204,7 +241,13 @@ class ExportViewModel(
         }
     }
 
-    fun saveTo(destination: Uri) {
+    fun saveTo(destination: Uri?) {
+        if (destination == null) {
+            val status = UiText.resource(R.string.export_save_cancelled)
+            _uiState.update { it.copy(status = status, errorMessage = null) }
+            persistMessages(status, null)
+            return
+        }
         val image = _uiState.value.exported ?: return
         viewModelScope.launch {
             try {
@@ -214,8 +257,8 @@ class ExportViewModel(
                 persistMessages(status, null)
             } catch (cause: CancellationException) {
                 throw cause
-            } catch (cause: Throwable) {
-                val message = UiText.resource(R.string.export_save_failed)
+            } catch (_: Throwable) {
+                val message = UiText.resource(R.string.export_save_failed_retryable)
                 _uiState.update { it.copy(errorMessage = message) }
                 persistMessages(_uiState.value.status, message)
             }
@@ -225,6 +268,13 @@ class ExportViewModel(
     fun reportExternalActionError(message: UiText) {
         _uiState.update { it.copy(errorMessage = message) }
         persistMessages(_uiState.value.status, message)
+    }
+
+    override fun onCleared() {
+        exportJob?.cancel()
+        previewJob?.cancel()
+        recycle(_uiState.value.preview.bitmap)
+        super.onCleared()
     }
 
     private suspend fun loadProject() {
@@ -253,12 +303,13 @@ class ExportViewModel(
                     projectUnavailable = false,
                     multiplier = defaultMultiplier,
                     fileName = fileName,
-                    measuredHeight = it.measuredHeight.takeIf { height -> height > 0 } ?: project.spec.canvas.height,
+                    measuredHeight = it.measuredHeight.takeIf { height -> height > 0 }
+                        ?: project.spec.canvas.height,
                 )
             }
         } catch (cause: CancellationException) {
             throw cause
-        } catch (cause: Throwable) {
+        } catch (_: Throwable) {
             val message = UiText.resource(R.string.editor_error_open_project)
             _uiState.update {
                 it.copy(
@@ -272,9 +323,14 @@ class ExportViewModel(
     }
 
     private fun exportOrDispatch(action: ExportPendingAction) {
-        if (_uiState.value.isBusy) return
-        if (_uiState.value.exported != null) {
-            dispatch(action)
+        val state = _uiState.value
+        if (state.isBusy) return
+        if (state.exported != null) {
+            if (state.preview.phase == ExportPreviewPhase.READY) {
+                dispatch(action)
+            } else if (state.preview.phase == ExportPreviewPhase.LOADING) {
+                pendingPreviewAction = action
+            }
         } else {
             startExport(action)
         }
@@ -283,27 +339,41 @@ class ExportViewModel(
     private fun startExport(action: ExportPendingAction?) {
         if (exportJob?.isActive == true) return
         val project = _uiState.value.project ?: return
+        val multiplier = _uiState.value.multiplier
         lateinit var launched: Job
         launched = viewModelScope.launch(start = CoroutineStart.LAZY) {
             clearPersistedImage()
-            persistOperation(ExportOperationState.RUNNING)
-            val runningStatus = UiText.resource(R.string.export_running, _uiState.value.multiplier)
-            persistMessages(runningStatus, null)
+            clearPreview()
+            persistOperation(ExportOperationState.PREPARING)
+            val preparingStatus = UiText.resource(R.string.export_preparing)
+            persistMessages(preparingStatus, null)
             _uiState.update {
                 it.copy(
-                    operation = ExportOperationState.RUNNING,
+                    operation = ExportOperationState.PREPARING,
                     exported = null,
                     errorMessage = null,
-                    status = runningStatus,
+                    status = preparingStatus,
                     effect = null,
                 )
             }
             try {
-                val image = renderer.exportPng(project, _uiState.value.multiplier)
-                finalizeExport(project, image, action)
+                currentCoroutineContext().ensureActive()
+                val renderingStatus = UiText.resource(R.string.export_running, multiplier)
+                persistOperation(ExportOperationState.RENDERING)
+                persistMessages(renderingStatus, null)
+                _uiState.update {
+                    it.copy(
+                        operation = ExportOperationState.RENDERING,
+                        status = renderingStatus,
+                    )
+                }
+                val image = renderer.exportPng(project, multiplier)
+                finalizeExport(project, image)
+                beginPreviewLoad(image, action)
             } catch (cause: CancellationException) {
                 if (_uiState.value.operation == ExportOperationState.SUCCESS) throw cause
                 clearPersistedImage()
+                clearPreview()
                 persistOperation(ExportOperationState.CANCELLED)
                 val cancelledStatus = UiText.resource(R.string.export_cancelled)
                 persistMessages(cancelledStatus, null)
@@ -317,8 +387,9 @@ class ExportViewModel(
                     )
                 }
                 throw cause
-            } catch (cause: Throwable) {
+            } catch (_: Throwable) {
                 clearPersistedImage()
+                clearPreview()
                 persistOperation(ExportOperationState.FAILURE)
                 val message = UiText.resource(R.string.export_failure)
                 val failureStatus = UiText.resource(R.string.export_failed_retryable)
@@ -341,14 +412,12 @@ class ExportViewModel(
     }
 
     /**
-     * Point of no return: once the renderer has produced a complete PNG, publishing the thumbnail,
-     * committing both Room metadata fields, and recording the restorable success state must finish
-     * as one non-cancellable finalization sequence.
+     * Point of no return. Thumbnail publication, the single Room record update, and restorable
+     * success metadata are completed together even when the caller is cancelled.
      */
     private suspend fun finalizeExport(
         project: Project,
         image: ExportedImage,
-        action: ExportPendingAction?,
     ) = withContext(NonCancellable) {
         val finalizingStatus = UiText.resource(R.string.export_finalizing_records)
         persistOperation(ExportOperationState.FINALIZING)
@@ -374,7 +443,6 @@ class ExportViewModel(
                 errorMessage = metadataWarning,
             )
         }
-        if (action != null) dispatch(action)
     }
 
     private suspend fun recordExport(project: Project, image: ExportedImage): UiText? = try {
@@ -386,14 +454,103 @@ class ExportViewModel(
         null
     } catch (cause: CancellationException) {
         throw cause
-    } catch (cause: Throwable) {
+    } catch (_: Throwable) {
         UiText.resource(R.string.export_metadata_warning)
     }
 
+    private fun beginPreviewLoad(image: ExportedImage, action: ExportPendingAction?) {
+        previewJob?.cancel()
+        val generation = ++previewGeneration
+        pendingPreviewAction = action
+        replacePreview(
+            ExportPreviewUiState(
+                phase = ExportPreviewPhase.LOADING,
+                message = UiText.resource(R.string.export_preview_loading),
+            ),
+        )
+        previewJob = viewModelScope.launch {
+            val result = try {
+                previewDecoder.decode(image)
+            } catch (cause: CancellationException) {
+                throw cause
+            } catch (_: Throwable) {
+                ExportPreviewDecodeResult.DecodeFailed
+            }
+            if (!currentCoroutineContext().isActive || generation != previewGeneration) {
+                if (result is ExportPreviewDecodeResult.Success) recycle(result.bitmap)
+                return@launch
+            }
+            val current = _uiState.value.exported
+            if (current == null || !sameImage(current, image)) {
+                if (result is ExportPreviewDecodeResult.Success) recycle(result.bitmap)
+                return@launch
+            }
+            when (result) {
+                is ExportPreviewDecodeResult.Success -> {
+                    replacePreview(
+                        ExportPreviewUiState(
+                            phase = ExportPreviewPhase.READY,
+                            bitmap = result.bitmap,
+                        ),
+                    )
+                    val pending = pendingPreviewAction
+                    pendingPreviewAction = null
+                    if (pending != null) dispatch(pending)
+                }
+                ExportPreviewDecodeResult.Missing -> invalidateExportResult(
+                    UiText.resource(R.string.export_result_missing_error),
+                )
+                ExportPreviewDecodeResult.InvalidPng -> invalidateExportResult(
+                    UiText.resource(R.string.export_result_invalid_png),
+                )
+                ExportPreviewDecodeResult.DecodeFailed -> invalidateExportResult(
+                    UiText.resource(R.string.export_preview_decode_failed),
+                )
+            }
+        }
+    }
+
+    private fun invalidateExportResult(message: UiText) {
+        pendingPreviewAction = null
+        clearPersistedImage()
+        persistOperation(ExportOperationState.FAILURE)
+        val status = UiText.resource(R.string.export_previous_result_expired)
+        persistMessages(status, message)
+        replacePreview(
+            ExportPreviewUiState(
+                phase = ExportPreviewPhase.ERROR,
+                message = message,
+            ),
+        )
+        _uiState.update {
+            it.copy(
+                operation = ExportOperationState.FAILURE,
+                exported = null,
+                status = status,
+                errorMessage = message,
+                effect = null,
+            )
+        }
+    }
+
     private fun dispatch(action: ExportPendingAction) {
-        if (_uiState.value.exported == null) return
+        if (!_uiState.value.isResultReady) return
         val effect = ExportEffect(id = ++nextEffectId, action = action)
         _uiState.update { it.copy(effect = effect) }
+    }
+
+    private fun clearPreview() {
+        previewJob?.cancel()
+        previewJob = null
+        previewGeneration += 1
+        pendingPreviewAction = null
+        replacePreview(ExportPreviewUiState())
+    }
+
+    private fun replacePreview(next: ExportPreviewUiState) {
+        val previous = _uiState.value.preview.bitmap
+        if (previous !== next.bitmap) recycle(previous)
+        _uiState.update { it.copy(preview = next) }
     }
 
     private fun persistOperation(value: ExportOperationState) {
@@ -402,7 +559,11 @@ class ExportViewModel(
 
     private fun persistMessages(status: UiText, error: UiText?) {
         savedStateHandle[STATUS_KEY] = status
-        if (error == null) savedStateHandle.remove<UiText>(ERROR_KEY) else savedStateHandle[ERROR_KEY] = error
+        if (error == null) {
+            savedStateHandle.remove<UiText>(ERROR_KEY)
+        } else {
+            savedStateHandle[ERROR_KEY] = error
+        }
     }
 
     private fun persistImage(image: ExportedImage) {
@@ -449,15 +610,24 @@ class ExportViewModel(
 
         private fun restoreExportedImage(handle: SavedStateHandle): ExportedImage? {
             val path = handle.get<String>(EXPORTED_PATH_KEY) ?: return null
-            val file = File(path).takeIf(File::isFile) ?: return null
             val width = handle.get<Int>(EXPORTED_WIDTH_KEY)?.takeIf { it > 0 } ?: return null
             val height = handle.get<Int>(EXPORTED_HEIGHT_KEY)?.takeIf { it > 0 } ?: return null
             return ExportedImage(
-                file = file,
+                file = File(path),
                 width = width,
                 height = height,
                 mimeType = handle[EXPORTED_MIME_KEY] ?: "image/png",
             )
+        }
+
+        private fun sameImage(first: ExportedImage, second: ExportedImage): Boolean =
+            first.file.absolutePath == second.file.absolutePath &&
+                first.width == second.width &&
+                first.height == second.height &&
+                first.mimeType == second.mimeType
+
+        private fun recycle(bitmap: android.graphics.Bitmap?) {
+            if (bitmap != null && !bitmap.isRecycled) bitmap.recycle()
         }
     }
 }

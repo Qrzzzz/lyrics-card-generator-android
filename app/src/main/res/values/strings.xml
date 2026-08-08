@@ -18,6 +18,7 @@
     <string name="common_portrait">竖版</string>
     <string name="common_landscape">横版</string>
     <string name="common_custom">自定义</string>
+    <string name="common_required_field">此项不能为空</string>
     <string name="list_separator">、</string>
     <string name="middle_dot_separator"> · </string>
 
@@ -67,6 +68,7 @@
     <string name="editor_saving_and_leaving">正在保存并离开…</string>
     <string name="editor_progress_status">%1$d/%2$d · %3$s</string>
     <string name="editor_step_number">%1$d. %2$s</string>
+    <string name="editor_step_accessibility">第 %1$d 步，共 %2$d 步，%3$s</string>
     <string name="editor_autosave_saved">已自动保存</string>
     <string name="editor_autosave_saving">正在自动保存…</string>
     <string name="editor_autosave_failed">自动保存失败</string>
@@ -80,6 +82,7 @@
     <string name="editor_netease_search">搜索网易云歌曲</string>
     <string name="editor_netease_link_label">网易云分享文本或链接</string>
     <string name="editor_netease_link_example" translatable="false">https://music.163.com/song?id=…</string>
+    <string name="editor_link_supporting_text">支持网易云歌曲链接或包含链接的分享文本</string>
     <string name="editor_paste">贴入</string>
     <string name="editor_parse">解析</string>
     <string name="editor_manual_section">手动补充</string>
@@ -98,14 +101,18 @@
     <string name="editor_merge_blank_lines">合并空行</string>
     <string name="editor_show_translation">显示译文</string>
     <string name="editor_translation_lyrics">译文歌词</string>
+    <string name="editor_lyric_line_count">当前 %1$d 行，上限 %2$d 行</string>
+    <string name="editor_lyric_line_limit_inline">当前 %1$d 行，超过 %2$d 行上限；预览与项目仍保留上一个有效版本</string>
     <string name="editor_canvas">画布</string>
     <string name="editor_instrumental_canvas_help">纯音乐模式固定使用竖版 1:1 画布。关闭纯音乐模式后可选择其他比例。</string>
     <string name="editor_ratio">比例</string>
     <string name="editor_width">宽度</string>
     <string name="editor_height">高度</string>
     <string name="editor_auto_height">竖版自动高度</string>
+    <string name="editor_auto_height_disabled_reason">横版画布不支持自动高度</string>
     <string name="editor_elements">元素</string>
     <string name="editor_show_cover">显示封面</string>
+    <string name="editor_cover_required_reason">请先在第一步选择封面</string>
     <string name="editor_show_song_info">显示歌曲信息</string>
     <string name="editor_show_album">显示专辑</string>
     <string name="editor_cover_crop_scale">封面裁切缩放</string>
@@ -149,6 +156,7 @@
     <string name="brand_spotify" translatable="false">Spotify</string>
     <string name="editor_platform_attribution">平台与署名</string>
     <string name="editor_show_platform_logo">显示平台 Logo</string>
+    <string name="editor_platform_required_reason">请先选择来源平台</string>
     <string name="editor_show_shared_by">显示 %1$s</string>
     <string name="editor_sharer_name">分享者名称</string>
     <string name="editor_show_generated_watermark">显示 %1$s</string>
@@ -158,9 +166,16 @@
     <string name="editor_return_to_first_step">仍可返回第一步补充</string>
     <string name="editor_card_content">卡片内容</string>
     <string name="editor_ready">已准备</string>
+    <string name="editor_not_ready">尚未准备</string>
     <string name="editor_lyrics_empty">歌词为空</string>
     <string name="editor_canvas_summary">%1$d × %2$d · %3$s</string>
     <string name="editor_export_help">点击下方“导出 PNG”后，可选择标准/高清倍率、文件名，并保存或分享图片。</string>
+    <string name="editor_character_count">%1$d / %2$d 个字符</string>
+    <string name="editor_text_too_long">最多可输入 %1$d 个字符；当前值尚未应用</string>
+    <string name="editor_value_range">有效范围：%1$d–%2$d</string>
+    <string name="editor_invalid_number">请输入 %1$d–%2$d 之间的整数；当前设置未更改</string>
+    <string name="editor_color_format_hint">格式：#RRGGBB 或 #RRGGBBAA</string>
+    <string name="editor_invalid_color">请输入 #RRGGBB 或 #RRGGBBAA；当前颜色未更改</string>
     <string name="editor_netease_idle">可按歌曲名搜索，或贴入网易云分享链接</string>
     <string name="editor_netease_enter_query">请输入歌曲名或歌手</string>
     <string name="editor_netease_searching">正在搜索网易云音乐…</string>
@@ -188,10 +203,15 @@
     <string name="export_final_dimensions">%1$d × %2$d px</string>
     <string name="export_memory_estimate">预计解码内存 %1$.1f MB</string>
     <string name="export_file_name">文件名</string>
+    <string name="export_file_name_help">保存时会自动补全 .png 扩展名</string>
+    <string name="export_file_name_sanitized">文件名包含系统不支持的字符，保存时会替换为连字符</string>
     <string name="export_result_preview">导出结果预览</string>
+    <string name="export_preview_loading">正在后台检查并生成结果预览…</string>
     <string name="exported_image_description">导出的图片</string>
     <string name="export_retry">重试导出</string>
     <string name="export_generating">生成中…</string>
+    <string name="export_generate_and_save">生成并保存</string>
+    <string name="export_generate_and_share">生成并分享</string>
     <string name="export_finalizing">正在完成</string>
     <string name="export_share_chooser">分享歌词卡片</string>
     <string name="export_default_file_name" translatable="false">lyrics-card.png</string>
@@ -199,6 +219,7 @@
     <string name="export_error_open_file_picker">无法打开文件选择器</string>
     <string name="export_error_open_share_sheet">无法打开分享面板</string>
     <string name="export_ready">准备导出</string>
+    <string name="export_preparing">正在准备导出…</string>
     <string name="export_generated">已生成 %1$d × %2$d PNG</string>
     <string name="export_result_expired">导出结果已失效</string>
     <string name="export_cancelled">导出已取消，可立即重试</string>
@@ -206,11 +227,15 @@
     <string name="export_failed_retryable">导出失败，可重试</string>
     <string name="export_interrupted_status">上次导出被系统中断，没有自动重试</string>
     <string name="export_result_missing_error">导出结果文件已不存在，请重试</string>
+    <string name="export_result_invalid_png">导出结果不是有效的 PNG，请重试</string>
+    <string name="export_preview_decode_failed">无法生成导出预览，请重试</string>
     <string name="export_previous_failure_error">上次导出失败，可手动重试</string>
     <string name="export_interrupted_error">上次导出被系统中断，可手动重试</string>
     <string name="export_cancelling">正在取消并恢复渲染器…</string>
     <string name="export_saved">已保存到所选位置</string>
+    <string name="export_save_cancelled">未选择保存位置，导出结果仍保留在应用内</string>
     <string name="export_save_failed">保存失败</string>
+    <string name="export_save_failed_retryable">无法保存到所选位置，请检查访问权限和剩余空间后重试</string>
     <string name="export_running">正在生成 %1$d× PNG…</string>
     <string name="export_failure">导出失败</string>
     <string name="export_finalizing_records">正在完成缩略图与导出记录…</string>

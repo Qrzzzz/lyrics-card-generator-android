@@ -1,6 +1,5 @@
 package com.qrzzzz.lyricscard.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -100,114 +99,22 @@ fun LyricsCardApp(
         }
 
         composable<EditorRoute> { entry ->
-            val editorViewModel: EditorViewModel = viewModel(
-                viewModelStoreOwner = entry,
+            EditorRouteContent(
+                entry = entry,
                 factory = factory,
+                container = container,
+                showSafeArea = settingsState.preferences.showSafeArea,
+                navController = navController,
             )
-            val state by editorViewModel.uiState.collectAsStateWithLifecycle()
-            val scope = rememberCoroutineScope()
-            val snackbar = remember { SnackbarHostState() }
-            val context = LocalContext.current
-
-            LaunchedEffect(state.errorMessage) {
-                state.errorMessage?.let {
-                    snackbar.showSnackbar(it.resolve(context))
-                    editorViewModel.clearError()
-                }
-            }
-            LaunchedEffect(state.projectUnavailable) {
-                if (state.projectUnavailable) navController.returnHome()
-            }
-            LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
-                editorViewModel.requestFlush()
-            }
-            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-                editorViewModel.onNavigationResumed()
-            }
-            BackHandler(enabled = state.currentProject != null) {
-                if (!state.isLeaving) {
-                    scope.launch {
-                        editorViewModel.popAfterSaving(navController)
-                    }
-                }
-            }
-
-            if (state.currentProject == null) {
-                ProjectLoading()
-            } else {
-                EditorScreen(
-                    state = state,
-                    showSafeArea = settingsState.preferences.showSafeArea,
-                    renderer = container.rendererController,
-                    snackbarHost = { SnackbarHost(snackbar) },
-                    onBack = {
-                        scope.launch {
-                            editorViewModel.popAfterSaving(navController)
-                        }
-                    },
-                    onSelectedStep = editorViewModel::selectStep,
-                    onSearchQueryChange = editorViewModel::updateSearchQuery,
-                    onLinkInputChange = editorViewModel::updateLinkInput,
-                    onProjectNameChange = editorViewModel::updateProjectName,
-                    onSpecChange = { next -> editorViewModel.updateSpec { next } },
-                    onMeasuredHeight = editorViewModel::updateMeasuredHeight,
-                    onExtractPalette = editorViewModel::extractPalette,
-                    onUndo = editorViewModel::undo,
-                    onRedo = editorViewModel::redo,
-                    onSelectCover = editorViewModel::importCover,
-                    onRemoveCover = editorViewModel::removeCover,
-                    onSearchNetease = editorViewModel::searchNetease,
-                    onResolveNeteaseSong = editorViewModel::resolveNeteaseSong,
-                    onResolveNeteaseLink = editorViewModel::resolveNeteaseLink,
-                    onExport = {
-                        scope.launch {
-                            if (editorViewModel.prepareForNavigation()) {
-                                editorViewModel.markNavigationCommitted()
-                                try {
-                                    navController.navigate(ExportRoute(state.projectId)) {
-                                        launchSingleTop = true
-                                    }
-                                } catch (cause: Throwable) {
-                                    editorViewModel.navigationFailed()
-                                    throw cause
-                                }
-                            }
-                        }
-                    },
-                )
-            }
         }
 
         composable<ExportRoute> { entry ->
-            val exportViewModel: ExportViewModel = viewModel(
-                viewModelStoreOwner = entry,
+            ExportRouteContent(
+                entry = entry,
                 factory = factory,
+                container = container,
+                navController = navController,
             )
-            val state by exportViewModel.uiState.collectAsStateWithLifecycle()
-
-            LaunchedEffect(state.projectUnavailable) {
-                if (state.projectUnavailable) navController.returnHome()
-            }
-
-            if (state.project == null) {
-                ProjectLoading()
-            } else {
-                ExportScreen(
-                    state = state,
-                    renderer = container.rendererController,
-                    onBack = { navController.popBackStack() },
-                    onMultiplier = exportViewModel::setMultiplier,
-                    onFileName = exportViewModel::setFileName,
-                    onMeasuredHeight = exportViewModel::setMeasuredHeight,
-                    onSave = exportViewModel::save,
-                    onShare = exportViewModel::share,
-                    onCancel = exportViewModel::cancelExport,
-                    onRetry = exportViewModel::retry,
-                    onSaveDestination = exportViewModel::saveTo,
-                    onEffectConsumed = exportViewModel::consumeEffect,
-                    onExternalActionError = exportViewModel::reportExternalActionError,
-                )
-            }
         }
 
         composable<SettingsRoute> {
@@ -224,7 +131,7 @@ fun LyricsCardApp(
     }
 }
 
-private fun NavHostController.returnHome() {
+internal fun NavHostController.returnHome() {
     if (!popBackStack()) navigate(HomeRoute) { launchSingleTop = true }
 }
 
@@ -238,19 +145,8 @@ private inline fun HomeViewModel.commitNavigation(navigate: () -> Unit) {
     }
 }
 
-private suspend fun EditorViewModel.popAfterSaving(navController: NavHostController) {
-    if (!prepareForNavigation()) return
-    markNavigationCommitted()
-    try {
-        if (!navController.popBackStack()) navigationFailed()
-    } catch (cause: Throwable) {
-        navigationFailed()
-        throw cause
-    }
-}
-
 @Composable
-private fun ProjectLoading() {
+internal fun ProjectLoading() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
     }

@@ -1,24 +1,28 @@
 package com.qrzzzz.lyricscard.ui
 
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
-import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
@@ -27,10 +31,12 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -38,16 +44,21 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -56,9 +67,6 @@ import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.renderer.ExportedImage
 import com.qrzzzz.lyricscard.renderer.RendererController
 import com.qrzzzz.lyricscard.renderer.RendererPreview
-import com.qrzzzz.lyricscard.ui.theme.LyricsCardLayout
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,31 +81,38 @@ fun ExportScreen(
     onShare: () -> Unit,
     onCancel: () -> Unit,
     onRetry: () -> Unit,
-    onSaveDestination: (android.net.Uri) -> Unit,
+    onSaveDestination: (android.net.Uri?) -> Unit,
     onEffectConsumed: (Long) -> Unit,
     onExternalActionError: (UiText) -> Unit,
+    windowWidthSizeClass: WindowWidthSizeClass? = null,
 ) {
     val project = checkNotNull(state.project)
     val context = LocalContext.current
+    val windowWidth = currentLyricsWindowWidth(windowWidthSizeClass)
     val defaultFileName = stringResource(R.string.export_default_file_name)
-
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/png"),
     ) { uri ->
-        uri?.let(onSaveDestination)
+        onSaveDestination(uri)
     }
 
     LaunchedEffect(state.effect?.id) {
         val effect = state.effect ?: return@LaunchedEffect
         try {
             when (effect.action) {
-                ExportPendingAction.SAVE -> saveLauncher.launch(ensurePng(state.fileName, defaultFileName))
+                ExportPendingAction.SAVE -> {
+                    saveLauncher.launch(ensurePng(state.fileName, defaultFileName))
+                }
                 ExportPendingAction.SHARE -> {
                     val image = state.exported
-                    if (image != null) shareImage(context, image)
+                    if (image == null || !state.isResultReady) {
+                        onExternalActionError(UiText.resource(R.string.export_result_missing_error))
+                    } else {
+                        shareImage(context, image)
+                    }
                 }
             }
-        } catch (cause: Throwable) {
+        } catch (_: Throwable) {
             onExternalActionError(
                 UiText.resource(
                     if (effect.action == ExportPendingAction.SAVE) {
@@ -112,12 +127,20 @@ fun ExportScreen(
         }
     }
 
-    BackHandler(enabled = state.isBusy) { }
+    BackHandler(enabled = state.isBusy) {
+        if (state.canCancel) onCancel()
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.export_title), fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        stringResource(R.string.export_title),
+                        modifier = Modifier.semantics { heading() },
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack, enabled = !state.isBusy) {
                         Icon(
@@ -126,122 +149,130 @@ fun ExportScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
             )
         },
     ) { padding ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
-            val wide = maxWidth >= LyricsCardLayout.wideBreakpoint
-            if (wide) {
-                Row(
+        if (windowWidth == LyricsWindowWidth.COMPACT) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 12.dp)
+                    .imePadding()
+                    .testTag(EXPORT_COMPACT_LAYOUT_TAG),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                RendererPreview(
+                    spec = project.spec.copy(
+                        canvas = project.spec.canvas.copy(pixelRatio = state.multiplier),
+                    ),
+                    controller = renderer,
+                    onMeasuredHeight = onMeasuredHeight,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    RendererPreview(
-                        spec = project.spec.copy(canvas = project.spec.canvas.copy(pixelRatio = state.multiplier)),
-                        controller = renderer,
-                        onMeasuredHeight = onMeasuredHeight,
-                        modifier = Modifier.weight(1f),
-                    )
-                    ExportControls(
-                        project = project,
-                        resolvedHeight = state.measuredHeight,
-                        multiplier = state.multiplier,
-                        onMultiplier = onMultiplier,
-                        fileName = state.fileName,
-                        onFileName = onFileName,
-                        exported = state.exported,
-                        busy = state.isBusy,
-                        canCancel = state.canCancel,
-                        status = state.status,
-                        error = state.errorMessage,
-                        onSave = onSave,
-                        onShare = onShare,
-                        onCancel = onCancel,
-                        onRetry = onRetry,
-                        modifier = Modifier.weight(0.72f),
-                    )
-                }
-            } else {
-                Column(
+                        .fillMaxWidth()
+                        .weight(0.42f)
+                        .heightIn(min = 128.dp, max = 360.dp),
+                )
+                ExportControls(
+                    state = state,
+                    project = project,
+                    onMultiplier = onMultiplier,
+                    onFileName = onFileName,
+                    onSave = onSave,
+                    onShare = onShare,
+                    onCancel = onCancel,
+                    onRetry = onRetry,
+                    modifier = Modifier.fillMaxWidth().weight(0.58f),
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp)
+                    .imePadding()
+                    .testTag(
+                        if (windowWidth == LyricsWindowWidth.MEDIUM) {
+                            EXPORT_MEDIUM_LAYOUT_TAG
+                        } else {
+                            EXPORT_EXPANDED_LAYOUT_TAG
+                        },
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                RendererPreview(
+                    spec = project.spec.copy(
+                        canvas = project.spec.canvas.copy(pixelRatio = state.multiplier),
+                    ),
+                    controller = renderer,
+                    onMeasuredHeight = onMeasuredHeight,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    RendererPreview(
-                        spec = project.spec.copy(canvas = project.spec.canvas.copy(pixelRatio = state.multiplier)),
-                        controller = renderer,
-                        onMeasuredHeight = onMeasuredHeight,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(0.46f),
-                    )
-                    ExportControls(
-                        project = project,
-                        resolvedHeight = state.measuredHeight,
-                        multiplier = state.multiplier,
-                        onMultiplier = onMultiplier,
-                        fileName = state.fileName,
-                        onFileName = onFileName,
-                        exported = state.exported,
-                        busy = state.isBusy,
-                        canCancel = state.canCancel,
-                        status = state.status,
-                        error = state.errorMessage,
-                        onSave = onSave,
-                        onShare = onShare,
-                        onCancel = onCancel,
-                        onRetry = onRetry,
-                        modifier = Modifier.weight(0.54f),
-                    )
-                }
+                        .weight(if (windowWidth == LyricsWindowWidth.EXPANDED) 1.7f else 1.2f)
+                        .fillMaxHeight()
+                        .widthIn(min = 240.dp),
+                )
+                ExportControls(
+                    state = state,
+                    project = project,
+                    onMultiplier = onMultiplier,
+                    onFileName = onFileName,
+                    onSave = onSave,
+                    onShare = onShare,
+                    onCancel = onCancel,
+                    onRetry = onRetry,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .widthIn(
+                            min = if (windowWidth == LyricsWindowWidth.EXPANDED) 360.dp else 320.dp,
+                            max = if (windowWidth == LyricsWindowWidth.EXPANDED) 560.dp else 480.dp,
+                        ),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ExportControls(
+internal fun ExportControls(
+    state: ExportUiState,
     project: Project,
-    resolvedHeight: Int,
-    multiplier: Int,
     onMultiplier: (Int) -> Unit,
-    fileName: String,
     onFileName: (String) -> Unit,
-    exported: ExportedImage?,
-    busy: Boolean,
-    canCancel: Boolean,
-    status: UiText,
-    error: UiText?,
     onSave: () -> Unit,
     onShare: () -> Unit,
     onCancel: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val finalWidth = project.spec.canvas.width * multiplier
-    val finalHeight = resolvedHeight * multiplier
+    val finalWidth = project.spec.canvas.width * state.multiplier
+    val finalHeight = state.measuredHeight * state.multiplier
     val estimateMb = finalWidth.toLong() * finalHeight.toLong() * 4.0 / (1024.0 * 1024.0)
+    val invalidFileName = INVALID_FILE_CHARS.containsMatchIn(state.fileName)
+    val resultPending = state.exported != null && state.preview.phase == ExportPreviewPhase.LOADING
+    val actionEnabled = !state.isBusy && !resultPending
+
     LazyColumn(
         modifier = modifier,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            Text(stringResource(R.string.export_output_settings), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(R.string.export_output_settings),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleLarge,
+            )
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf(1, 2).forEach { value ->
                     FilterChip(
-                        selected = multiplier == value,
+                        selected = state.multiplier == value,
                         onClick = { onMultiplier(value) },
                         label = {
                             Text(
@@ -258,14 +289,21 @@ private fun ExportControls(
                                 ),
                             )
                         },
-                        enabled = !busy,
+                        leadingIcon = if (state.multiplier == value) {
+                            { Icon(Icons.Rounded.Check, contentDescription = null) }
+                        } else {
+                            null
+                        },
+                        enabled = !state.isBusy,
                     )
                 }
             }
         }
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
                 shape = MaterialTheme.shapes.large,
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -283,95 +321,127 @@ private fun ExportControls(
         }
         item {
             OutlinedTextField(
-                value = fileName,
-                onValueChange = { onFileName(it.take(80)) },
-                modifier = Modifier.fillMaxWidth(),
+                value = state.fileName,
+                onValueChange = onFileName,
+                modifier = Modifier.fillMaxWidth().testTag(EXPORT_FILE_NAME_TAG),
                 label = { Text(stringResource(R.string.export_file_name)) },
                 suffix = {
-                    if (!fileName.endsWith(".png", true)) {
+                    if (!state.fileName.endsWith(".png", true)) {
                         Text(stringResource(R.string.file_extension_png))
                     }
                 },
+                supportingText = {
+                    Text(
+                        stringResource(
+                            if (invalidFileName) {
+                                R.string.export_file_name_sanitized
+                            } else {
+                                R.string.export_file_name_help
+                            },
+                        ),
+                    )
+                },
+                isError = invalidFileName,
                 singleLine = true,
-                enabled = !busy,
+                enabled = !state.isBusy,
             )
         }
-        if (exported != null) {
-            item {
-                val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
-                    initialValue = null,
-                    key1 = exported.file.absolutePath,
-                ) {
-                    value = withContext(Dispatchers.IO) {
-                        decodePreviewBitmap(exported.file.absolutePath)
-                    }
-                }
-                Card(shape = MaterialTheme.shapes.large) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                stringResource(R.string.export_result_preview),
-                                modifier = Modifier.padding(start = 8.dp),
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                        val previewBitmap = bitmap
-                        if (previewBitmap != null) {
+        when (state.preview.phase) {
+            ExportPreviewPhase.LOADING -> item {
+                ExportPreviewLoading()
+            }
+            ExportPreviewPhase.READY -> state.preview.bitmap?.let { bitmap ->
+                item {
+                    val imageBitmap = remember(bitmap) { bitmap.asImageBitmap() }
+                    Card(shape = MaterialTheme.shapes.large) {
+                        Column(
+                            Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Rounded.CheckCircle,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    stringResource(R.string.export_result_preview),
+                                    modifier = Modifier.padding(start = 8.dp),
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
                             Image(
-                                bitmap = previewBitmap,
+                                bitmap = imageBitmap,
                                 contentDescription = stringResource(R.string.exported_image_description),
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(130.dp),
+                                    .heightIn(min = 120.dp, max = 220.dp),
                             )
                         }
                     }
                 }
             }
+            ExportPreviewPhase.ERROR,
+            ExportPreviewPhase.EMPTY,
+            -> Unit
         }
         item {
-            Text(
-                error?.asString() ?: status.asString(),
-                color = if (error == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-            )
+            ExportOperationStatus(state)
         }
-        if (error != null) {
+        if (state.errorMessage != null && !state.isBusy) {
             item {
-                OutlinedButton(onClick = onRetry, enabled = !busy) {
+                OutlinedButton(onClick = onRetry) {
                     Icon(Icons.Rounded.Refresh, contentDescription = null)
                     Text(stringResource(R.string.export_retry), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onSave, modifier = Modifier.weight(1f), enabled = !busy) {
-                    Icon(Icons.Rounded.Download, contentDescription = null)
-                    Text(
-                        stringResource(if (busy) R.string.export_generating else R.string.common_save),
-                        modifier = Modifier.padding(start = 6.dp),
-                    )
-                }
-                if (busy) {
+            if (state.isBusy) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     OutlinedButton(
                         onClick = onCancel,
-                        modifier = Modifier.weight(1f),
-                        enabled = canCancel,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                        enabled = state.canCancel,
                     ) {
                         Icon(Icons.Rounded.Close, contentDescription = null)
                         Text(
                             stringResource(
-                                if (canCancel) R.string.common_cancel else R.string.export_finalizing,
+                                if (state.canCancel) R.string.common_cancel else R.string.export_finalizing,
                             ),
                             modifier = Modifier.padding(start = 6.dp),
                         )
                     }
-                } else {
-                    OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) {
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = onSave,
+                        modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                        enabled = actionEnabled,
+                    ) {
+                        Icon(Icons.Rounded.Download, contentDescription = null)
+                        Text(
+                            stringResource(
+                                if (state.isResultReady) R.string.common_save else R.string.export_generate_and_save,
+                            ),
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onShare,
+                        modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                        enabled = actionEnabled,
+                    ) {
                         Icon(Icons.Rounded.Share, contentDescription = null)
-                        Text(stringResource(R.string.common_share), modifier = Modifier.padding(start = 6.dp))
+                        Text(
+                            stringResource(
+                                if (state.isResultReady) R.string.common_share else R.string.export_generate_and_share,
+                            ),
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
                     }
                 }
             }
@@ -379,9 +449,47 @@ private fun ExportControls(
     }
 }
 
+@Composable
+private fun ExportPreviewLoading() {
+    Card(shape = MaterialTheme.shapes.large) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+            Text(stringResource(R.string.export_preview_loading))
+        }
+    }
+}
+
+@Composable
+private fun ExportOperationStatus(state: ExportUiState) {
+    val isError = state.errorMessage != null
+    val announce = state.operation in setOf(
+        ExportOperationState.SUCCESS,
+        ExportOperationState.FAILURE,
+        ExportOperationState.CANCELLED,
+        ExportOperationState.INTERRUPTED,
+    )
+    Text(
+        text = state.errorMessage?.asString() ?: state.status.asString(),
+        modifier = Modifier.then(
+            if (announce) {
+                Modifier.semantics {
+                    liveRegion = if (isError) LiveRegionMode.Assertive else LiveRegionMode.Polite
+                }
+            } else {
+                Modifier
+            },
+        ),
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 private fun shareImage(context: android.content.Context, image: ExportedImage) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", image.file)
-    val intent = Intent(Intent.ACTION_SEND).apply {
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
         type = image.mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
         clipData = ClipData.newUri(
@@ -391,21 +499,22 @@ private fun shareImage(context: android.content.Context, image: ExportedImage) {
         )
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(intent, context.getString(R.string.export_share_chooser)))
+    if (context.packageManager.queryIntentActivities(sendIntent, 0).isEmpty()) {
+        throw ActivityNotFoundException("No activity can share an image")
+    }
+    context.startActivity(
+        Intent.createChooser(sendIntent, context.getString(R.string.export_share_chooser)),
+    )
 }
 
-private fun ensurePng(value: String, fallbackName: String): String {
+internal fun ensurePng(value: String, fallbackName: String): String {
     val clean = value.ifBlank { fallbackName }.replace(INVALID_FILE_CHARS, "-")
     return if (clean.endsWith(".png", true)) clean else "$clean.png"
 }
 
-private fun decodePreviewBitmap(path: String): androidx.compose.ui.graphics.ImageBitmap? {
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeFile(path, bounds)
-    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-    var sample = 1
-    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1_024) sample *= 2
-    return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
-}
-
 private val INVALID_FILE_CHARS = Regex("[\\\\/:*?\"<>|]+")
+
+internal const val EXPORT_COMPACT_LAYOUT_TAG = "export-compact-layout"
+internal const val EXPORT_MEDIUM_LAYOUT_TAG = "export-medium-layout"
+internal const val EXPORT_EXPANDED_LAYOUT_TAG = "export-expanded-layout"
+internal const val EXPORT_FILE_NAME_TAG = "export-file-name"

@@ -23,6 +23,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.annotation.StringRes
@@ -71,7 +76,8 @@ fun RendererPreview(
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .testTag(RENDERER_PREVIEW_TAG),
     ) {
         key(generation) {
             val owner = remember { Any() }
@@ -99,10 +105,12 @@ fun RendererPreview(
             RendererStatus.Phase.STARTING -> PreviewStatus(
                 message = localizedStatus,
                 showProgress = true,
+                isError = false,
             )
             RendererStatus.Phase.ERROR -> PreviewStatus(
                 message = localizedStatus,
                 retry = controller::retry,
+                isError = true,
             )
             else -> Unit
         }
@@ -127,16 +135,25 @@ private fun rendererStatusResource(key: RendererUiMessageKey): Int = when (key) 
 }
 
 @Composable
-private fun PreviewStatus(
+internal fun PreviewStatus(
     message: String,
     showProgress: Boolean = false,
     retry: (() -> Unit)? = null,
+    isError: Boolean = false,
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
-            .padding(24.dp),
+            .padding(24.dp)
+            .testTag(if (isError) RENDERER_ERROR_TAG else RENDERER_LOADING_TAG)
+            .then(
+                if (isError) {
+                    Modifier.semantics { liveRegion = LiveRegionMode.Assertive }
+                } else {
+                    Modifier
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -144,7 +161,11 @@ private fun PreviewStatus(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (showProgress) CircularProgressIndicator()
-            Text(message, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                message,
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.bodyMedium,
+            )
             retry?.let {
                 FilledTonalButton(onClick = it) {
                     Icon(Icons.Rounded.Refresh, contentDescription = null)
@@ -154,3 +175,7 @@ private fun PreviewStatus(
         }
     }
 }
+
+const val RENDERER_PREVIEW_TAG = "renderer-preview"
+const val RENDERER_LOADING_TAG = "renderer-loading"
+const val RENDERER_ERROR_TAG = "renderer-error"
