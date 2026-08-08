@@ -11,6 +11,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
 import android.os.Debug
+import android.os.Handler
+import android.os.Looper
 import android.os.StrictMode
 import android.os.SystemClock
 import android.provider.Settings
@@ -28,6 +30,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import com.qrzzzz.lyricscard.LyricsCardApplication
 import com.qrzzzz.lyricscard.RendererOperations
 import com.qrzzzz.lyricscard.model.GridDensity
@@ -40,8 +44,11 @@ import com.qrzzzz.lyricscard.renderer.RendererController
 import com.qrzzzz.lyricscard.renderer.RendererStatus
 import com.qrzzzz.lyricscard.ui.EditorViewModel
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.ceil
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -71,7 +78,7 @@ class QualityStressTest {
         val assetStore = ProjectAssetStore(appContext)
         val controller = RendererController(appContext, assetStore)
         val scenario = ActivityScenario.launch(ComponentActivity::class.java)
-        val binding = RendererBinding(controller, scenario)
+        val binding = RendererBinding(controller)
         val exportDirectory = File(appContext.cacheDir, "exports")
         val filesBefore = exportDirectory.listFiles().orEmpty().map(File::getCanonicalPath).toSet()
         val created = mutableListOf<File>()
@@ -92,7 +99,7 @@ class QualityStressTest {
             assertTrue("warmup export was not removed", warmup.file.delete())
             forceIdleGc()
 
-            scenario.onActivity { activity ->
+            runOnResumedActivity { activity ->
                 previousPolicy = StrictMode.getThreadPolicy()
                 StrictMode.setThreadPolicy(
                     StrictMode.ThreadPolicy.Builder(previousPolicy)
@@ -135,7 +142,7 @@ class QualityStressTest {
             assertEquals("app main-thread disk I/O violations", 0, strictModeViolations.get())
             Log.i(QUALITY_TAG, "export-summary success=$successful rendererErrors=0 partialFiles=0")
         } finally {
-            previousPolicy?.let { policy -> scenario.onActivity { StrictMode.setThreadPolicy(policy) } }
+            previousPolicy?.let { policy -> runOnMainThread { StrictMode.setThreadPolicy(policy) } }
             violationExecutor.shutdownNow()
             created.forEach { file ->
                 if (file.exists()) assertTrue("stress export cleanup failed", file.delete())
@@ -171,7 +178,7 @@ class QualityStressTest {
         }
         val editor = ViewModelProvider(store, factory)[EditorViewModel::class.java]
         val scenario = ActivityScenario.launch(ComponentActivity::class.java)
-        val binding = RendererBinding(controller, scenario)
+        val binding = RendererBinding(controller)
         val strictModeViolations = AtomicInteger(0)
         val violationExecutor = Executors.newSingleThreadExecutor()
         var previousPolicy: StrictMode.ThreadPolicy? = null
@@ -180,7 +187,7 @@ class QualityStressTest {
             binding.attach()
             waitForRenderer(controller)
             waitUntil(20_000) { !editor.uiState.value.isLoading && editor.uiState.value.currentProject != null }
-            scenario.onActivity { activity ->
+            runOnResumedActivity { activity ->
                 previousPolicy = StrictMode.getThreadPolicy()
                 StrictMode.setThreadPolicy(
                     StrictMode.ThreadPolicy.Builder(previousPolicy)
@@ -233,17 +240,7 @@ class QualityStressTest {
                     lastBackground = elapsed
                 }
                 if (elapsed - lastRecreation >= RECREATION_INTERVAL_MS) {
-                    binding.detach()
-                    scenario.onActivity { activity ->
-                        activity.requestedOrientation = if (recreations % 2 == 0) {
-                            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                        } else {
-                            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                        }
-                    }
-                    SystemClock.sleep(800)
-                    binding.attach()
-                    waitForRenderer(controller)
+                    rotateAndReattach(binding, controller, recreations)
                     recreations += 1
                     lastRecreation = elapsed
                 }
@@ -285,7 +282,7 @@ class QualityStressTest {
                     "peakPssKb=$peakPssKb endPssKb=${endMemory.totalPssKb} rendererErrors=0 autosave=consistent",
             )
         } finally {
-            previousPolicy?.let { policy -> scenario.onActivity { StrictMode.setThreadPolicy(policy) } }
+            previousPolicy?.let { policy -> runOnMainThread { StrictMode.setThreadPolicy(policy) } }
             violationExecutor.shutdownNow()
             closeRendererOnMain(binding, scenario, controller)
             store.clear()
@@ -298,7 +295,7 @@ class QualityStressTest {
         val assetStore = ProjectAssetStore(appContext)
         val controller = RendererController(appContext, assetStore)
         val scenario = ActivityScenario.launch(ComponentActivity::class.java)
-        val binding = RendererBinding(controller, scenario)
+        val binding = RendererBinding(controller)
         val sourceFile = File(appContext.cacheDir, "quality-large-cover.jpg")
         var assetId: String? = null
         var exported: ExportedImage? = null
@@ -371,17 +368,52 @@ class QualityStressTest {
         }
     }
 
+    @Test
+    fun d_repeatedRotationReattachRemainsBoundedAndRendererReady() {
+        val controller = RendererController(appContext, ProjectAssetStore(appContext))
+        val scenario = ActivityScenario.launch(ComponentActivity::class.java)
+        val binding = RendererBinding(controller)
+
+        try {
+            binding.attach()
+            waitForRenderer(controller)
+            repeat(REATTACH_REGRESSION_CYCLES) { index ->
+                rotateAndReattach(binding, controller, index)
+                assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+            }
+            Log.i(QUALITY_TAG, "reattach-summary cycles=$REATTACH_REGRESSION_CYCLES rendererErrors=0")
+        } finally {
+            closeRendererOnMain(binding, scenario, controller)
+        }
+    }
+
+    private fun rotateAndReattach(
+        binding: RendererBinding,
+        controller: RendererController,
+        index: Int,
+    ) {
+        binding.detach()
+        val expectedOrientation = if (index % 2 == 0) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        Log.i(QUALITY_TAG, "edit-recreation-begin index=$index requested=$expectedOrientation")
+        runOnResumedActivity { activity -> activity.requestedOrientation = expectedOrientation }
+        waitForStableOrientation(expectedOrientation)
+        binding.attach()
+        waitForRenderer(controller)
+        Log.i(QUALITY_TAG, "edit-recreation-ready index=$index")
+    }
+
     private fun closeRendererOnMain(
         binding: RendererBinding,
         scenario: ActivityScenario<ComponentActivity>,
         controller: RendererController,
     ) {
         binding.close()
-        try {
-            InstrumentationRegistry.getInstrumentation().runOnMainSync { controller.close() }
-        } finally {
-            scenario.close()
-        }
+        runOnMainThread { controller.close() }
+        scenario.close()
     }
 
     private fun releaseStressSpec(): RenderSpec = RenderSpec().copy(
@@ -498,9 +530,9 @@ class QualityStressTest {
     }
 
     private fun backgroundAndResume(scenario: ActivityScenario<ComponentActivity>) {
-        var host: ComponentActivity? = null
-        scenario.onActivity { activity -> host = activity }
-        val activity = checkNotNull(host)
+        val activity = checkNotNull(currentResumedActivity()) {
+            "no resumed host before background cycle"
+        }
         appContext.startActivity(
             Intent(Settings.ACTION_SETTINGS).addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
@@ -516,6 +548,65 @@ class QualityStressTest {
         waitUntil(BACKGROUND_TIMEOUT_MS) {
             activity.lifecycle.currentState == Lifecycle.State.RESUMED
         }
+    }
+
+    private fun waitForStableOrientation(requestedOrientation: Int) {
+        val expectedConfiguration = when (requestedOrientation) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE -> android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT -> android.content.res.Configuration.ORIENTATION_PORTRAIT
+            else -> error("unsupported quality-test orientation $requestedOrientation")
+        }
+        var stableActivity: ComponentActivity? = null
+        var stableChecks = 0
+        waitUntil(MAIN_THREAD_TIMEOUT_MS) {
+            val activity = currentResumedActivity()
+            val stable = activity != null &&
+                activity.resources.configuration.orientation == expectedConfiguration &&
+                activity.lifecycle.currentState == Lifecycle.State.RESUMED &&
+                activity.window.decorView.isAttachedToWindow &&
+                activity.window.decorView.isLaidOut &&
+                activity.window.decorView.hasWindowFocus()
+            if (stable && activity === stableActivity) {
+                stableChecks += 1
+            } else {
+                stableActivity = if (stable) activity else null
+                stableChecks = if (stable) 1 else 0
+            }
+            stableChecks >= STABLE_ACTIVITY_CHECKS
+        }
+    }
+
+    private fun currentResumedActivity(): ComponentActivity? = runOnMainThread {
+        ActivityLifecycleMonitorRegistry.getInstance()
+            .getActivitiesInStage(Stage.RESUMED)
+            .filterIsInstance<ComponentActivity>()
+            .singleOrNull()
+    }
+
+    private fun runOnResumedActivity(block: (ComponentActivity) -> Unit) {
+        runOnMainThread {
+            val activity = ActivityLifecycleMonitorRegistry.getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .filterIsInstance<ComponentActivity>()
+                .singleOrNull()
+            block(checkNotNull(activity) { "expected exactly one resumed ComponentActivity" })
+        }
+    }
+
+    private fun <T> runOnMainThread(block: () -> T): T {
+        if (Looper.myLooper() == Looper.getMainLooper()) return block()
+        val result = AtomicReference<Result<T>?>(null)
+        val completed = CountDownLatch(1)
+        val posted = Handler(Looper.getMainLooper()).post {
+            result.set(runCatching(block))
+            completed.countDown()
+        }
+        assertTrue("failed to enqueue quality action on the main thread", posted)
+        assertTrue(
+            "main-thread quality action timed out after $MAIN_THREAD_TIMEOUT_MS ms",
+            completed.await(MAIN_THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS),
+        )
+        return checkNotNull(result.get()) { "main-thread quality action completed without a result" }.getOrThrow()
     }
 
     private fun memorySample(
@@ -562,16 +653,15 @@ class QualityStressTest {
         val rssKb: Int,
     )
 
-    private class RendererBinding(
+    private inner class RendererBinding(
         private val controller: RendererController,
-        private val scenario: ActivityScenario<ComponentActivity>,
     ) {
         private var owner: Any? = null
         private var view: android.webkit.WebView? = null
 
         fun attach() {
             val nextOwner = Any()
-            scenario.onActivity { activity ->
+            runOnResumedActivity { activity ->
                 val root = FrameLayout(activity)
                 activity.setContentView(root)
                 val nextView = controller.acquireWebView(activity, nextOwner)
@@ -590,7 +680,7 @@ class QualityStressTest {
         fun detach() {
             val currentOwner = owner ?: return
             val currentView = view ?: return
-            scenario.onActivity { controller.releaseWebView(currentOwner, currentView) }
+            runOnMainThread { controller.releaseWebView(currentOwner, currentView) }
             owner = null
             view = null
         }
@@ -604,6 +694,9 @@ class QualityStressTest {
         const val EDITING_DURATION_MS = 30L * 60L * 1_000L
         const val BACKGROUND_INTERVAL_MS = 90L * 1_000L
         const val BACKGROUND_TIMEOUT_MS = 20_000L
+        const val MAIN_THREAD_TIMEOUT_MS = 20_000L
+        const val STABLE_ACTIVITY_CHECKS = 10
+        const val REATTACH_REGRESSION_CYCLES = 12
         const val RECREATION_INTERVAL_MS = 3L * 60L * 1_000L
         const val MEMORY_INTERVAL_MS = 5L * 60L * 1_000L
         const val LARGE_COVER_EDGE = 4_096
