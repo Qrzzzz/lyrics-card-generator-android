@@ -140,7 +140,7 @@ class AppShellAccessibilityTest {
                 }
             }
 
-            listOf(1f, 2f).forEach { scale ->
+            listOf(1f, 1.3f, 2f).forEach { scale ->
                 HarnessScreen.entries.forEach { target ->
                     compose.runOnIdle {
                         fontScale.floatValue = scale

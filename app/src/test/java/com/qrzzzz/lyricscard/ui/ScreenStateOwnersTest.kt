@@ -45,11 +45,14 @@ class ScreenStateOwnersTest {
     fun settingsOwnerPublishesPreferencesAndCacheOperationState() = runTest(mainDispatcherRule.dispatcher) {
         val preferences = FakePreferencesStore(UserPreferences(darkMode = false))
         val files = FakeExportFiles().apply { clearBytes = 2L * 1024L * 1024L }
-        val viewModel = SettingsViewModel(preferences, files)
+        val diagnostics = FakeDiagnosticsReader()
+        val viewModel = SettingsViewModel(preferences, files, diagnostics)
         runCurrent()
 
         viewModel.setDarkMode(true)
+        runCurrent()
         viewModel.setDefaultExportScale(1)
+        runCurrent()
         viewModel.clearExportCache()
         runCurrent()
 
@@ -60,5 +63,7 @@ class ScreenStateOwnersTest {
             viewModel.uiState.value.cacheStatus,
         )
         assertFalse(viewModel.uiState.value.isClearingCache)
+        assertEquals(diagnostics.snapshot, viewModel.uiState.value.diagnostics)
+        assertEquals(1, diagnostics.reads)
     }
 }

@@ -1,6 +1,8 @@
 package com.qrzzzz.lyricscard.ui
 
 import android.net.Uri
+import com.qrzzzz.lyricscard.DiagnosticsReader
+import com.qrzzzz.lyricscard.DiagnosticsSnapshot
 import com.qrzzzz.lyricscard.ExportFiles
 import com.qrzzzz.lyricscard.NeteaseClient
 import com.qrzzzz.lyricscard.ProjectAssets
@@ -201,6 +203,8 @@ class FakeRendererOperations : RendererOperations {
 class FakeExportFiles : ExportFiles {
     var clearBytes = 0L
     var clearFailure: Throwable? = null
+    var clearCalls = 0
+    var clearBlock: (suspend () -> Long)? = null
     val copied = mutableListOf<Pair<ExportedImage, Uri>>()
     var thumbnailCalls = 0
     var createThumbnailBlock: suspend (String, ExportedImage) -> String = { projectId, image ->
@@ -217,8 +221,34 @@ class FakeExportFiles : ExportFiles {
     }
 
     override suspend fun clearExportCache(): Long {
+        clearCalls += 1
+        clearBlock?.let { return it() }
         clearFailure?.let { throw it }
         return clearBytes
+    }
+}
+
+class FakeDiagnosticsReader(
+    var snapshot: DiagnosticsSnapshot = DiagnosticsSnapshot(
+        appVersionName = "1.0.0-test",
+        appVersionCode = 10000,
+        rendererVersion = "renderer-test",
+        rendererSchemaVersion = 1,
+        rendererProtocolVersion = 1,
+        rendererSourcePackageVersion = "4.3.8",
+        rendererSourceCommit = "0123456789abcdef0123456789abcdef01234567",
+        rendererFontManifestHash = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+        systemWebViewPackage = "com.android.webview.test",
+        systemWebViewVersion = "1.2.3",
+    ),
+) : DiagnosticsReader {
+    var reads = 0
+    var failure: Throwable? = null
+
+    override suspend fun read(): DiagnosticsSnapshot {
+        reads += 1
+        failure?.let { throw it }
+        return snapshot
     }
 }
 
