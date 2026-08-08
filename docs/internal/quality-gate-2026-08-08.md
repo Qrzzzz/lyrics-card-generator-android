@@ -157,6 +157,7 @@ $env:ANDROID_SERIAL='emulator-5556'
 - 20 次 2x：149.557 s。
 - 30 分钟编辑：1807.380 s testcase；内部 wall-clock assertion 为 1,800,021 ms。
 - 关键 UI 定向回归另有 13/13 PASS（90.955 s）。
+- API 36 外部进程恢复：后台后 `am kill` 使旧 PID 消失；cold relaunch 恢复到第 4 步，返回第 1 步后 synthetic search draft 精确保留。
 
 21 项覆盖：renderer lifecycle/shared WebView、Home 无 WebView、ATF、font 1/2、landscape+IME、Activity recreation、matrix 1x/2x、Home actions/dialog、Editor 六步/search/invalid inputs/slider/retry、Export 1x/2x/busy/failure/success/cancel/save/share actions、Settings 两态/quality/safe-area/cache、20-export、30-minute endurance。
 
@@ -205,6 +206,8 @@ adb -s emulator-5556 shell am instrument -w -r `
 服务启用状态下走 Home ready → 新建 → 六步 direct/back/next → Step 3 renderer ready → 1x → 2x → Export route → Home；随后 ATF 检查 Home → Editor → Export → Settings。Accessibility Scanner 的标准包 `com.google.android.apps.accessibility.auditor` 不存在，未伪报 PASS；使用 Espresso Accessibility Test Framework 替代。
 
 Compose/instrumentation 还真实覆盖 compact/medium/expanded、wide landscape、Activity portrait/landscape、fontScale 1.0/1.3/2.0、实际 IME inset 与 48dp touch target；检查 heading、paneTitle、selected/disabled、Role.Switch/Button、合并 semantics、decorative null、dialog action/focus、live-region error/polite 状态。
+
+进程恢复没有只用 Activity recreation 代替：API 36 上先进入 Editor 第 4 步并写入 synthetic draft，HOME 后执行 `adb -s emulator-5556 shell am kill com.qrzzzz.lyricscard.debug`；PID 2631 消失，重新启动报告 `LaunchState: COLD` 且恢复原 task。新 PID 4014 恢复第 4 步，切回第 1 步后 draft `process-restore-42` 精确存在。
 
 ## F. 20-export and 30-minute performance
 
@@ -288,7 +291,7 @@ f167202 test(android): measure auto-height stress exports
 b65d2a1 test(renderer): normalize golden source fingerprints
 ```
 
-脱敏证据与产物：`C:\CodexTmp\lcg-quality-artifacts-20260808-final`（93 files；APK、R8/resource mappings、lint/JVM/connected XML、npm/Golden/Gradle/AVD/performance logs）。
+脱敏证据与产物：`C:\CodexTmp\lcg-quality-artifacts-20260808-final`（94 files；APK、R8/resource mappings、lint/JVM/connected XML、npm/Golden/Gradle/AVD/performance/process-restoration logs）。
 
 | Artifact | Size | SHA-256 |
 |---|---:|---|
