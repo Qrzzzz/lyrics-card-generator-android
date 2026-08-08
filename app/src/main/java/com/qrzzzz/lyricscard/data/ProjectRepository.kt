@@ -112,6 +112,24 @@ class ProjectRepository(
         return projectDao.markExported(id, exportedAt, updatedAt) > 0
     }
 
+    /** Commits thumbnail and export metadata together so callers never observe a half export. */
+    suspend fun recordExport(
+        id: String,
+        thumbnailPath: String,
+        exportedAt: Long = clock(),
+    ): Boolean = assetMutationMutex.withLock {
+        require('\u0000' !in thumbnailPath) { "thumbnailPath must not contain NUL" }
+        require(exportedAt >= 0L) { "exportedAt must not be negative" }
+        val current = projectDao.getById(id) ?: return false
+        require(exportedAt >= current.createdAt) { "exportedAt must not be earlier than createdAt" }
+        val updatedAt = maxOf(nextUpdatedAt(current.updatedAt), exportedAt)
+        if (projectDao.recordExport(id, thumbnailPath, exportedAt, updatedAt) == 0) return false
+        current.thumbnailPath
+            ?.takeIf { it != thumbnailPath }
+            ?.let { deleteThumbnailIfStillUnreferenced(it) }
+        true
+    }
+
     suspend fun delete(id: String): Boolean = assetMutationMutex.withLock {
         val result = projectDao.deleteProjectWithAssetReferences(id)
         result.releasedAssetId?.let { deleteIfStillUnreferenced(it) }

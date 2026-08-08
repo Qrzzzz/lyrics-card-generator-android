@@ -17,16 +17,19 @@ import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class ExportOperationState {
     IDLE,
     RUNNING,
+    FINALIZING,
     SUCCESS,
     CANCELLED,
     FAILURE,
@@ -58,6 +61,9 @@ data class ExportUiState(
     val effect: ExportEffect? = null,
 ) {
     val isBusy: Boolean
+        get() = operation == ExportOperationState.RUNNING || operation == ExportOperationState.FINALIZING
+
+    val canCancel: Boolean
         get() = operation == ExportOperationState.RUNNING
 }
 
@@ -80,7 +86,8 @@ class ExportViewModel(
     private val restoredImage = restoreExportedImage(savedStateHandle)
     private val initialImage = restoredImage.takeIf { restoredOperation == ExportOperationState.SUCCESS }
     private val initialOperation = when {
-        restoredOperation == ExportOperationState.RUNNING -> ExportOperationState.INTERRUPTED
+        restoredOperation == ExportOperationState.RUNNING ||
+            restoredOperation == ExportOperationState.FINALIZING -> ExportOperationState.INTERRUPTED
         restoredOperation == ExportOperationState.SUCCESS && initialImage == null -> ExportOperationState.FAILURE
         else -> restoredOperation
     }
@@ -180,6 +187,7 @@ class ExportViewModel(
     }
 
     fun cancelExport() {
+        if (_uiState.value.operation == ExportOperationState.FINALIZING) return
         val job = exportJob ?: return
         if (!job.isActive) return
         _uiState.update { it.copy(status = "正在取消并恢复渲染器…", errorMessage = null) }
@@ -288,21 +296,9 @@ class ExportViewModel(
             }
             try {
                 val image = renderer.exportPng(project, _uiState.value.multiplier)
-                val metadataWarning = recordExport(project, image)
-                persistImage(image)
-                persistOperation(ExportOperationState.SUCCESS)
-                val successStatus = "已生成 ${image.width} × ${image.height} PNG"
-                persistMessages(successStatus, metadataWarning)
-                _uiState.update {
-                    it.copy(
-                        operation = ExportOperationState.SUCCESS,
-                        exported = image,
-                        status = successStatus,
-                        errorMessage = metadataWarning,
-                    )
-                }
-                if (action != null) dispatch(action)
+                finalizeExport(project, image, action)
             } catch (cause: CancellationException) {
+                if (_uiState.value.operation == ExportOperationState.SUCCESS) throw cause
                 clearPersistedImage()
                 persistOperation(ExportOperationState.CANCELLED)
                 persistMessages("导出已取消，可立即重试", null)
@@ -338,10 +334,46 @@ class ExportViewModel(
         launched.start()
     }
 
+    /**
+     * Point of no return: once the renderer has produced a complete PNG, publishing the thumbnail,
+     * committing both Room metadata fields, and recording the restorable success state must finish
+     * as one non-cancellable finalization sequence.
+     */
+    private suspend fun finalizeExport(
+        project: Project,
+        image: ExportedImage,
+        action: ExportPendingAction?,
+    ) = withContext(NonCancellable) {
+        val finalizingStatus = "正在完成缩略图与导出记录…"
+        persistOperation(ExportOperationState.FINALIZING)
+        persistMessages(finalizingStatus, null)
+        _uiState.update {
+            it.copy(
+                operation = ExportOperationState.FINALIZING,
+                status = finalizingStatus,
+                errorMessage = null,
+            )
+        }
+
+        val metadataWarning = recordExport(project, image)
+        persistImage(image)
+        persistOperation(ExportOperationState.SUCCESS)
+        val successStatus = "已生成 ${image.width} × ${image.height} PNG"
+        persistMessages(successStatus, metadataWarning)
+        _uiState.update {
+            it.copy(
+                operation = ExportOperationState.SUCCESS,
+                exported = image,
+                status = successStatus,
+                errorMessage = metadataWarning,
+            )
+        }
+        if (action != null) dispatch(action)
+    }
+
     private suspend fun recordExport(project: Project, image: ExportedImage): String? = try {
         val thumbnailPath = exportFiles.createThumbnail(project.id, image)
-        check(projects.updateThumbnail(project.id, thumbnailPath)) { "项目已被删除，无法记录缩略图" }
-        check(projects.markExported(project.id)) { "项目已被删除，无法记录导出时间" }
+        check(projects.recordExport(project.id, thumbnailPath)) { "项目已被删除，无法记录导出信息" }
         projects.getProject(project.id)?.let { refreshed ->
             _uiState.update { it.copy(project = refreshed) }
         }

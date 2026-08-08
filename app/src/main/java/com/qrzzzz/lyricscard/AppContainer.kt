@@ -1,8 +1,6 @@
 package com.qrzzzz.lyricscard
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.room.Room
 import com.qrzzzz.lyricscard.data.AppDatabase
@@ -54,6 +52,7 @@ interface ProjectStore {
     suspend fun delete(id: String): Boolean
     suspend fun updateThumbnail(id: String, thumbnailPath: String?): Boolean
     suspend fun markExported(id: String): Boolean
+    suspend fun recordExport(id: String, thumbnailPath: String): Boolean
     suspend fun reconcileCoverAssets()
 }
 
@@ -143,7 +142,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
     override val netease: NeteaseClient by lazy { AndroidNeteaseClient(NeteaseMusicService()) }
     override val rendererController: RendererController by rendererControllerDelegate
     override val renderer: RendererOperations by lazy { AndroidRendererOperations(rendererController) }
-    override val exportFiles: ExportFiles = AndroidExportFiles(appContext)
+    override val exportFiles: ExportFiles = AndroidExportFiles(appContext, nativeAssetStore)
     override val editorSessions = EditorSessionRegistry()
     override val editorMessages: EditorMessageResolver = AndroidEditorMessageResolver(appContext)
 
@@ -203,7 +202,12 @@ private class ProjectRepositoryStore(
         repository.updateThumbnail(id, thumbnailPath)
 
     override suspend fun markExported(id: String): Boolean = repository.markExported(id)
-    override suspend fun reconcileCoverAssets() = repository.reconcileCoverAssets()
+    override suspend fun recordExport(id: String, thumbnailPath: String): Boolean =
+        repository.recordExport(id, thumbnailPath)
+
+    override suspend fun reconcileCoverAssets() {
+        repository.reconcileCoverAssets()
+    }
 }
 
 private class UserPreferencesRepositoryStore(
@@ -242,16 +246,14 @@ private class AndroidRendererOperations(
     override fun retry() = controller.retry()
 }
 
-private class AndroidExportFiles(context: Context) : ExportFiles {
+private class AndroidExportFiles(
+    context: Context,
+    private val assetStore: ProjectAssetStore,
+) : ExportFiles {
     private val appContext = context.applicationContext
 
     override suspend fun createThumbnail(projectId: String, image: ExportedImage): String =
-        withContext(Dispatchers.IO) {
-            val directory = File(appContext.filesDir, "thumbnails").apply { mkdirs() }
-            File(directory, "$projectId.png").also { target ->
-                createThumbnail(image.file, target)
-            }.absolutePath
-        }
+        assetStore.createThumbnailAtomically(projectId, image.file).absolutePath
 
     override suspend fun copyTo(image: ExportedImage, destination: Uri) = withContext(Dispatchers.IO) {
         appContext.contentResolver.openOutputStream(destination, "w")?.use { sink ->
@@ -271,40 +273,4 @@ private class AndroidExportFiles(context: Context) : ExportFiles {
         bytes
     }
 
-    private fun createThumbnail(source: File, target: File) {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(source.absolutePath, bounds)
-        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "无法读取导出图片" }
-        var sampleSize = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > THUMBNAIL_EDGE * 2) {
-            sampleSize *= 2
-        }
-        val bitmap = BitmapFactory.decodeFile(
-            source.absolutePath,
-            BitmapFactory.Options().apply { inSampleSize = sampleSize },
-        ) ?: error("无法生成项目缩略图")
-        val scale = minOf(
-            1f,
-            THUMBNAIL_EDGE.toFloat() / maxOf(bitmap.width, bitmap.height).toFloat(),
-        )
-        val width = (bitmap.width * scale).toInt().coerceAtLeast(1)
-        val height = (bitmap.height * scale).toInt().coerceAtLeast(1)
-        val scaled = if (width == bitmap.width && height == bitmap.height) {
-            bitmap
-        } else {
-            Bitmap.createScaledBitmap(bitmap, width, height, true)
-        }
-        try {
-            target.outputStream().use { output ->
-                check(scaled.compress(Bitmap.CompressFormat.PNG, 100, output)) { "缩略图编码失败" }
-            }
-        } finally {
-            if (scaled !== bitmap) scaled.recycle()
-            bitmap.recycle()
-        }
-    }
-
-    private companion object {
-        const val THUMBNAIL_EDGE = 480
-    }
 }

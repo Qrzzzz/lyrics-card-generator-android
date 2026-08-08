@@ -86,6 +86,22 @@ abstract class ProjectDao {
     )
     abstract suspend fun markExported(id: String, exportedAt: Long, updatedAt: Long): Int
 
+    @Query(
+        """
+        UPDATE projects
+        SET thumbnail_path = :thumbnailPath,
+            last_exported_at = :exportedAt,
+            updated_at = :updatedAt
+        WHERE id = :id
+        """,
+    )
+    abstract suspend fun recordExport(
+        id: String,
+        thumbnailPath: String,
+        exportedAt: Long,
+        updatedAt: Long,
+    ): Int
+
     @Query("DELETE FROM projects WHERE id = :id")
     abstract suspend fun deleteById(id: String): Int
 

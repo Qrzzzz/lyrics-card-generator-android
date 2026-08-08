@@ -13,9 +13,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.RenderSpec
 import com.qrzzzz.lyricscard.ui.EditorScreen
+import com.qrzzzz.lyricscard.ui.EditorUiState
 import com.qrzzzz.lyricscard.ui.ExportScreen
+import com.qrzzzz.lyricscard.ui.ExportUiState
 import com.qrzzzz.lyricscard.ui.HomeScreen
-import com.qrzzzz.lyricscard.ui.NeteaseLookupUiState
 import com.qrzzzz.lyricscard.ui.theme.LyricsCardTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -34,6 +35,7 @@ class RendererUiLifecycleTest {
             LyricsCardTheme {
                 HomeScreen(
                     projects = emptyList(),
+                    isWorking = false,
                     snackbarHost = {},
                     onCreateBlank = {},
                     onCreateSample = {},
@@ -64,33 +66,55 @@ class RendererUiLifecycleTest {
             createdAt = 1L,
             updatedAt = 1L,
         )
+        val editorState = mutableStateOf(
+            EditorUiState(
+                projectId = project.id,
+                currentProject = project,
+                isLoading = false,
+            ),
+        )
 
         try {
             compose.setContent {
                 LyricsCardTheme {
                     if (showExport.value) {
                         ExportScreen(
-                            project = project,
+                            state = ExportUiState(
+                                projectId = project.id,
+                                project = project,
+                                isLoading = false,
+                                multiplier = 1,
+                                fileName = "renderer-lifecycle.png",
+                            ),
                             renderer = controller,
-                            defaultMultiplier = 1,
                             onBack = {},
-                            onExportRecorded = {},
+                            onMultiplier = {},
+                            onFileName = {},
+                            onMeasuredHeight = {},
+                            onSave = {},
+                            onShare = {},
+                            onCancel = {},
+                            onRetry = {},
+                            onSaveDestination = {},
+                            onEffectConsumed = {},
+                            onExternalActionError = {},
                         )
                     } else {
                         EditorScreen(
-                            project = project,
-                            isSaving = false,
-                            canUndo = false,
-                            canRedo = false,
+                            state = editorState.value,
                             showSafeArea = false,
                             renderer = controller,
-                            netease = NeteaseLookupUiState(),
                             snackbarHost = {},
                             onBack = {},
+                            onSelectedStep = { step ->
+                                editorState.value = editorState.value.copy(selectedStep = step)
+                            },
+                            onSearchQueryChange = {},
+                            onLinkInputChange = {},
                             onProjectNameChange = {},
                             onSpecChange = {},
                             onMeasuredHeight = {},
-                            onPaletteExtracted = {},
+                            onExtractPalette = {},
                             onUndo = {},
                             onRedo = {},
                             onSelectCover = {},

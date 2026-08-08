@@ -315,6 +315,19 @@ private class FakeProjectDao : ProjectDao() {
     override suspend fun markExported(id: String, exportedAt: Long, updatedAt: Long): Int =
         update(id) { it.copy(lastExportedAt = exportedAt, updatedAt = updatedAt) }
 
+    override suspend fun recordExport(
+        id: String,
+        thumbnailPath: String,
+        exportedAt: Long,
+        updatedAt: Long,
+    ): Int = update(id) {
+        it.copy(
+            thumbnailPath = thumbnailPath,
+            lastExportedAt = exportedAt,
+            updatedAt = updatedAt,
+        )
+    }
+
     override suspend fun deleteById(id: String): Int {
         val next = entities.value.filterNot { it.id == id }
         if (next.size == entities.value.size) return 0

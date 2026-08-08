@@ -20,8 +20,10 @@ import com.qrzzzz.lyricscard.renderer.ExportedImage
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -50,7 +52,10 @@ class FakeProjectStore(initial: List<Project> = emptyList()) : ProjectStore {
     val saved = mutableListOf<Project>()
     val requestedIds = mutableListOf<String>()
     var saveFailure: Throwable? = null
+    var recordExportFailure: Throwable? = null
     var beforeSave: suspend (Project) -> Unit = {}
+    var beforeRecordExport: suspend (String, String) -> Unit = { _, _ -> }
+    var recordExportCalls = 0
     var nextId = 0
 
     override fun observeProjects(): Flow<List<ProjectSummary>> = summaries
@@ -99,6 +104,21 @@ class FakeProjectStore(initial: List<Project> = emptyList()) : ProjectStore {
         return true
     }
 
+    override suspend fun recordExport(id: String, thumbnailPath: String): Boolean {
+        recordExportCalls += 1
+        beforeRecordExport(id, thumbnailPath)
+        recordExportFailure?.let { throw it }
+        val project = values[id] ?: return false
+        add(
+            project.copy(
+                thumbnailPath = thumbnailPath,
+                lastExportedAt = project.updatedAt + 1,
+                updatedAt = project.updatedAt + 1,
+            ),
+        )
+        return true
+    }
+
     override suspend fun reconcileCoverAssets() = Unit
 
     private fun add(project: Project): Project {
@@ -137,18 +157,28 @@ class FakePreferencesStore(
 
 class FakeProjectAssets : ProjectAssets {
     val deleted = mutableListOf<String>()
-    override suspend fun importCover(uri: Uri): String = "00000000-0000-4000-8000-000000000001"
-    override suspend fun importCover(bytes: ByteArray): String = "00000000-0000-4000-8000-000000000002"
+    val deleteContextWasActive = mutableListOf<Boolean>()
+    var importUriBlock: suspend (Uri) -> String = { "00000000-0000-4000-8000-000000000001" }
+    var importBytesBlock: suspend (ByteArray) -> String = { "00000000-0000-4000-8000-000000000002" }
+    var deleteBlock: suspend (String) -> Unit = {}
+    override suspend fun importCover(uri: Uri): String = importUriBlock(uri)
+    override suspend fun importCover(bytes: ByteArray): String = importBytesBlock(bytes)
     override suspend fun delete(id: String) {
+        deleteContextWasActive += currentCoroutineContext().isActive
         deleted += id
+        deleteBlock(id)
     }
 }
 
 class FakeNeteaseClient : NeteaseClient {
-    override suspend fun search(keyword: String): List<NeteaseSongSearchResult> = emptyList()
-    override suspend fun resolveSong(id: String): ResolvedNeteaseSong = error("not configured")
-    override suspend fun resolveLink(input: String): ResolvedNeteaseSong = error("not configured")
-    override suspend fun downloadCover(url: String): ByteArray = error("not configured")
+    var searchBlock: suspend (String) -> List<NeteaseSongSearchResult> = { emptyList() }
+    var resolveSongBlock: suspend (String) -> ResolvedNeteaseSong = { error("not configured") }
+    var resolveLinkBlock: suspend (String) -> ResolvedNeteaseSong = { error("not configured") }
+    var downloadCoverBlock: suspend (String) -> ByteArray = { error("not configured") }
+    override suspend fun search(keyword: String): List<NeteaseSongSearchResult> = searchBlock(keyword)
+    override suspend fun resolveSong(id: String): ResolvedNeteaseSong = resolveSongBlock(id)
+    override suspend fun resolveLink(input: String): ResolvedNeteaseSong = resolveLinkBlock(input)
+    override suspend fun downloadCover(url: String): ByteArray = downloadCoverBlock(url)
 }
 
 class FakeRendererOperations : RendererOperations {
@@ -174,9 +204,15 @@ class FakeExportFiles : ExportFiles {
     var clearBytes = 0L
     var clearFailure: Throwable? = null
     val copied = mutableListOf<Pair<ExportedImage, Uri>>()
-
-    override suspend fun createThumbnail(projectId: String, image: ExportedImage): String =
+    var thumbnailCalls = 0
+    var createThumbnailBlock: suspend (String, ExportedImage) -> String = { projectId, image ->
         File(image.file.parentFile, "$projectId-thumbnail.png").absolutePath
+    }
+
+    override suspend fun createThumbnail(projectId: String, image: ExportedImage): String {
+        thumbnailCalls += 1
+        return createThumbnailBlock(projectId, image)
+    }
 
     override suspend fun copyTo(image: ExportedImage, destination: Uri) {
         copied += image to destination

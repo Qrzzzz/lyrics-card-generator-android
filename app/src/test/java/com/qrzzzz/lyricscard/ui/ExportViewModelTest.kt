@@ -237,16 +237,124 @@ class ExportViewModelTest {
         assertEquals("", handle.get<String>(ExportViewModel.FILE_NAME_KEY))
     }
 
+    @Test
+    fun cancelDuringDelayedThumbnailCannotInterruptFinalization() = runTest(mainDispatcherRule.dispatcher) {
+        val project = project("export-finalizing")
+        val store = FakeProjectStore(listOf(project))
+        val thumbnailStarted = CompletableDeferred<Unit>()
+        val releaseThumbnail = CompletableDeferred<Unit>()
+        val exportFiles = FakeExportFiles().apply {
+            createThumbnailBlock = { projectId, image ->
+                thumbnailStarted.complete(Unit)
+                releaseThumbnail.await()
+                File(image.file.parentFile, "$projectId-thumbnail.png").absolutePath
+            }
+        }
+        val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+        val viewModel = exportViewModel(project, store, renderer, exportFiles)
+        runCurrent()
+
+        viewModel.save()
+        runCurrent()
+        assertTrue(thumbnailStarted.isCompleted)
+        assertEquals(ExportOperationState.FINALIZING, viewModel.uiState.value.operation)
+        assertFalse(viewModel.uiState.value.canCancel)
+
+        viewModel.cancelExport()
+        runCurrent()
+        assertEquals(ExportOperationState.FINALIZING, viewModel.uiState.value.operation)
+
+        releaseThumbnail.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(ExportOperationState.SUCCESS, viewModel.uiState.value.operation)
+        assertEquals(1, renderer.exportCalls)
+        assertEquals(1, exportFiles.thumbnailCalls)
+        assertEquals(1, store.recordExportCalls)
+    }
+
+    @Test
+    fun metadataFailureIsVisibleAndDoesNotHalfCommitProjectFields() = runTest(mainDispatcherRule.dispatcher) {
+        val project = project("export-metadata-warning")
+        val store = FakeProjectStore(listOf(project)).apply {
+            recordExportFailure = IllegalStateException("metadata unavailable")
+        }
+        val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+        val viewModel = exportViewModel(project, store, renderer)
+        runCurrent()
+
+        viewModel.save()
+        advanceUntilIdle()
+
+        assertEquals(ExportOperationState.SUCCESS, viewModel.uiState.value.operation)
+        assertNotNull(viewModel.uiState.value.exported)
+        assertTrue(viewModel.uiState.value.errorMessage.orEmpty().contains("metadata unavailable"))
+        val stored = store.getProject(project.id)
+        assertNull(stored?.thumbnailPath)
+        assertNull(stored?.lastExportedAt)
+    }
+
+    @Test
+    fun thumbnailFailureCanRetryWithoutDuplicateAutomaticExport() = runTest(mainDispatcherRule.dispatcher) {
+        val project = project("export-thumbnail-retry")
+        val store = FakeProjectStore(listOf(project))
+        val exportFiles = FakeExportFiles().apply {
+            createThumbnailBlock = { _, _ -> throw IllegalStateException("atomic thumbnail failed") }
+        }
+        val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+        val viewModel = exportViewModel(project, store, renderer, exportFiles)
+        runCurrent()
+
+        viewModel.save()
+        advanceUntilIdle()
+        assertEquals(ExportOperationState.SUCCESS, viewModel.uiState.value.operation)
+        assertEquals(1, renderer.exportCalls)
+        assertEquals(0, store.recordExportCalls)
+        assertTrue(viewModel.uiState.value.errorMessage.orEmpty().contains("atomic thumbnail failed"))
+
+        exportFiles.createThumbnailBlock = { projectId, image ->
+            File(image.file.parentFile, "$projectId-thumbnail.png").absolutePath
+        }
+        viewModel.retry()
+        advanceUntilIdle()
+
+        assertEquals(2, renderer.exportCalls)
+        assertEquals(2, exportFiles.thumbnailCalls)
+        assertEquals(1, store.recordExportCalls)
+        assertEquals(ExportOperationState.SUCCESS, viewModel.uiState.value.operation)
+        assertNull(viewModel.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun restoredFinalizingOperationIsInterruptedWithoutDuplicateExport() = runTest(mainDispatcherRule.dispatcher) {
+        val project = project("export-finalizing-restore")
+        val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+        val handle = SavedStateHandle(
+            mapOf(
+                ExportViewModel.PROJECT_ID_KEY to project.id,
+                ExportViewModel.OPERATION_KEY to ExportOperationState.FINALIZING.name,
+            ),
+        )
+
+        val restored = exportViewModel(project, renderer = renderer, handle = handle)
+        runCurrent()
+
+        assertEquals(ExportOperationState.INTERRUPTED, restored.uiState.value.operation)
+        assertEquals(0, renderer.exportCalls)
+        assertNull(restored.uiState.value.exported)
+    }
+
     private fun exportViewModel(
         project: Project,
+        store: FakeProjectStore = FakeProjectStore(listOf(project)),
         renderer: FakeRendererOperations = FakeRendererOperations(),
+        exportFiles: FakeExportFiles = FakeExportFiles(),
         handle: SavedStateHandle = SavedStateHandle(mapOf(ExportViewModel.PROJECT_ID_KEY to project.id)),
     ) = ExportViewModel(
         savedStateHandle = handle,
-        projects = FakeProjectStore(listOf(project)),
+        projects = store,
         preferences = FakePreferencesStore(),
         renderer = renderer,
-        exportFiles = FakeExportFiles(),
+        exportFiles = exportFiles,
         clock = { 0L },
     )
 

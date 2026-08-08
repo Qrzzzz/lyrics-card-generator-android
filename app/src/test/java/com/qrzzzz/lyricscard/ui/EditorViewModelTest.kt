@@ -2,15 +2,19 @@ package com.qrzzzz.lyricscard.ui
 
 import androidx.lifecycle.SavedStateHandle
 import com.qrzzzz.lyricscard.EditorSessionRegistry
+import com.qrzzzz.lyricscard.data.ResolvedNeteaseSong
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.PaletteSpec
 import com.qrzzzz.lyricscard.model.ProjectTemplates
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -263,16 +267,111 @@ class EditorViewModelTest {
         assertTrue(viewModel.prepareForNavigation())
     }
 
+    @Test
+    fun cancellingNeteaseCoverImportCleansPendingAssetWithoutApplyingCancelledSong() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val stored = project("project-netease-cancel")
+            val store = FakeProjectStore(listOf(stored))
+            val cleanupFinished = CompletableDeferred<Unit>()
+            val assets = FakeProjectAssets().apply {
+                deleteBlock = { cleanupFinished.complete(Unit) }
+            }
+            val netease = FakeNeteaseClient().apply {
+                resolveSongBlock = { id ->
+                    ResolvedNeteaseSong(
+                        id = id,
+                        title = if (id == "first") "Cancelled song" else "Replacement song",
+                        artist = "Artist",
+                        album = "Album",
+                        lyrics = "Line",
+                        coverUrl = if (id == "first") "https://p1.music.126.net/cover.jpg" else "",
+                    )
+                }
+                downloadCoverBlock = { byteArrayOf(1, 2, 3) }
+            }
+            lateinit var viewModel: EditorViewModel
+            assets.importBytesBlock = {
+                viewModel.resolveNeteaseSong("second")
+                "pending-cover"
+            }
+            viewModel = editorViewModel(
+                store = store,
+                handle = SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to stored.id)),
+                projectAssets = assets,
+                neteaseClient = netease,
+            )
+            runCurrent()
+
+            viewModel.resolveNeteaseSong("first")
+            runCurrent()
+            cleanupFinished.await()
+            advanceUntilIdle()
+            withTimeout(5_000L) { viewModel.uiState.first { !it.netease.isResolving } }
+
+            assertEquals(1, assets.deleted.size)
+            assertEquals("pending-cover", assets.deleted.single())
+            assertTrue(assets.deleteContextWasActive.all { it })
+            assertEquals("Replacement song", viewModel.uiState.value.currentProject?.spec?.song?.title)
+            assertFalse(viewModel.uiState.value.netease.isResolving)
+            assertFalse(viewModel.uiState.value.netease.message.contains("Cancelled song"))
+        }
+
+    @Test
+    fun failedNeteaseCoverApplicationCleansPendingAssetAndSurfacesFailure() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val stored = project("project-netease-failure")
+            val cleanupFinished = CompletableDeferred<Unit>()
+            val assets = FakeProjectAssets().apply {
+                importBytesBlock = { "bad/id" }
+                deleteBlock = { cleanupFinished.complete(Unit) }
+            }
+            val netease = FakeNeteaseClient().apply {
+                resolveSongBlock = {
+                    ResolvedNeteaseSong(
+                        id = it,
+                        title = "Must not apply",
+                        artist = "Artist",
+                        album = "Album",
+                        lyrics = "Line",
+                        coverUrl = "https://p1.music.126.net/cover.jpg",
+                    )
+                }
+                downloadCoverBlock = { byteArrayOf(1, 2, 3) }
+            }
+            val viewModel = editorViewModel(
+                store = FakeProjectStore(listOf(stored)),
+                handle = SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to stored.id)),
+                projectAssets = assets,
+                neteaseClient = netease,
+            )
+            runCurrent()
+
+            viewModel.resolveNeteaseSong("broken")
+            runCurrent()
+            cleanupFinished.await()
+            advanceUntilIdle()
+            withTimeout(5_000L) { viewModel.uiState.first { !it.netease.isResolving } }
+
+            assertEquals(1, assets.deleted.size)
+            assertEquals("bad/id", assets.deleted.single())
+            assertTrue(assets.deleteContextWasActive.all { it })
+            assertEquals(stored.spec.song.title, viewModel.uiState.value.currentProject?.spec?.song?.title)
+            assertFalse(viewModel.uiState.value.netease.isResolving)
+            assertFalse(viewModel.uiState.value.netease.message.startsWith("已从网易云导入"))
+        }
+
     private fun editorViewModel(
         store: FakeProjectStore,
         handle: SavedStateHandle,
         sessions: EditorSessionRegistry = EditorSessionRegistry(),
         renderer: FakeRendererOperations = FakeRendererOperations(),
+        projectAssets: FakeProjectAssets = FakeProjectAssets(),
+        neteaseClient: FakeNeteaseClient = FakeNeteaseClient(),
     ) = EditorViewModel(
         savedStateHandle = handle,
         projects = store,
-        projectAssets = FakeProjectAssets(),
-        neteaseClient = FakeNeteaseClient(),
+        projectAssets = projectAssets,
+        neteaseClient = neteaseClient,
         renderer = renderer,
         messages = FakeEditorMessages,
         sessions = sessions,

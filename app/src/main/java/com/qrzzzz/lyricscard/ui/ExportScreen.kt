@@ -150,6 +150,7 @@ fun ExportScreen(
                         onFileName = onFileName,
                         exported = state.exported,
                         busy = state.isBusy,
+                        canCancel = state.canCancel,
                         status = state.status,
                         error = state.errorMessage,
                         onSave = onSave,
@@ -183,6 +184,7 @@ fun ExportScreen(
                         onFileName = onFileName,
                         exported = state.exported,
                         busy = state.isBusy,
+                        canCancel = state.canCancel,
                         status = state.status,
                         error = state.errorMessage,
                         onSave = onSave,
@@ -207,6 +209,7 @@ private fun ExportControls(
     onFileName: (String) -> Unit,
     exported: ExportedImage?,
     busy: Boolean,
+    canCancel: Boolean,
     status: String,
     error: String?,
     onSave: () -> Unit,
@@ -313,9 +316,16 @@ private fun ExportControls(
                     Text(if (busy) "生成中…" else "保存", modifier = Modifier.padding(start = 6.dp))
                 }
                 if (busy) {
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        modifier = Modifier.weight(1f),
+                        enabled = canCancel,
+                    ) {
                         Icon(Icons.Rounded.Close, contentDescription = null)
-                        Text("取消", modifier = Modifier.padding(start = 6.dp))
+                        Text(
+                            if (canCancel) "取消" else "正在完成",
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
                     }
                 } else {
                     OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) {

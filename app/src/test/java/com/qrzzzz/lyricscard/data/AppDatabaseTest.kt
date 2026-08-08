@@ -197,7 +197,7 @@ class AppDatabaseTest {
                     thumbnail_path, created_at, updated_at, last_exported_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
-                arrayOf(
+                arrayOf<Any?>(
                     "legacy-v2",
                     "Legacy v2",
                     legacySpec.schemaVersion,
@@ -212,7 +212,7 @@ class AppDatabaseTest {
             )
             rawDatabase.execSQL(
                 "INSERT INTO cover_assets (id, reference_count) VALUES (?, ?)",
-                arrayOf(assetId, 1),
+                arrayOf<Any?>(assetId, 1),
             )
             rawDatabase.version = 2
         } finally {

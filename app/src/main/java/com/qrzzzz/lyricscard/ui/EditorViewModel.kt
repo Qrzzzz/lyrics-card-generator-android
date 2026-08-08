@@ -24,8 +24,12 @@ import com.qrzzzz.lyricscard.model.requireValid
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,6 +37,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 enum class AutosaveStatus {
     SAVED,
@@ -428,6 +433,7 @@ class EditorViewModel(
         updateNetease { it.copy(isResolving = true, message = "正在解析歌曲信息、歌词与封面…") }
         neteaseResolveJob = viewModelScope.launch {
             var importedCoverId: String? = null
+            var coverWarning: String? = null
             try {
                 val resolved = block()
                 val importedLineCount = LyricTextLimits.countPhysicalLines(resolved.lyrics)
@@ -447,13 +453,19 @@ class EditorViewModel(
                     return@launch
                 }
                 importedCoverId = resolved.coverUrl.takeIf(String::isNotBlank)?.let { coverUrl ->
-                    runCatching {
+                    try {
                         val bytes = neteaseClient.downloadCover(coverUrl)
                         projectAssets.importCover(bytes)
-                    }.getOrNull()
+                    } catch (cause: CancellationException) {
+                        throw cause
+                    } catch (cause: Throwable) {
+                        coverWarning = cause.message ?: "封面下载或导入失败"
+                        null
+                    }
                 }
+                currentCoroutineContext().ensureActive()
                 if (_uiState.value.currentProject?.id != projectId) {
-                    importedCoverId?.let { projectAssets.delete(it) }
+                    importedCoverId?.let { cleanupPendingCover(it) }
                     return@launch
                 }
                 val nextCoverId = importedCoverId
@@ -492,17 +504,32 @@ class EditorViewModel(
                     if (resolved.lyrics.isNotBlank()) add("歌词")
                     if (nextCoverId != null) add("封面")
                 }.joinToString("、")
-                updateNetease { it.copy(isResolving = false, message = "已从网易云导入$imported") }
+                val resultMessage = buildString {
+                    append("已从网易云导入$imported")
+                    coverWarning?.let { append("；封面未导入：$it") }
+                }
+                updateNetease { it.copy(isResolving = false, message = resultMessage) }
                 flushAutosave()
             } catch (cause: CancellationException) {
-                importedCoverId?.let { projectAssets.delete(it) }
+                importedCoverId?.let { cleanupPendingCover(it, cause) }
                 throw cause
             } catch (cause: Throwable) {
-                importedCoverId?.let { projectAssets.delete(it) }
+                importedCoverId?.let { cleanupPendingCover(it, cause) }
                 if (_uiState.value.currentProject?.id == projectId) {
                     updateNetease { it.copy(isResolving = false, message = cause.message ?: "网易云解析失败") }
                 }
             }
+        }
+    }
+
+    private suspend fun cleanupPendingCover(id: String, primaryFailure: Throwable? = null) {
+        try {
+            withContext(NonCancellable + Dispatchers.IO) {
+                projectAssets.delete(id)
+            }
+        } catch (cleanupFailure: Throwable) {
+            if (primaryFailure == null) throw cleanupFailure
+            primaryFailure.addSuppressed(cleanupFailure)
         }
     }
 
