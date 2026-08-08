@@ -203,6 +203,61 @@ class ProjectRepositoryTest {
         assertEquals(LyricTextLimits.MAX_LINES + 1, lineViolation.actual)
         assertEquals(entity, dao.getById(entity.id))
     }
+
+    @Test
+    fun `malformed project stays listable and fails open with stable domain error`() = runTest {
+        val dao = FakeProjectDao()
+        val entity = ProjectEntity(
+            id = "malformed",
+            name = "Malformed",
+            schemaVersion = RenderSpec.SCHEMA_VERSION,
+            rendererVersion = RenderSpec.DEFAULT_RENDERER_VERSION,
+            specJson = "{malformed-json",
+            coverAssetId = null,
+            thumbnailPath = null,
+            createdAt = 0L,
+            updatedAt = 0L,
+            lastExportedAt = null,
+        )
+        dao.upsert(entity)
+        val repository = ProjectRepository(dao)
+
+        assertEquals(listOf(entity.id), repository.observeProjects().first().map { it.id })
+        val failure = try {
+            repository.getProject(entity.id)
+            fail("Expected CorruptProjectException")
+            null
+        } catch (cause: CorruptProjectException) {
+            cause
+        }
+
+        assertEquals(entity.id, failure?.projectId)
+        assertEquals("Stored project '${entity.id}' is corrupt", failure?.message)
+        assertEquals(entity, dao.getById(entity.id))
+    }
+
+    @Test
+    fun `persisted alpha renderer compatibility identifier remains loadable`() = runTest {
+        val dao = FakeProjectDao()
+        val legacy = RenderSpec(rendererVersion = "android-alpha-renderer-1")
+        val entity = ProjectEntity(
+            id = "legacy-renderer",
+            name = "Legacy renderer",
+            schemaVersion = legacy.schemaVersion,
+            rendererVersion = "android-alpha-renderer-1",
+            specJson = RenderSpecJson.encode(legacy),
+            coverAssetId = null,
+            thumbnailPath = null,
+            createdAt = 0L,
+            updatedAt = 0L,
+            lastExportedAt = null,
+        )
+        dao.upsert(entity)
+
+        val loaded = ProjectRepository(dao).getProject(entity.id)
+
+        assertEquals("android-alpha-renderer-1", loaded?.spec?.rendererVersion)
+    }
 }
 
 private class FakeProjectDao : ProjectDao() {
@@ -218,6 +273,8 @@ private class FakeProjectDao : ProjectDao() {
 
     override suspend fun getById(id: String): ProjectEntity? =
         entities.value.firstOrNull { it.id == id }
+
+    override suspend fun getAll(): List<ProjectEntity> = entities.value.sortedBy { it.id }
 
     override suspend fun upsert(project: ProjectEntity) {
         entities.value = entities.value.filterNot { it.id == project.id } + project
@@ -252,6 +309,9 @@ private class FakeProjectDao : ProjectDao() {
     override suspend fun updateThumbnail(id: String, thumbnailPath: String?, updatedAt: Long): Int =
         update(id) { it.copy(thumbnailPath = thumbnailPath, updatedAt = updatedAt) }
 
+    override suspend fun clearThumbnailIfMatches(id: String, expectedPath: String): Int =
+        updateIf(id, predicate = { it.thumbnailPath == expectedPath }) { it.copy(thumbnailPath = null) }
+
     override suspend fun markExported(id: String, exportedAt: Long, updatedAt: Long): Int =
         update(id) { it.copy(lastExportedAt = exportedAt, updatedAt = updatedAt) }
 
@@ -264,6 +324,9 @@ private class FakeProjectDao : ProjectDao() {
 
     override suspend fun countProjectsReferencingAsset(id: String): Int =
         entities.value.count { it.coverAssetId == id }
+
+    override suspend fun countProjectsReferencingThumbnail(path: String): Int =
+        entities.value.count { it.thumbnailPath == path }
 
     override suspend fun getCoverAssetReferenceCount(id: String): Int? =
         coverAssets[id]?.referenceCount
@@ -293,9 +356,17 @@ private class FakeProjectDao : ProjectDao() {
     }
 
     private fun update(id: String, transform: (ProjectEntity) -> ProjectEntity): Int {
+        return updateIf(id, predicate = { true }, transform = transform)
+    }
+
+    private fun updateIf(
+        id: String,
+        predicate: (ProjectEntity) -> Boolean,
+        transform: (ProjectEntity) -> ProjectEntity,
+    ): Int {
         var matched = false
         entities.value = entities.value.map { project ->
-            if (project.id == id) {
+            if (project.id == id && predicate(project)) {
                 matched = true
                 transform(project)
             } else {

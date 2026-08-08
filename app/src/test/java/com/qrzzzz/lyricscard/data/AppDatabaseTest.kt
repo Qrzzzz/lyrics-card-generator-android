@@ -144,8 +144,97 @@ class AppDatabaseTest {
             assertEquals(assetId, migratedDao.getById("legacy-a")?.coverAssetId)
             assertEquals(assetId, migratedDao.getById("legacy-b")?.coverAssetId)
             assertEquals(2, migratedDao.getCoverAssetReferenceCount(assetId))
+            assertEquals(AppDatabase.VERSION, migrated.openHelper.readableDatabase.version)
         } finally {
             migrated.close()
+            context.deleteDatabase(databaseName)
+        }
+    }
+
+    @Test
+    fun `version 2 database opens as current without losing legacy alpha project data`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        assertEquals(2, AppDatabase.VERSION)
+        val databaseName = "current-${UUID.randomUUID()}.db"
+        context.deleteDatabase(databaseName)
+        val assetId = "legacy-v2-cover"
+        val thumbnailPath = "/private/thumbnails/legacy-v2.png"
+        val legacySpec = RenderSpec(song = SongSpec(title = "Alpha project", coverAssetId = assetId))
+        assertEquals("android-alpha-renderer-1", legacySpec.rendererVersion)
+        val rawDatabase = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        try {
+            rawDatabase.execSQL(
+                """
+                CREATE TABLE projects (
+                    id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL,
+                    renderer_version TEXT NOT NULL,
+                    spec_json TEXT NOT NULL,
+                    cover_asset_id TEXT,
+                    thumbnail_path TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    last_exported_at INTEGER,
+                    PRIMARY KEY(id)
+                )
+                """.trimIndent(),
+            )
+            rawDatabase.execSQL("CREATE INDEX index_projects_updated_at ON projects (updated_at)")
+            rawDatabase.execSQL(
+                """
+                CREATE TABLE cover_assets (
+                    id TEXT NOT NULL,
+                    reference_count INTEGER NOT NULL,
+                    PRIMARY KEY(id)
+                )
+                """.trimIndent(),
+            )
+            rawDatabase.execSQL(
+                """
+                INSERT INTO projects (
+                    id, name, schema_version, renderer_version, spec_json, cover_asset_id,
+                    thumbnail_path, created_at, updated_at, last_exported_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent(),
+                arrayOf(
+                    "legacy-v2",
+                    "Legacy v2",
+                    legacySpec.schemaVersion,
+                    legacySpec.rendererVersion,
+                    RenderSpecJson.encode(legacySpec),
+                    assetId,
+                    thumbnailPath,
+                    100L,
+                    200L,
+                    190L,
+                ),
+            )
+            rawDatabase.execSQL(
+                "INSERT INTO cover_assets (id, reference_count) VALUES (?, ?)",
+                arrayOf(assetId, 1),
+            )
+            rawDatabase.version = 2
+        } finally {
+            rawDatabase.close()
+        }
+
+        val current = Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val currentDao = current.projectDao()
+            val entity = checkNotNull(currentDao.getById("legacy-v2"))
+            assertEquals(AppDatabase.VERSION, current.openHelper.readableDatabase.version)
+            assertEquals("android-alpha-renderer-1", entity.rendererVersion)
+            assertEquals(thumbnailPath, entity.thumbnailPath)
+            assertEquals(190L, entity.lastExportedAt)
+            assertEquals(1, currentDao.getCoverAssetReferenceCount(assetId))
+            assertEquals(legacySpec, ProjectRepository(currentDao).getProject(entity.id)?.spec)
+        } finally {
+            current.close()
             context.deleteDatabase(databaseName)
         }
     }

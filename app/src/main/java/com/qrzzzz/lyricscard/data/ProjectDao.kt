@@ -17,6 +17,9 @@ abstract class ProjectDao {
     @Query("SELECT * FROM projects WHERE id = :id LIMIT 1")
     abstract suspend fun getById(id: String): ProjectEntity?
 
+    @Query("SELECT * FROM projects ORDER BY id ASC")
+    abstract suspend fun getAll(): List<ProjectEntity>
+
     @Upsert
     abstract suspend fun upsert(project: ProjectEntity)
 
@@ -68,6 +71,15 @@ abstract class ProjectDao {
     @Query(
         """
         UPDATE projects
+        SET thumbnail_path = NULL
+        WHERE id = :id AND thumbnail_path = :expectedPath
+        """,
+    )
+    abstract suspend fun clearThumbnailIfMatches(id: String, expectedPath: String): Int
+
+    @Query(
+        """
+        UPDATE projects
         SET last_exported_at = :exportedAt, updated_at = :updatedAt
         WHERE id = :id
         """,
@@ -79,6 +91,9 @@ abstract class ProjectDao {
 
     @Query("SELECT COUNT(*) FROM projects WHERE cover_asset_id = :id")
     abstract suspend fun countProjectsReferencingAsset(id: String): Int
+
+    @Query("SELECT COUNT(*) FROM projects WHERE thumbnail_path = :path")
+    abstract suspend fun countProjectsReferencingThumbnail(path: String): Int
 
     @Query("SELECT reference_count FROM cover_assets WHERE id = :id LIMIT 1")
     abstract suspend fun getCoverAssetReferenceCount(id: String): Int?
@@ -159,6 +174,7 @@ abstract class ProjectDao {
         return ProjectDeleteResult(
             deleted = true,
             releasedAssetId = current.coverAssetId?.let { synchronizeCoverAsset(it) },
+            releasedThumbnailPath = current.thumbnailPath,
         )
     }
 
@@ -189,4 +205,5 @@ data class ProjectWriteResult(
 data class ProjectDeleteResult(
     val deleted: Boolean,
     val releasedAssetId: String? = null,
+    val releasedThumbnailPath: String? = null,
 )
