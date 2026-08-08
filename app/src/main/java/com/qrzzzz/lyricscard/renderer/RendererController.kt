@@ -306,6 +306,12 @@ class RendererController private constructor(
                 existing.requestLayout()
                 existing.invalidate()
             }
+            if (
+                pendingSpec != null &&
+                _status.value.phase == RendererStatus.Phase.READY
+            ) {
+                schedulePreviewUpdate(delayMillis = 0)
+            }
             return existing
         }
         val assetLoader = WebViewAssetLoader.Builder()
@@ -367,6 +373,13 @@ class RendererController private constructor(
         if (!contextBinding.isOwnedBy(owner)) return
         runCatching { (view.parent as? ViewGroup)?.removeView(view) }
         runCatching { view.onPause() }
+        if (_status.value.phase in setOf(RendererStatus.Phase.READY, RendererStatus.Phase.RENDERING)) {
+            val wasRendering = _status.value.phase == RendererStatus.Phase.RENDERING
+            stopPreviewJobs(restoreInFlight = true)
+            if (wasRendering) {
+                _status.value = RendererStatus(RendererStatus.Phase.READY, "Preview paused for host recreation")
+            }
+        }
         contextBinding.release(owner)
     }
 
