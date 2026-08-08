@@ -2,6 +2,9 @@ package com.qrzzzz.lyricscard.ui
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -40,27 +43,42 @@ class AvdMatrixSmokeTest {
     fun productionMainActivitySixStepPreviewAndOneTwoXExportsWork() {
         val beforeIds = projectIds()
         val exported = mutableListOf<File>()
+        var returnedHome = false
+        var navigationDepth = 0
+        var createdId: String? = null
 
         try {
+            waitUntil(UI_TIMEOUT_MS) {
+                compose.onNodeWithTag(HOME_CREATE_BLANK_TAG).assertIsDisplayed().assertIsEnabled()
+                true
+            }
+            qualityStage("home-ready")
+            settleNavigation()
             compose.onNodeWithTag(HOME_CREATE_BLANK_TAG).performClick()
+            navigationDepth = 1
+            qualityStage("create-clicked")
+            createdId = waitForCreatedProject(beforeIds)
+            qualityStage("project-created")
             waitForStep(1)
+            qualityStage("editor-step-1")
 
             for (step in 2..EDITOR_STEP_COUNT) {
                 val label = stepAccessibilityLabel(step)
                 compose.onNodeWithContentDescription(label).performScrollTo().performClick()
                 waitForStep(step)
+                qualityStage("editor-step-$step")
 
                 if (step == 3) {
                     compose.onNodeWithTag(RENDERER_PREVIEW_TAG).assertExists()
                     waitUntil(RENDERER_TIMEOUT_MS) {
                         app.container.rendererController.status.value.phase == RendererStatus.Phase.READY &&
-                            app.container.rendererController.generation.value > 0
+                            app.container.rendererController.status.value.lastRenderMillis != null
                     }
+                    qualityStage("renderer-ready")
                 }
             }
 
-            val createdId = waitForCreatedProject(beforeIds)
-            val project = checkNotNull(runBlocking { app.container.projects.getProject(createdId) })
+            val project = checkNotNull(runBlocking { app.container.projects.getProject(checkNotNull(createdId)) })
             app.container.rendererController.updateSpec(project.spec)
             waitUntil(RENDERER_TIMEOUT_MS) {
                 app.container.rendererController.status.value.phase == RendererStatus.Phase.READY
@@ -69,10 +87,12 @@ class AvdMatrixSmokeTest {
             val oneX = runBlocking { app.container.renderer.exportPng(project, 1) }
             exported += oneX.file
             assertPng(oneX)
+            qualityStage("export-1x")
 
             val twoX = runBlocking { app.container.renderer.exportPng(project, 2) }
             exported += twoX.file
             assertPng(twoX)
+            qualityStage("export-2x")
             assertEquals(oneX.width * 2, twoX.width)
             assertEquals(oneX.height * 2, twoX.height)
             assertNotEquals(oneX.file.canonicalPath, twoX.file.canonicalPath)
@@ -81,16 +101,43 @@ class AvdMatrixSmokeTest {
             compose.onNodeWithText(
                 compose.activity.getString(R.string.editor_export_png, compose.activity.getString(R.string.file_png)),
             ).performClick()
+            navigationDepth = 2
             waitUntil(UI_TIMEOUT_MS) {
                 compose.onAllNodes(
                     androidx.compose.ui.test.hasText(compose.activity.getString(R.string.export_title)),
                 ).fetchSemanticsNodes().isNotEmpty()
             }
+            qualityStage("export-route")
+
+            returnToHome(navigationDepth)
+            navigationDepth = 0
+            returnedHome = true
+            qualityStage("home-returned")
+        } catch (cause: Throwable) {
+            qualityStage("failure-${cause::class.java.simpleName}")
+            runCatching {
+                repeat(2) { settleNavigation() }
+                if (navigationDepth > 0) {
+                    returnToHome(navigationDepth)
+                    navigationDepth = 0
+                    returnedHome = true
+                }
+            }
+            throw cause
         } finally {
             exported.forEach { file -> if (file.exists()) assertTrue("smoke export cleanup failed", file.delete()) }
-            val createdIds = projectIds() - beforeIds
-            createdIds.forEach { id -> runBlocking { app.container.projects.delete(id) } }
+            if (returnedHome) {
+                val createdIds = projectIds() - beforeIds
+                createdIds.forEach { id -> runBlocking { app.container.projects.delete(id) } }
+                qualityStage("cleanup-complete")
+                repeat(2) { settleNavigation() }
+                qualityStage("teardown-settled")
+            }
         }
+    }
+
+    private fun qualityStage(stage: String) {
+        Log.i(QUALITY_TAG, "matrix-smoke stage=$stage api=${android.os.Build.VERSION.SDK_INT}")
     }
 
     private fun waitForStep(step: Int) {
@@ -100,6 +147,24 @@ class AvdMatrixSmokeTest {
                 androidx.compose.ui.test.hasContentDescription(expected),
             ).fetchSemanticsNodes().isNotEmpty()
         }
+        settleNavigation()
+    }
+
+    private fun settleNavigation() {
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(NAVIGATION_SETTLE_MS)
+        SystemClock.sleep(NAVIGATION_SETTLE_MS)
+        compose.waitForIdle()
+    }
+
+    private fun returnToHome(depth: Int) {
+        repeat(depth) {
+            compose.activityRule.scenario.onActivity { activity ->
+                activity.onBackPressedDispatcher.onBackPressed()
+            }
+            settleNavigation()
+        }
+        compose.onNodeWithTag(HOME_CREATE_BLANK_TAG).assertExists()
     }
 
     private fun stepAccessibilityLabel(step: Int): String {
@@ -147,13 +212,27 @@ class AvdMatrixSmokeTest {
 
     private fun waitUntil(timeoutMillis: Long, condition: () -> Boolean) {
         val deadline = SystemClock.elapsedRealtime() + timeoutMillis
-        while (!condition() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(50)
-        assertTrue("condition timed out after $timeoutMillis ms", condition())
+        var satisfied = runCatching(condition).getOrDefault(false)
+        while (!satisfied && SystemClock.elapsedRealtime() < deadline) {
+            compose.mainClock.advanceTimeBy(POLL_FRAME_MILLIS)
+            compose.waitForIdle()
+            SystemClock.sleep(50)
+            satisfied = runCatching(condition).getOrDefault(false)
+        }
+        assertTrue(
+            "condition timed out after $timeoutMillis ms; rendererPhase=" +
+                "${app.container.rendererController.status.value.phase}; " +
+                "generation=${app.container.rendererController.generation.value}",
+            satisfied,
+        )
     }
 
     private companion object {
         const val UI_TIMEOUT_MS = 20_000L
         const val RENDERER_TIMEOUT_MS = 30_000L
+        const val NAVIGATION_SETTLE_MS = 1_000L
+        const val POLL_FRAME_MILLIS = 100L
+        const val QUALITY_TAG = "LCG_QUALITY"
         val PNG_SIGNATURE = byteArrayOf(
             0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
         )
