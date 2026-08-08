@@ -546,7 +546,7 @@ class QualityStressTest {
                 .first { phase -> phase == RendererStatus.Phase.READY }
         }
         controller.updateSpec(spec)
-        withTimeout(30_000) { completion.await() }
+        withTimeout(MAIN_THREAD_TIMEOUT_MS) { completion.await() }
         assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
     }
 
@@ -585,7 +585,7 @@ class QualityStressTest {
     }
 
     private fun waitForRenderer(controller: RendererController) {
-        waitUntil(30_000) {
+        waitUntil(MAIN_THREAD_TIMEOUT_MS) {
             controller.status.value.phase == RendererStatus.Phase.READY
         }
         assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)

@@ -272,6 +272,40 @@ class RendererControllerRecoveryTest {
     }
 
     @Test
+    fun `release during an in-flight preview reapplies only the latest spec after reattach`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val bridge = FakeRendererBridge(ByteArray(0)).apply { mode = FakeRendererBridge.Mode.HANG_SET_SPEC }
+        val controller = RendererController(context, ProjectAssetStore(context), TEST_TIMEOUT_MS, bridge)
+        val firstOwner = Any()
+        val secondOwner = Any()
+
+        try {
+            val view = controller.acquireWebView(context, firstOwner)
+            controller.updateSpec(TEST_SPEC.copy(song = TEST_SPEC.song.copy(title = "in-flight")))
+            advanceTimeBy(41)
+            runCurrent()
+            assertEquals(RendererStatus.Phase.RENDERING, controller.status.value.phase)
+
+            controller.updateSpec(TEST_SPEC.copy(song = TEST_SPEC.song.copy(title = "latest")))
+            controller.releaseWebView(firstOwner, view)
+            runCurrent()
+
+            assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+            bridge.mode = FakeRendererBridge.Mode.SUCCESS
+            val rebound = controller.acquireWebView(context, secondOwner)
+            runCurrent()
+
+            assertTrue(view === rebound)
+            assertEquals(listOf("in-flight", "latest"), bridge.appliedSpecTitles)
+            assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+        } finally {
+            controller.close()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun `invalid PNG is never published cleans part and a rebuilt session can retry`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -413,6 +447,7 @@ private class FakeRendererBridge(
                     emitSuccessfulExport(session, envelope.requestId)
                 }
             }
+            "cancel" -> pendingSpec = null
         }
     }
 
