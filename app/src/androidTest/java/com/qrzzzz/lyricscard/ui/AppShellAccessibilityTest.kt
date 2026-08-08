@@ -2,9 +2,13 @@ package com.qrzzzz.lyricscard.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -181,6 +185,7 @@ class AppShellAccessibilityTest {
         val controller = RendererController(context, ProjectAssetStore(context))
         val project = ProjectTemplates.blank(id = "landscape-shell", now = 1L)
         val showExport = mutableStateOf(false)
+        val imeBottomPx = mutableIntStateOf(0)
 
         try {
             compose.setContent {
@@ -188,6 +193,8 @@ class AppShellAccessibilityTest {
                     LocalDensity provides Density(density = 1f, fontScale = 2f),
                     LocalLayoutDirection provides LayoutDirection.Ltr,
                 ) {
+                    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+                    SideEffect { imeBottomPx.intValue = imeBottom }
                     LyricsCardTheme {
                         Box(
                             Modifier
@@ -251,6 +258,9 @@ class AppShellAccessibilityTest {
 
             compose.onNodeWithText(text(R.string.editor_netease_query_label))
                 .performClick()
+            compose.waitUntil(timeoutMillis = 5_000) { imeBottomPx.intValue > 0 }
+            assertTrue("IME inset did not become visible", imeBottomPx.intValue > 0)
+            compose.onNodeWithText(text(R.string.editor_netease_query_label))
                 .performTextInput("landscape query")
             assertDisplayedInsideViewport(text(R.string.editor_next_step))
 
