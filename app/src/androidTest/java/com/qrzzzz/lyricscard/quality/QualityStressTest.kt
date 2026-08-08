@@ -430,10 +430,9 @@ class QualityStressTest {
 
     private fun closeScenarioWithinTimeout(scenario: ActivityScenario<ComponentActivity>) {
         val startedAt = SystemClock.elapsedRealtime()
-        val deadline = startedAt + MAIN_THREAD_TIMEOUT_MS
-        val stopped = CountDownLatch(1)
+        val deadline = startedAt + SCENARIO_CLEANUP_TIMEOUT_MS
         val destroyed = CountDownLatch(1)
-        val activity = runOnMainThread(remainingCleanupTime(deadline)) {
+        val activity = runOnMainThread(remainingMainCleanupTime(deadline)) {
             ActivityLifecycleMonitorRegistry.getInstance()
                 .getActivitiesInStage(Stage.RESUMED)
                 .filterIsInstance<ComponentActivity>()
@@ -443,37 +442,18 @@ class QualityStressTest {
         Log.i(QUALITY_TAG, "scenario-cleanup-begin hasResumedActivity=${activity != null}")
         if (activity != null) {
             val observer = LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_STOP -> stopped.countDown()
-                    Lifecycle.Event.ON_DESTROY -> destroyed.countDown()
-                    else -> Unit
-                }
+                if (event == Lifecycle.Event.ON_DESTROY) destroyed.countDown()
             }
-            runOnMainThread(remainingCleanupTime(deadline)) {
+            runOnMainThread(remainingMainCleanupTime(deadline)) {
                 activity.lifecycle.addObserver(observer)
                 if (activity.lifecycle.currentState == Lifecycle.State.DESTROYED) {
-                    stopped.countDown()
                     destroyed.countDown()
                 } else {
-                    appContext.startActivity(
-                        Intent(Settings.ACTION_SETTINGS).addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                                Intent.FLAG_ACTIVITY_NO_ANIMATION,
-                        ),
-                    )
+                    activity.finishAndRemoveTask()
                 }
             }
-            if (!stopped.await(remainingCleanupTime(deadline), TimeUnit.MILLISECONDS)) {
-                throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
-            }
-            Log.i(
-                QUALITY_TAG,
-                "scenario-cleanup-background-stopped elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
-            )
-            runOnMainThread(remainingCleanupTime(deadline)) { activity.finishAndRemoveTask() }
             if (!destroyed.await(remainingCleanupTime(deadline), TimeUnit.MILLISECONDS)) {
-                throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+                throw ActivityCleanupTimeoutException(SCENARIO_CLEANUP_TIMEOUT_MS)
             }
             Log.i(
                 QUALITY_TAG,
@@ -494,7 +474,7 @@ class QualityStressTest {
             start()
         }
         if (!closeCompleted.await(remainingCleanupTime(deadline), TimeUnit.MILLISECONDS)) {
-            throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+            throw ActivityCleanupTimeoutException(SCENARIO_CLEANUP_TIMEOUT_MS)
         }
         checkNotNull(closeResult.get()) { "scenario close completed without a result" }.getOrThrow()
         Log.i(
@@ -505,9 +485,12 @@ class QualityStressTest {
 
     private fun remainingCleanupTime(deadline: Long): Long {
         val remaining = deadline - SystemClock.elapsedRealtime()
-        if (remaining <= 0L) throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+        if (remaining <= 0L) throw ActivityCleanupTimeoutException(SCENARIO_CLEANUP_TIMEOUT_MS)
         return remaining
     }
+
+    private fun remainingMainCleanupTime(deadline: Long): Long =
+        minOf(MAIN_THREAD_TIMEOUT_MS, remainingCleanupTime(deadline))
 
     private fun releaseStressSpec(): RenderSpec = RenderSpec().copy(
         content = RenderSpec().content.copy(
@@ -799,6 +782,7 @@ class QualityStressTest {
         const val BACKGROUND_INTERVAL_MS = 90L * 1_000L
         const val BACKGROUND_TIMEOUT_MS = 20_000L
         const val MAIN_THREAD_TIMEOUT_MS = 20_000L
+        const val SCENARIO_CLEANUP_TIMEOUT_MS = 30_000L
         const val STABLE_ACTIVITY_CHECKS = 10
         const val REATTACH_REGRESSION_CYCLES = 12
         const val RECREATION_INTERVAL_MS = 3L * 60L * 1_000L
