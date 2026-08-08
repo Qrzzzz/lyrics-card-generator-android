@@ -378,8 +378,19 @@ class QualityStressTest {
         try {
             binding.attach()
             waitForRenderer(controller)
+            val reattachSpec = releaseStressSpec()
             repeat(REATTACH_REGRESSION_CYCLES) { index ->
-                rotateAndReattach(binding, controller, index)
+                controller.updateSpec(
+                    reattachSpec.copy(
+                        song = reattachSpec.song.copy(title = "reattach-latest-$index"),
+                    ),
+                )
+                rotateAndReattach(
+                    binding = binding,
+                    controller = controller,
+                    index = index,
+                    detachedHoldMillis = DETACHED_SPEC_TIMEOUT_CROSSING_MS,
+                )
                 assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
             }
             Log.i(QUALITY_TAG, "reattach-summary cycles=$REATTACH_REGRESSION_CYCLES rendererErrors=0")
@@ -392,6 +403,7 @@ class QualityStressTest {
         binding: RendererBinding,
         controller: RendererController,
         index: Int,
+        detachedHoldMillis: Long = 0L,
     ) {
         binding.detach()
         val expectedOrientation = if (index % 2 == 0) {
@@ -401,6 +413,7 @@ class QualityStressTest {
         }
         Log.i(QUALITY_TAG, "edit-recreation-begin index=$index requested=$expectedOrientation")
         runOnResumedActivity { activity -> activity.requestedOrientation = expectedOrientation }
+        if (detachedHoldMillis > 0L) SystemClock.sleep(detachedHoldMillis)
         waitForStableOrientation(expectedOrientation)
         binding.attach()
         waitForRenderer(controller)
@@ -785,6 +798,7 @@ class QualityStressTest {
         const val SCENARIO_CLEANUP_TIMEOUT_MS = 30_000L
         const val STABLE_ACTIVITY_CHECKS = 10
         const val REATTACH_REGRESSION_CYCLES = 12
+        const val DETACHED_SPEC_TIMEOUT_CROSSING_MS = 8_500L
         const val RECREATION_INTERVAL_MS = 3L * 60L * 1_000L
         const val MEMORY_INTERVAL_MS = 5L * 60L * 1_000L
         const val LARGE_COVER_EDGE = 4_096
