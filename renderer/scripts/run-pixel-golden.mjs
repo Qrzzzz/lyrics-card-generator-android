@@ -56,8 +56,8 @@ const sourceFingerprint = hashTree([
   resolve(rendererRoot, "public", "fonts")
 ]);
 const fixtureFingerprint = sha256(Buffer.concat([
-  readFileSync(matrixPath),
-  readFileSync(resolve(rendererRoot, matrix.baseFixture))
+  Buffer.from(normalizeTextFingerprint(readFileSync(matrixPath))),
+  Buffer.from(normalizeTextFingerprint(readFileSync(resolve(rendererRoot, matrix.baseFixture))))
 ]));
 
 let previewServer;
@@ -333,10 +333,19 @@ function hashTree(paths) {
   for (const file of files) {
     hash.update(relative(rendererRoot, file).replaceAll("\\", "/"));
     hash.update("\0");
-    hash.update(readFileSync(file));
+    const contents = readFileSync(file);
+    hash.update(isTextFingerprintFile(file) ? normalizeTextFingerprint(contents) : contents);
     hash.update("\0");
   }
   return hash.digest("hex");
+}
+
+function isTextFingerprintFile(path) {
+  return /\.(?:css|html|json|ts|tsx|txt)$/i.test(path);
+}
+
+function normalizeTextFingerprint(contents) {
+  return contents.toString("utf8").replaceAll("\r\n", "\n");
 }
 
 function listFiles(path) {
