@@ -1,22 +1,20 @@
 package com.qrzzzz.lyricscard.ui
 
-import android.os.Build
 import android.os.SystemClock
 import android.util.Log
-import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.junit4.accessibility.disableAccessibilityChecks
-import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckPreset
+import com.google.android.apps.common.testing.accessibility.framework.AccessibilityCheckResult.AccessibilityCheckResultType
+import com.google.android.apps.common.testing.accessibility.framework.uielement.AccessibilityHierarchyAndroid
 import com.qrzzzz.lyricscard.MainActivity
 import com.qrzzzz.lyricscard.R
 import org.junit.Assert.assertTrue
@@ -73,22 +71,36 @@ class AccessibilityFrameworkTest {
         compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle)).assertExists()
     }
 
-    @OptIn(ExperimentalTestApi::class)
     private fun assertAtf(stage: String) {
         compose.waitForIdle()
-        if (Build.VERSION.SDK_INT < COMPOSE_ATF_MIN_SDK) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val root = instrumentation.uiAutomation.rootInActiveWindow
+        assertTrue("ATF could not capture the active accessibility window", root != null)
+        try {
+            val hierarchy = AccessibilityHierarchyAndroid
+                .newBuilder(requireNotNull(root), instrumentation.targetContext)
+                .build()
+            val nodeCount = hierarchy.activeWindow?.allViews?.size ?: 0
+            assertTrue("ATF captured no virtual accessibility descendants", nodeCount > 1)
+            val checks = AccessibilityCheckPreset.getAccessibilityHierarchyChecksForPreset(
+                AccessibilityCheckPreset.VERSION_3_1_CHECKS,
+            )
+            val results = checks.flatMap { it.runCheckOnHierarchy(hierarchy) }
+            val actionable = results.filter {
+                it.type == AccessibilityCheckResultType.ERROR ||
+                    it.type == AccessibilityCheckResultType.WARNING
+            }
+            val safeSummary = actionable.joinToString(limit = 12) {
+                "${it.sourceCheckClass.simpleName}#${it.resultId}:${it.type}"
+            }
+            assertTrue("ATF findings: $safeSummary", actionable.isEmpty())
             Log.i(
                 ATF_TAG,
-                "stage=$stage engine=compose-atf assertion=unsupported sdk=${Build.VERSION.SDK_INT} min=$COMPOSE_ATF_MIN_SDK",
+                "stage=$stage engine=node-hierarchy-atf preset=3.1 checks=${checks.size} nodes=$nodeCount " +
+                    "results=${results.size} assertion=pass",
             )
-            return
-        }
-        compose.enableAccessibilityChecks()
-        try {
-            compose.onRoot().tryPerformAccessibilityChecks()
-            Log.i(ATF_TAG, "stage=$stage engine=compose-atf assertion=pass")
         } finally {
-            compose.disableAccessibilityChecks()
+            root?.recycle()
         }
     }
 
@@ -114,7 +126,6 @@ class AccessibilityFrameworkTest {
         const val UI_TIMEOUT_MS = 20_000L
         const val POLL_FRAME_MILLIS = 100L
         const val NAVIGATION_SETTLE_MS = 1_000L
-        const val COMPOSE_ATF_MIN_SDK = 34
         const val ATF_TAG = "LCG_ATF"
     }
 }

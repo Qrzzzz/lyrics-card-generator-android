@@ -138,8 +138,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.test.espresso.accessibility)
+    androidTestCompileOnly(libs.guava.atf)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4.accessibility)
 }
 
 val buildRenderer by tasks.registering(Exec::class) {
