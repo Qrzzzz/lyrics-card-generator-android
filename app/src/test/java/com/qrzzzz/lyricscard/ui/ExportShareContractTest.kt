@@ -2,7 +2,6 @@ package com.qrzzzz.lyricscard.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -87,16 +86,19 @@ class ExportShareContractTest {
             deleteOnExit()
         }
         var startAttempted = false
-        val noActivityContext = object : ContextWrapper(context) {
-            override fun startActivity(intent: Intent) {
-                startAttempted = true
-                throw ActivityNotFoundException()
-            }
-        }
-
         assertEquals(
             UiText.resource(R.string.export_error_open_share_sheet),
-            shareImage(noActivityContext, ExportedImage(insideRoot, 10, 10)),
+            shareImage(
+                context = context,
+                image = ExportedImage(insideRoot, 10, 10),
+                resolveUri = { _, _ ->
+                    Uri.parse("content://com.qrzzzz.lyricscard.test/exports/share.png")
+                },
+                launch = { _, _ ->
+                    startAttempted = true
+                    throw ActivityNotFoundException()
+                },
+            ),
         )
         assertTrue(startAttempted)
     }

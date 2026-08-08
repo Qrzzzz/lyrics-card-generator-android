@@ -516,9 +516,17 @@ internal fun buildShareIntent(
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
-internal fun shareImage(context: android.content.Context, image: ExportedImage): UiText? = try {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", image.file)
-    context.startActivity(
+internal fun shareImage(
+    context: android.content.Context,
+    image: ExportedImage,
+    resolveUri: (android.content.Context, ExportedImage) -> android.net.Uri = { receiver, exported ->
+        FileProvider.getUriForFile(receiver, "${receiver.packageName}.files", exported.file)
+    },
+    launch: (android.content.Context, Intent) -> Unit = { receiver, intent -> receiver.startActivity(intent) },
+): UiText? = try {
+    val uri = resolveUri(context, image)
+    launch(
+        context,
         Intent.createChooser(
             buildShareIntent(context, image, uri),
             context.getString(R.string.export_share_chooser),
