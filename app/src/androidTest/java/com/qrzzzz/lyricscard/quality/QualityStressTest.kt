@@ -431,6 +431,7 @@ class QualityStressTest {
     private fun closeScenarioWithinTimeout(scenario: ActivityScenario<ComponentActivity>) {
         val startedAt = SystemClock.elapsedRealtime()
         val deadline = startedAt + MAIN_THREAD_TIMEOUT_MS
+        val stopped = CountDownLatch(1)
         val destroyed = CountDownLatch(1)
         val activity = runOnMainThread(remainingCleanupTime(deadline)) {
             ActivityLifecycleMonitorRegistry.getInstance()
@@ -442,16 +443,35 @@ class QualityStressTest {
         Log.i(QUALITY_TAG, "scenario-cleanup-begin hasResumedActivity=${activity != null}")
         if (activity != null) {
             val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_DESTROY) destroyed.countDown()
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> stopped.countDown()
+                    Lifecycle.Event.ON_DESTROY -> destroyed.countDown()
+                    else -> Unit
+                }
             }
             runOnMainThread(remainingCleanupTime(deadline)) {
                 activity.lifecycle.addObserver(observer)
                 if (activity.lifecycle.currentState == Lifecycle.State.DESTROYED) {
+                    stopped.countDown()
                     destroyed.countDown()
                 } else {
-                    activity.finishAndRemoveTask()
+                    appContext.startActivity(
+                        Intent(Settings.ACTION_SETTINGS).addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                Intent.FLAG_ACTIVITY_NO_ANIMATION,
+                        ),
+                    )
                 }
             }
+            if (!stopped.await(remainingCleanupTime(deadline), TimeUnit.MILLISECONDS)) {
+                throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
+            }
+            Log.i(
+                QUALITY_TAG,
+                "scenario-cleanup-background-stopped elapsedMs=${SystemClock.elapsedRealtime() - startedAt}",
+            )
+            runOnMainThread(remainingCleanupTime(deadline)) { activity.finishAndRemoveTask() }
             if (!destroyed.await(remainingCleanupTime(deadline), TimeUnit.MILLISECONDS)) {
                 throw ActivityCleanupTimeoutException(MAIN_THREAD_TIMEOUT_MS)
             }
