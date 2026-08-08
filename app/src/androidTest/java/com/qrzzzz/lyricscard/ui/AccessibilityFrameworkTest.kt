@@ -109,18 +109,28 @@ class AccessibilityFrameworkTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun waitForAccessibilityRoot(automation: UiAutomation): AccessibilityNodeInfo {
         val deadline = SystemClock.elapsedRealtime() + UI_TIMEOUT_MS
-        var root = automation.rootInActiveWindow
-        while (root == null && SystemClock.elapsedRealtime() < deadline) {
+        val expectedPackage = compose.activity.packageName
+        var lastPackage = "<none>"
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val candidate = automation.rootInActiveWindow
+            if (candidate != null) {
+                lastPackage = candidate.packageName?.toString() ?: "<null>"
+                if (lastPackage == expectedPackage) {
+                    return candidate
+                }
+                candidate.recycle()
+            }
             compose.mainClock.advanceTimeBy(POLL_FRAME_MILLIS)
             compose.waitForIdle()
             SystemClock.sleep(50)
-            root = automation.rootInActiveWindow
         }
-        return requireNotNull(root) {
-            "ATF could not capture the active accessibility window within $UI_TIMEOUT_MS ms"
-        }
+        throw AssertionError(
+            "ATF active package mismatch within $UI_TIMEOUT_MS ms: " +
+                "expected=$expectedPackage actual=$lastPackage",
+        )
     }
 
     private fun waitForText(value: String, substring: Boolean = false) {
