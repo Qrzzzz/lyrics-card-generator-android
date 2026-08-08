@@ -3,6 +3,7 @@ package com.qrzzzz.lyricscard.ui
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.SystemClock
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -30,6 +31,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.IdlingPolicies
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.data.UserPreferences
@@ -37,6 +39,7 @@ import com.qrzzzz.lyricscard.model.ProjectTemplates
 import com.qrzzzz.lyricscard.renderer.ProjectAssetStore
 import com.qrzzzz.lyricscard.renderer.RendererController
 import com.qrzzzz.lyricscard.ui.theme.LyricsCardTheme
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -185,12 +188,16 @@ class AppShellAccessibilityTest {
     }
 
     @Test
-    fun landscapeEditorAndExportKeepActionsReachableAfterImeFocus() {
+    fun landscapeEditorAndExportKeepActionsReachableAfterImeFocus() = withEspressoTimeouts {
+        val startedAt = SystemClock.elapsedRealtime()
+        logImeStage(startedAt, "test-start")
         val originalOrientation = compose.activity.requestedOrientation
+        logImeStage(startedAt, "orientation-request-begin")
         compose.activityRule.scenario.onActivity { activity ->
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
         waitForOrientation(Configuration.ORIENTATION_LANDSCAPE)
+        logImeStage(startedAt, "orientation-ready")
         val deviceDensity = compose.activity.resources.displayMetrics.density
         val context = compose.activity.applicationContext
         val controller = RendererController(context, ProjectAssetStore(context))
@@ -199,6 +206,7 @@ class AppShellAccessibilityTest {
         val imeBottomPx = mutableIntStateOf(0)
 
         try {
+            logImeStage(startedAt, "set-content-begin")
             compose.setContent {
                 CompositionLocalProvider(
                     LocalDensity provides Density(density = deviceDensity, fontScale = 2f),
@@ -266,34 +274,66 @@ class AppShellAccessibilityTest {
                     }
                 }
             }
+            logImeStage(startedAt, "set-content-ready")
 
+            logImeStage(startedAt, "editor-input-begin")
             compose.onNodeWithTag(EDITOR_NETEASE_QUERY_FIELD_TAG)
                 .performScrollTo()
                 .performClick()
                 .performTextInput("landscape query")
+            logImeStage(startedAt, "editor-input-complete")
             waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
+            logImeStage(startedAt, "editor-ime-ready")
             assertTrue("IME inset did not become visible", imeBottomPx.intValue > 0)
             assertDisplayedInsideViewport(text(R.string.editor_next_step))
 
+            logImeStage(startedAt, "export-switch-begin")
             compose.runOnIdle { showExport.value = true }
             assertDisplayedInsideViewport(text(R.string.export_title))
+            logImeStage(startedAt, "export-switch-ready")
             compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
                 .performScrollToNode(hasTestTag(EXPORT_FILE_NAME_TAG))
+            logImeStage(startedAt, "export-input-begin")
             compose.onNodeWithTag(EXPORT_FILE_NAME_TAG)
                 .performClick()
                 .performTextInput("x")
+            logImeStage(startedAt, "export-input-complete")
             waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
+            logImeStage(startedAt, "export-ime-ready")
             assertTrue("IME inset was not visible over Export", imeBottomPx.intValue > 0)
             compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
                 .performScrollToNode(hasTestTag(EXPORT_SAVE_ACTION_TAG))
             compose.onNodeWithTag(EXPORT_SAVE_ACTION_TAG)
                 .assertIsDisplayed()
+            logImeStage(startedAt, "assertions-complete")
         } finally {
+            logImeStage(startedAt, "controller-close-begin")
             compose.runOnIdle { controller.close() }
+            logImeStage(startedAt, "controller-close-complete")
+            logImeStage(startedAt, "orientation-restore-begin")
             compose.activityRule.scenario.onActivity { activity ->
                 activity.requestedOrientation = originalOrientation
             }
+            logImeStage(startedAt, "orientation-restore-complete")
         }
+        logImeStage(startedAt, "test-complete")
+    }
+
+    private inline fun withEspressoTimeouts(block: () -> Unit) {
+        val master = IdlingPolicies.getMasterIdlingPolicy()
+        val resource = IdlingPolicies.getDynamicIdlingResourceErrorPolicy()
+        IdlingPolicies.setMasterPolicyTimeout(ESPRESSO_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        IdlingPolicies.setIdlingResourceTimeout(ESPRESSO_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        try {
+            block()
+        } finally {
+            IdlingPolicies.setMasterPolicyTimeout(master.idleTimeout, master.idleTimeoutUnit)
+            IdlingPolicies.setIdlingResourceTimeout(resource.idleTimeout, resource.idleTimeoutUnit)
+        }
+    }
+
+    private fun logImeStage(startedAt: Long, stage: String) {
+        Log.i(IME_TAG, "stage=$stage elapsedMs=${SystemClock.elapsedRealtime() - startedAt}")
     }
 
     private fun assertDisplayedInsideViewport(value: String) {
@@ -335,5 +375,7 @@ class AppShellAccessibilityTest {
         const val IME_TIMEOUT_MS = 5_000L
         const val ORIENTATION_TIMEOUT_MS = 5_000L
         const val POLL_FRAME_MILLIS = 100L
+        const val ESPRESSO_TIMEOUT_MS = 20_000L
+        const val IME_TAG = "LCG_IME"
     }
 }
