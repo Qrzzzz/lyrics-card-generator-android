@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="launch_background">#F5F1EB</color>
+    <color name="brand_seed">#6656C8</color>
+    <color name="app_window_background">#6656C8</color>
+    <color name="splash_background">#6656C8</color>
+    <color name="launcher_background">#6656C8</color>
 </resources>
 
