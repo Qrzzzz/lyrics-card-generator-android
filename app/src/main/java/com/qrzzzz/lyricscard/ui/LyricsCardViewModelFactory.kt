@@ -35,6 +35,7 @@ class LyricsCardViewModelFactory(
         modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(
             preferences = container.preferences,
             exportFiles = container.exportFiles,
+            diagnostics = container.diagnostics,
         )
 
         else -> error("Unknown ViewModel class: ${modelClass.name}")

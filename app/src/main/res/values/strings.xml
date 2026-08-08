@@ -30,21 +30,20 @@
     <string name="renderer_manifest_label" translatable="false">Renderer manifest</string>
 
     <string name="home_title">歌词卡片</string>
-    <string name="home_alpha_label" translatable="false">Android Alpha 0.2</string>
     <string name="home_settings_description">设置</string>
+    <string name="home_create_heading">新建项目</string>
     <string name="home_recent_projects">最近项目</string>
-    <string name="home_hero_title">把一句歌词，做成一张值得保存的卡片。</string>
-    <string name="home_hero_subtitle">原生编辑、离线预览，最终图片沿用 Windows 版的网页渲染路径。</string>
     <string name="home_blank_project">空白项目</string>
     <string name="home_open_sample">打开示例</string>
     <string name="home_empty_title">还没有项目</string>
     <string name="home_empty_body">从空白卡片或内置示例开始</string>
     <string name="home_updated_at">更新于 %1$s</string>
-    <string name="home_project_menu_description">项目菜单</string>
+    <string name="home_project_menu_description">%1$s 的项目菜单</string>
     <string name="home_rename">重命名</string>
     <string name="home_duplicate">复制</string>
     <string name="home_rename_project">重命名项目</string>
     <string name="home_project_name">项目名称</string>
+    <string name="home_project_name_required">请输入项目名称</string>
     <string name="home_delete_project_title">删除“%1$s”？</string>
     <string name="home_delete_project_body">项目数据将从本机删除，此操作无法撤销。</string>
     <string name="home_error_read_projects">无法读取项目</string>
@@ -219,25 +218,39 @@
     <string name="export_finalizing_records">正在完成缩略图与导出记录…</string>
     <string name="export_metadata_warning">图片已生成，但无法更新项目导出记录</string>
 
-    <string name="settings_title">设置与诊断</string>
-    <string name="settings_section_general">常规</string>
+    <string name="settings_title">设置</string>
+    <string name="settings_section_appearance">外观</string>
+    <string name="settings_section_export">导出</string>
+    <string name="settings_section_editing">编辑</string>
+    <string name="settings_section_storage">存储</string>
+    <string name="settings_section_about_diagnostics">关于与诊断</string>
     <string name="settings_dark_mode">深色模式</string>
-    <string name="settings_dark_mode_description">只影响原生编辑界面</string>
+    <string name="settings_dark_mode_description">切换应用界面的浅色与深色外观</string>
+    <string name="settings_state_on">已开启</string>
+    <string name="settings_state_off">已关闭</string>
     <string name="settings_default_export_quality">默认导出质量</string>
+    <string name="settings_default_export_quality_description">点击在 1× 与 2× 之间切换</string>
     <string name="settings_scale_standard">1× 标准</string>
     <string name="settings_scale_high">2× 高清</string>
     <string name="settings_safe_area">预览安全区域</string>
-    <string name="settings_safe_area_description">为后续裁切提示保留</string>
-    <string name="settings_section_storage">本地存储</string>
+    <string name="settings_safe_area_description">在编辑预览中显示裁切参考区域</string>
     <string name="settings_clear_export_cache">清理导出缓存</string>
-    <string name="settings_section_diagnostics">诊断信息</string>
+    <string name="settings_clear_export_cache_description">删除临时导出文件，不影响项目</string>
+    <string name="settings_cache_ready">可以清理</string>
+    <string name="settings_cache_clearing">正在清理导出缓存…</string>
     <string name="settings_app_version">应用版本</string>
     <string name="settings_renderer" translatable="false">Renderer</string>
     <string name="settings_render_spec_schema" translatable="false">RenderSpec Schema</string>
-    <string name="settings_windows_baseline">Windows 基准</string>
+    <string name="settings_renderer_protocol">Renderer 协议</string>
+    <string name="settings_renderer_source">Renderer 来源</string>
     <string name="settings_system_webview" translatable="false">System WebView</string>
-    <string name="settings_privacy_note">诊断信息不包含歌词正文、封面数据或导出图片。Alpha 默认不声明 INTERNET 权限。</string>
-    <string name="settings_renderer_manifest_missing">renderer manifest 尚未生成</string>
+    <string name="settings_app_version_value" translatable="false">%1$s (%2$d)</string>
+    <string name="settings_schema_value" translatable="false">v%1$d</string>
+    <string name="settings_protocol_value" translatable="false">v%1$d</string>
+    <string name="settings_renderer_source_value" translatable="false">%1$s · %2$s</string>
+    <string name="settings_package_version_value" translatable="false">%1$s %2$s</string>
+    <string name="settings_privacy_note">网易云导入需要网络连接，应用已声明 INTERNET 权限。诊断信息不包含歌词、URI、封面路径或渲染参数。</string>
+    <string name="settings_diagnostics_unavailable">部分诊断信息暂时不可用</string>
     <string name="settings_cache_cleared">已清理 %1$.1f MB 导出缓存</string>
     <string name="settings_error_read">无法读取设置</string>
     <string name="settings_error_save">无法保存设置</string>

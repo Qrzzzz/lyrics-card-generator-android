@@ -32,7 +32,7 @@ class HomeViewModel(
     init {
         viewModelScope.launch {
             projects.observeProjects()
-                .catch { cause ->
+                .catch {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -59,15 +59,18 @@ class HomeViewModel(
     }
 
     suspend fun duplicateProject(id: String): Boolean = runOperation(R.string.home_error_duplicate) {
-        projects.duplicate(id) != null
+        checkNotNull(projects.duplicate(id)) { "Project does not exist" }
+        true
     } ?: false
 
     suspend fun renameProject(id: String, name: String): Boolean = runOperation(R.string.home_error_rename) {
-        projects.rename(id, name)
+        check(projects.rename(id, name)) { "Project does not exist" }
+        true
     } ?: false
 
     suspend fun deleteProject(id: String): Boolean = runOperation(R.string.home_error_delete) {
-        projects.delete(id)
+        check(projects.delete(id)) { "Project does not exist" }
+        true
     } ?: false
 
     fun clearError() {

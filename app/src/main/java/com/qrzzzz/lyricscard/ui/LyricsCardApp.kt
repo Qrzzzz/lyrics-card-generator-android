@@ -58,6 +58,7 @@ fun LyricsCardApp(
 
             HomeScreen(
                 projects = state.projects,
+                isLoading = state.isLoading,
                 isWorking = state.isWorking,
                 snackbarHost = { SnackbarHost(snackbar) },
                 onCreateBlank = {
@@ -217,6 +218,7 @@ fun LyricsCardApp(
                 onDefaultExportScale = settingsViewModel::setDefaultExportScale,
                 onShowSafeArea = settingsViewModel::setShowSafeArea,
                 onClearExportCache = settingsViewModel::clearExportCache,
+                onMessageShown = settingsViewModel::clearMessages,
             )
         }
     }

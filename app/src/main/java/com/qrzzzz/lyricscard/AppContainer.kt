@@ -2,6 +2,7 @@ package com.qrzzzz.lyricscard
 
 import android.content.Context
 import android.net.Uri
+import android.webkit.WebView
 import androidx.room.Room
 import com.qrzzzz.lyricscard.data.AppDatabase
 import com.qrzzzz.lyricscard.data.NeteaseMusicService
@@ -24,6 +25,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 interface AppContainer {
     val projects: ProjectStore
@@ -33,6 +35,7 @@ interface AppContainer {
     val rendererController: RendererController
     val renderer: RendererOperations
     val exportFiles: ExportFiles
+    val diagnostics: DiagnosticsReader
     val editorSessions: EditorSessionRegistry
 
     fun start()
@@ -86,6 +89,23 @@ interface ExportFiles {
     suspend fun clearExportCache(): Long
 }
 
+data class DiagnosticsSnapshot(
+    val appVersionName: String,
+    val appVersionCode: Int,
+    val rendererVersion: String,
+    val rendererSchemaVersion: Int,
+    val rendererProtocolVersion: Int?,
+    val rendererSourcePackageVersion: String?,
+    val rendererSourceCommit: String?,
+    val rendererFontManifestHash: String?,
+    val systemWebViewPackage: String?,
+    val systemWebViewVersion: String?,
+)
+
+fun interface DiagnosticsReader {
+    suspend fun read(): DiagnosticsSnapshot
+}
+
 interface EditorAutosaveSession {
     suspend fun flushAutosave(): Boolean
 }
@@ -137,6 +157,7 @@ class DefaultAppContainer(context: Context) : AppContainer {
     override val rendererController: RendererController by rendererControllerDelegate
     override val renderer: RendererOperations by lazy { AndroidRendererOperations(rendererController) }
     override val exportFiles: ExportFiles = AndroidExportFiles(appContext, nativeAssetStore)
+    override val diagnostics: DiagnosticsReader = AndroidDiagnosticsReader(appContext)
     override val editorSessions = EditorSessionRegistry()
 
     override fun start() {
@@ -217,7 +238,7 @@ private class AndroidRendererOperations(
     override fun retry() = controller.retry()
 }
 
-private class AndroidExportFiles(
+internal class AndroidExportFiles(
     context: Context,
     private val assetStore: ProjectAssetStore,
 ) : ExportFiles {
@@ -240,8 +261,46 @@ private class AndroidExportFiles(
         } else {
             0L
         }
-        directory.deleteRecursively()
+        if (directory.exists() && !directory.deleteRecursively()) {
+            error("Export cache could not be removed")
+        }
         bytes
     }
 
+}
+
+internal class AndroidDiagnosticsReader(context: Context) : DiagnosticsReader {
+    private val appContext = context.applicationContext
+
+    override suspend fun read(): DiagnosticsSnapshot = withContext(Dispatchers.IO) {
+        val manifest = runCatching {
+            appContext.assets.open(RENDERER_MANIFEST_PATH)
+                .bufferedReader(Charsets.UTF_8)
+                .use { JSONObject(it.readText()) }
+        }.getOrNull()
+        val webViewPackage = runCatching { WebView.getCurrentWebViewPackage() }.getOrNull()
+
+        DiagnosticsSnapshot(
+            appVersionName = BuildConfig.VERSION_NAME,
+            appVersionCode = BuildConfig.VERSION_CODE,
+            rendererVersion = manifest.stringOrNull("rendererVersion") ?: BuildConfig.RENDERER_VERSION,
+            rendererSchemaVersion = manifest.intOrNull("schemaVersion") ?: BuildConfig.RENDERER_SCHEMA_VERSION,
+            rendererProtocolVersion = manifest.intOrNull("protocolVersion"),
+            rendererSourcePackageVersion = manifest.stringOrNull("sourcePackageVersion"),
+            rendererSourceCommit = manifest.stringOrNull("sourceCommit"),
+            rendererFontManifestHash = manifest.stringOrNull("fontManifestHash"),
+            systemWebViewPackage = webViewPackage?.packageName,
+            systemWebViewVersion = webViewPackage?.versionName,
+        )
+    }
+
+    private fun JSONObject?.stringOrNull(key: String): String? =
+        this?.optString(key)?.takeIf(String::isNotBlank)
+
+    private fun JSONObject?.intOrNull(key: String): Int? =
+        this?.takeIf { it.has(key) && !it.isNull(key) }?.optInt(key)
+
+    private companion object {
+        const val RENDERER_MANIFEST_PATH = "renderer/renderer-manifest.json"
+    }
 }
