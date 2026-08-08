@@ -509,8 +509,7 @@ internal fun buildShareIntent(
 ): Intent = Intent(Intent.ACTION_SEND).apply {
         type = image.mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
-        clipData = ClipData.newUri(
-            context.contentResolver,
+        clipData = ClipData.newRawUri(
             context.getString(R.string.export_clip_label),
             uri,
         )
