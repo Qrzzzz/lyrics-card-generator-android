@@ -247,6 +247,7 @@ class RendererControllerRecoveryTest {
             bridge.completePendingSpec()
             runCurrent()
             assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+            assertTrue(controller.status.value.lastRenderMillis != null)
         } finally {
             controller.close()
             Dispatchers.resetMain()

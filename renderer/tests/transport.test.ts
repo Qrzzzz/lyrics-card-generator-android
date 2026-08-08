@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   blobToBase64Chunks,
   createEnvelope,
@@ -9,6 +9,8 @@ import {
 } from "../src/transport";
 
 describe("renderer protocol", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("parses object and JSON messages", () => {
     const envelope = createEnvelope("request-1", "ping", {});
     expect(parseHostEnvelope(envelope)).toEqual(envelope);
@@ -54,5 +56,32 @@ describe("renderer protocol", () => {
     expect(chunks.every((chunk) => chunk.total === 3 && chunk.byteLength <= EXPORT_CHUNK_BYTES)).toBe(true);
     const restored = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk.base64, "base64")));
     expect(restored.equals(Buffer.from(source))).toBe(true);
+  });
+
+  it("streams chunks through FileReader when legacy WebView lacks Blob.arrayBuffer", async () => {
+    const source = new Uint8Array([0, 1, 2, 127, 128, 254, 255]);
+    const legacyBlob = {
+      size: source.byteLength,
+      slice(start: number, end: number) {
+        return { legacyBytes: source.slice(start, end) } as unknown as Blob;
+      }
+    } as Blob;
+    class LegacyFileReader {
+      error: Error | null = null;
+      result: ArrayBuffer | null = null;
+      onerror: (() => void) | null = null;
+      onload: (() => void) | null = null;
+
+      readAsArrayBuffer(value: Blob) {
+        const bytes = (value as unknown as { legacyBytes: Uint8Array }).legacyBytes;
+        this.result = bytes.slice().buffer;
+        this.onload?.();
+      }
+    }
+    vi.stubGlobal("FileReader", LegacyFileReader);
+    const chunks: Array<{ index: number; total: number; byteLength: number; base64: string }> = [];
+
+    expect(await blobToBase64Chunks(legacyBlob, (chunk) => chunks.push(chunk))).toBe(1);
+    expect(Buffer.from(chunks[0].base64, "base64").equals(Buffer.from(source))).toBe(true);
   });
 });

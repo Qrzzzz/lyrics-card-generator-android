@@ -5,8 +5,11 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
+import android.os.SystemClock
 import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebMessage
+import android.webkit.WebMessagePort
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -122,37 +125,128 @@ class RendererException(message: String, cause: Throwable? = null) : Exception(m
 internal interface RendererBridge {
     fun attach(view: WebView, onMessage: (String) -> Unit): Boolean
 
+    fun onMainFrameLoaded(view: WebView, onFailure: (Throwable) -> Unit) = Unit
+
     fun send(view: WebView, envelope: RendererEnvelope)
 
     fun detach(view: WebView)
 }
 
 private class WebViewRendererBridge : RendererBridge {
+    private var listenerAttached = false
+    private var fallbackPort: WebMessagePort? = null
+    private var fallbackOnMessage: ((String) -> Unit)? = null
+
     override fun attach(view: WebView, onMessage: (String) -> Unit): Boolean {
-        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return false
-        WebViewCompat.addWebMessageListener(
-            view,
-            BRIDGE_OBJECT,
-            setOf(TRUSTED_ORIGIN),
-        ) { _, message, sourceOrigin, isMainFrame, _ ->
-            if (isMainFrame && sourceOrigin.toString() == TRUSTED_ORIGIN) {
-                message.data?.let(onMessage)
+        listenerAttached = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
+        if (listenerAttached) {
+            WebViewCompat.addWebMessageListener(
+                view,
+                BRIDGE_OBJECT,
+                setOf(TRUSTED_ORIGIN),
+            ) { _, message, sourceOrigin, isMainFrame, _ ->
+                if (isMainFrame && sourceOrigin.toString() == TRUSTED_ORIGIN) {
+                    message.data?.let(onMessage)
+                }
             }
+        } else {
+            fallbackOnMessage = onMessage
         }
         return true
     }
 
+    override fun onMainFrameLoaded(view: WebView, onFailure: (Throwable) -> Unit) {
+        if (listenerAttached || fallbackPort != null) return
+
+        val nonce = UUID.randomUUID().toString()
+        val ports = runCatching { view.createWebMessageChannel() }
+            .getOrElse { cause ->
+                onFailure(cause)
+                return
+            }
+        val nativePort = ports[0]
+        val pagePort = ports[1]
+        fallbackPort = nativePort
+        nativePort.setWebMessageCallback(
+            object : WebMessagePort.WebMessageCallback() {
+                override fun onMessage(port: WebMessagePort, message: WebMessage) {
+                    message.data?.let { data -> fallbackOnMessage?.invoke(data) }
+                }
+            },
+        )
+
+        view.evaluateJavascript(legacyBridgeBootstrap(nonce)) {
+            if (fallbackPort !== nativePort) {
+                runCatching { pagePort.close() }
+                return@evaluateJavascript
+            }
+            runCatching {
+                view.postWebMessage(
+                    WebMessage(nonce, arrayOf(pagePort)),
+                    Uri.parse(TRUSTED_ORIGIN),
+                )
+            }.onFailure { cause ->
+                fallbackPort = null
+                runCatching { nativePort.close() }
+                runCatching { pagePort.close() }
+                onFailure(cause)
+            }
+        }
+    }
+
     override fun send(view: WebView, envelope: RendererEnvelope) {
         val json = RenderSpecJson.format.encodeToString(envelope)
-        val quoted = JsonPrimitive(json).toString()
-        val script = "window.LyricsCardRenderer && window.LyricsCardRenderer.receive(JSON.parse($quoted));"
-        view.evaluateJavascript(script, null)
+        if (listenerAttached) {
+            val quoted = JsonPrimitive(json).toString()
+            val script = "window.LyricsCardRenderer && window.LyricsCardRenderer.receive(JSON.parse($quoted));"
+            view.evaluateJavascript(script, null)
+        } else {
+            val port = fallbackPort ?: throw RendererException("安全消息通道尚未就绪")
+            port.postMessage(WebMessage(json))
+        }
     }
 
     override fun detach(view: WebView) {
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+        if (listenerAttached) {
             runCatching { WebViewCompat.removeWebMessageListener(view, BRIDGE_OBJECT) }
         }
+        listenerAttached = false
+        fallbackOnMessage = null
+        fallbackPort?.let { port -> runCatching { port.close() } }
+        fallbackPort = null
+    }
+
+    private fun legacyBridgeBootstrap(nonce: String): String {
+        val quotedNonce = JsonPrimitive(nonce).toString()
+        val quotedOrigin = JsonPrimitive(TRUSTED_ORIGIN).toString()
+        return """
+            (() => {
+              const expectedNonce = $quotedNonce;
+              if (window.location.origin !== $quotedOrigin || window.__lyricsCardPortPending) return;
+              window.__lyricsCardPortPending = true;
+              const receivePort = (event) => {
+                if (event.data !== expectedNonce || !event.ports || event.ports.length !== 1) return;
+                window.removeEventListener("message", receivePort);
+                const port = event.ports[0];
+                window.LyricsCardNative = { postMessage: (message) => port.postMessage(message) };
+                port.onmessage = (messageEvent) => {
+                  if (typeof messageEvent.data !== "string") return;
+                  try {
+                    window.LyricsCardRenderer &&
+                      window.LyricsCardRenderer.receive(JSON.parse(messageEvent.data));
+                  } catch (_) {}
+                };
+                if (port.start) port.start();
+                window.LyricsCardRenderer && window.LyricsCardRenderer.receive({
+                  protocolVersion: 1,
+                  requestId: `legacy-${'$'}{expectedNonce}`,
+                  type: "initialize",
+                  payload: {}
+                });
+              };
+              window.addEventListener("message", receivePort);
+            })();
+        """.trimIndent()
     }
 }
 
@@ -293,6 +387,7 @@ class RendererController private constructor(
                 val value = pendingSpec ?: break
                 pendingSpec = null
                 previewInFlightSpec = value
+                val renderStartedAt = SystemClock.elapsedRealtime()
                 _status.value = RendererStatus(RendererStatus.Phase.RENDERING, "正在更新预览…")
                 try {
                     val applied = operationMutex.withLock {
@@ -304,7 +399,11 @@ class RendererController private constructor(
                     }
                     if (applied.type != "specApplied") throw RendererException("渲染器未确认预览设置")
                     previewInFlightSpec = null
-                    _status.value = RendererStatus(RendererStatus.Phase.READY, "预览已更新")
+                    _status.value = RendererStatus(
+                        RendererStatus.Phase.READY,
+                        "预览已更新",
+                        lastRenderMillis = (SystemClock.elapsedRealtime() - renderStartedAt).coerceAtLeast(0L),
+                    )
                 } catch (cause: Throwable) {
                     pendingSpec = pendingSpec ?: value
                     previewInFlightSpec = null
@@ -743,6 +842,18 @@ class RendererController private constructor(
                     RendererStatus.Phase.ERROR,
                     "本地渲染器加载失败（${error.errorCode}）",
                 )
+            }
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            if (url != RENDERER_URL || !isCurrentSession(sessionId, view)) return
+            bridge.onMainFrameLoaded(view) {
+                if (isCurrentSession(sessionId, view)) {
+                    _status.value = RendererStatus(
+                        RendererStatus.Phase.ERROR,
+                        "安全消息通道初始化失败，请重试",
+                    )
+                }
             }
         }
 

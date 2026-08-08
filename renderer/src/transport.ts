@@ -78,7 +78,8 @@ export async function blobToBase64Chunks(
   const total = Math.max(1, Math.ceil(blob.size / EXPORT_CHUNK_BYTES));
   for (let index = 0; index < total; index += 1) {
     const start = index * EXPORT_CHUNK_BYTES;
-    const bytes = new Uint8Array(await blob.slice(start, Math.min(blob.size, start + EXPORT_CHUNK_BYTES)).arrayBuffer());
+    const slice = blob.slice(start, Math.min(blob.size, start + EXPORT_CHUNK_BYTES));
+    const bytes = new Uint8Array(await readBlobArrayBuffer(slice));
     const segmentSize = 32_768;
     const segments: string[] = [];
     for (let offset = 0; offset < bytes.length; offset += segmentSize) {
@@ -90,6 +91,22 @@ export async function blobToBase64Chunks(
     onChunk({ index, total, byteLength: bytes.length, base64: btoa(segments.join("")) });
   }
   return total;
+}
+
+async function readBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.arrayBuffer === "function") return blob.arrayBuffer();
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("Blob could not be read"));
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Blob reader returned an unexpected result"));
+      }
+    };
+    reader.readAsArrayBuffer(blob);
+  });
 }
 
 export const EXPORT_CHUNK_BYTES = 384 * 1024;

@@ -65,7 +65,7 @@ export default defineConfig({
     emptyOutDir: true,
     assetsDir: "assets",
     sourcemap: false,
-    target: "chrome105"
+    target: "chrome69"
   },
   test: {
     environment: "node",
