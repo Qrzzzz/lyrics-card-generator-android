@@ -1,6 +1,7 @@
 package com.qrzzzz.lyricscard.ui
 
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -10,6 +11,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.espresso.accessibility.AccessibilityChecks
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qrzzzz.lyricscard.MainActivity
 import com.qrzzzz.lyricscard.R
@@ -38,9 +41,11 @@ class AccessibilityFrameworkTest {
     @Test
     fun coreHomeEditorExportAndSettingsActionsPassAccessibilityTestFramework() {
         assertPaneTitleDefined()
+        assertAtf("home")
         compose.onNodeWithText("空白项目").performClick()
         waitForText("第 1 步，共 6 步，选择歌曲")
         assertPaneTitleDefined()
+        assertAtf("editor")
 
         for (step in 2..6) {
             compose.onNode(hasContentDescription("第 $step 步，共 6 步", substring = true))
@@ -51,6 +56,7 @@ class AccessibilityFrameworkTest {
         compose.onNodeWithText("导出 PNG").performClick()
         waitForText(compose.activity.getString(R.string.export_title))
         assertPaneTitleDefined()
+        assertAtf("export")
         compose.onNodeWithText(
             compose.activity.getString(
                 R.string.export_scale_label,
@@ -66,6 +72,7 @@ class AccessibilityFrameworkTest {
         compose.onNode(hasContentDescription("设置")).performClick()
         waitForText("设置")
         assertPaneTitleDefined()
+        assertAtf("settings")
         compose.onNodeWithText(compose.activity.getString(R.string.settings_dark_mode)).performClick()
         compose.onNodeWithText(compose.activity.getString(R.string.settings_default_export_quality)).performClick()
         compose.onNodeWithText(compose.activity.getString(R.string.settings_safe_area)).performClick()
@@ -73,6 +80,12 @@ class AccessibilityFrameworkTest {
 
     private fun assertPaneTitleDefined() {
         compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle)).assertExists()
+    }
+
+    private fun assertAtf(stage: String) {
+        compose.waitForIdle()
+        onView(isRoot()).check(AccessibilityChecks.accessibilityAssertion())
+        Log.i(ATF_TAG, "stage=$stage assertion=pass")
     }
 
     private fun waitForText(value: String, substring: Boolean = false) {
@@ -97,5 +110,6 @@ class AccessibilityFrameworkTest {
         const val UI_TIMEOUT_MS = 20_000L
         const val POLL_FRAME_MILLIS = 100L
         const val NAVIGATION_SETTLE_MS = 1_000L
+        const val ATF_TAG = "LCG_ATF"
     }
 }
