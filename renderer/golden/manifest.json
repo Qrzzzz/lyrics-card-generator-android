@@ -1,0 +1,270 @@
+{
+  "datasetVersion": "release-pixel-golden-v1",
+  "browserVersion": "151.0.7922.34",
+  "sourceFingerprint": "404d224bc6452116e0f347b6bbbf8110ce37e4dfd1a526302ab715e0c1ae4ab5",
+  "fixtureFingerprint": "5075dbcc070a8c1d97cd86f85777b6330d2d3be972617fd8b6497ed09a6da691",
+  "environment": {
+    "platform": "win32",
+    "viewport": {
+      "width": 1280,
+      "height": 960
+    },
+    "deviceScaleFactor": 1,
+    "locale": "en-US",
+    "timezoneId": "UTC",
+    "colorScheme": "light",
+    "reducedMotion": "reduce",
+    "chromiumArgs": [
+      "--disable-lcd-text",
+      "--font-render-hinting=none",
+      "--force-color-profile=srgb"
+    ]
+  },
+  "thresholds": {
+    "pixelmatchThreshold": 0.02,
+    "maxMismatchRatio": 0.0005,
+    "minSsim": 0.9995
+  },
+  "outputs": [
+    {
+      "id": "portrait-square-cjk-left-auto",
+      "width": 1080,
+      "height": 1080,
+      "pixelRatio": 1,
+      "bytes": 1462973,
+      "sha256": "e55f75dc9ab6096ea5f9c864689164484417779defb2f24a91336a38afaaa0a7"
+    },
+    {
+      "id": "portrait-four-five-bilingual-center-preset",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1889657,
+      "sha256": "909d2d4a3ee328524f9b14bcc2b1e980045c74dce80b70d46d2f824597150fca"
+    },
+    {
+      "id": "portrait-nine-sixteen-latin-right-custom-no-cover",
+      "width": 1080,
+      "height": 1920,
+      "pixelRatio": 1,
+      "bytes": 2466572,
+      "sha256": "d786549e14749ced6241f2edd6180302f60b20e647357ef5f4013ce54531c3bf"
+    },
+    {
+      "id": "landscape-sixteen-nine-long-serif",
+      "width": 1920,
+      "height": 1080,
+      "pixelRatio": 1,
+      "bytes": 2079082,
+      "sha256": "d816ac616aa825f0bb3ed623dcbeccb3f13c2b50d91cfee59f2e068b34dbd9d7"
+    },
+    {
+      "id": "landscape-twenty-one-nine-punctuation-emoji",
+      "width": 2520,
+      "height": 1080,
+      "pixelRatio": 1,
+      "bytes": 2483570,
+      "sha256": "d9f5c8dcd866997a32249bc0971af987a862c6589591f51b6d453c81b2f58de7"
+    },
+    {
+      "id": "landscape-three-two-minimal-branding",
+      "width": 1800,
+      "height": 1200,
+      "pixelRatio": 1,
+      "bytes": 2537135,
+      "sha256": "5afeed27b93a5116477095cb0767623d05379f48290c9093ca7dc5182b605931"
+    },
+    {
+      "id": "portrait-custom-fixed",
+      "width": 900,
+      "height": 1500,
+      "pixelRatio": 1,
+      "bytes": 1766797,
+      "sha256": "1e8d7600edd7fa0e4237cc99bc8ae6780cc51a8d076048cc221d21b9818e69d0"
+    },
+    {
+      "id": "portrait-custom-auto-height",
+      "width": 900,
+      "height": 1829,
+      "pixelRatio": 1,
+      "bytes": 2140269,
+      "sha256": "44d128677df7b3ebc8837ed257fb34c203b6d2f1c70fd0473f101b4f01cbb563"
+    },
+    {
+      "id": "instrumental-with-cover",
+      "width": 1080,
+      "height": 1080,
+      "pixelRatio": 1,
+      "bytes": 1319878,
+      "sha256": "59832de3ddebd3ceb2483d703e882cff87964149635f104a6b6be604d0b42ad6"
+    },
+    {
+      "id": "instrumental-without-cover",
+      "width": 1080,
+      "height": 1080,
+      "pixelRatio": 1,
+      "bytes": 1469864,
+      "sha256": "51ecb9a3bad14144497b48ecc69cb5af215aff2b080cf1c29fac5967db0d3830"
+    },
+    {
+      "id": "translation-off-traditional-cjk",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1829761,
+      "sha256": "e598d24fc14d005e2eb4bbe1dfba038b6c620d71c2dfad506ae9ead51d741309"
+    },
+    {
+      "id": "translation-on-spanish",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1845309,
+      "sha256": "de75c505be923790e7249d5a5ff333bd1ba6db6caa23c45806ebdea4434b76c7"
+    },
+    {
+      "id": "lyrics-without-song-info",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1789815,
+      "sha256": "3d023e08f6a00a1ca1ae80378ec5990b740524784046d1d39f7f61d1b38cd29d"
+    },
+    {
+      "id": "platform-qq-badge",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1886189,
+      "sha256": "f43e842f401862cb6403d454b5b0e1739de994495afe71f3505a9ed0960e1478"
+    },
+    {
+      "id": "platform-netease-badge",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1886779,
+      "sha256": "b831d912e7d96c94966de910b777abd893192b3a00b16436f53d1498279f77b1"
+    },
+    {
+      "id": "platform-apple-badge",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1885550,
+      "sha256": "da8fb7f2165e6af9362fecb20f95612c518b70bd8e7c26861da839f446b93093"
+    },
+    {
+      "id": "platform-spotify-badge",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1884788,
+      "sha256": "c1ddac19673e09e937dc1287c1274f2da93ea1e918afea772e202fba12d39a0b"
+    },
+    {
+      "id": "shared-by-without-platform",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1884822,
+      "sha256": "317702c8a879f4a96fafe158ed6f3490780dc61e5f923d55f9adceadf3d7e0ba"
+    },
+    {
+      "id": "watermark-without-footer-badges",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1877690,
+      "sha256": "1101696b66dcb4f8de8743ec3fbefe9601dd0a96f25c902ba1f85f945075e66a"
+    },
+    {
+      "id": "grid-sparse-palette",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1879848,
+      "sha256": "99e929db53fdaa5558fc5b5cb0a8c293243981ea58b51dce45936d67bfd8e786"
+    },
+    {
+      "id": "grid-medium-gradient",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1944341,
+      "sha256": "3fa2d3b891a99b320b5093ec446927be7cf97401e5da42028dbe7fb769eb7e91"
+    },
+    {
+      "id": "grid-dense-gradient",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1956185,
+      "sha256": "9a5b14db81ed98afc80de775ab8a3823f1e79c6d2500fc303d87672ee3cbb19e"
+    },
+    {
+      "id": "serif-center-cream",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1941795,
+      "sha256": "ac0e38f3b18f5a2c946d8f3f7391aae910c38c11b0159d3ce1fce31ec0e480b8"
+    },
+    {
+      "id": "sans-right-soft-blue",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1899917,
+      "sha256": "e74aad31e02e0bd5d75116869487632318dc5782df9643dbe5e5e36a792711ec"
+    },
+    {
+      "id": "custom-text-color",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1884453,
+      "sha256": "648c329c1c1fc7bc1a0108685d03ee92ce067aa1d3bf2201b2527fe73139d148"
+    },
+    {
+      "id": "long-lyrics-twenty-lines",
+      "width": 1080,
+      "height": 1920,
+      "pixelRatio": 1,
+      "bytes": 2569036,
+      "sha256": "b8f1552d6f07d9a4083d722417195514ee3da91ab9506d843b5757d29ac60cd9"
+    },
+    {
+      "id": "empty-lyrics-localized-fallback",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1824774,
+      "sha256": "c53734fe39420b2c77c3cb0c652d46e5cda4597e6bd1ca18abb63039a17275b6"
+    },
+    {
+      "id": "explicit-two-line-title",
+      "width": 1080,
+      "height": 1350,
+      "pixelRatio": 1,
+      "bytes": 1888723,
+      "sha256": "5b07a9c336c7c8f10e60683a01317ee159b5cff66460b6b534ab8e9c150ad22c"
+    },
+    {
+      "id": "square-two-x-export",
+      "width": 2160,
+      "height": 2160,
+      "pixelRatio": 2,
+      "bytes": 4927237,
+      "sha256": "36eb9e5099366b64da0577f61682de84ca9d27cdc10901be8062af139c3df970"
+    },
+    {
+      "id": "landscape-sixteen-nine-two-x-export",
+      "width": 3840,
+      "height": 2160,
+      "pixelRatio": 2,
+      "bytes": 6361876,
+      "sha256": "a5292777cf87f0436d4ff414e6616e3edbff1b5140f7ac093a1b3027dd6fa319"
+    }
+  ]
+}

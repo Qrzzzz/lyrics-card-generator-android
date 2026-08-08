@@ -26,9 +26,23 @@ export function App() {
       async measure(nextSpec) {
         await applySpec(nextSpec);
         const node = requireCardNode(cardRef.current);
+        let measuredHeight = measureCardHeight(node, nextSpec);
+        if (nextSpec.canvas.autoHeight) {
+          let measuredSpec = nextSpec;
+          for (let pass = 0; pass < 16; pass += 1) {
+            measuredSpec = {
+              ...measuredSpec,
+              canvas: { ...measuredSpec.canvas, height: measuredHeight }
+            };
+            await applySpec(measuredSpec);
+            const refinedHeight = measureCardHeight(node, measuredSpec);
+            if (Math.abs(refinedHeight - measuredHeight) <= 1) break;
+            measuredHeight = refinedHeight;
+          }
+        }
         return {
           width: nextSpec.canvas.width,
-          height: measureCardHeight(node, nextSpec)
+          height: measuredHeight
         };
       },
       async exportPng(nextSpec, pixelRatio) {

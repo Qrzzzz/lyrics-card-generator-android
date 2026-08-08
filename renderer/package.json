@@ -15,7 +15,10 @@
     "prebuild": "npm run check:validator",
     "build": "vite build",
     "check": "npm run typecheck && npm run test && npm run build",
-    "golden": "vitest run tests/fixtures.test.ts",
+    "golden": "npm run golden:test",
+    "golden:install": "playwright install chromium",
+    "golden:test": "node scripts/run-pixel-golden.mjs",
+    "golden:update": "node scripts/run-pixel-golden.mjs --update",
     "renderer:typecheck": "npm run typecheck",
     "renderer:test": "npm run test",
     "renderer:build": "npm run build",
@@ -28,10 +31,14 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/node": "^22.15.30",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
     "@vitejs/plugin-react": "^4.5.2",
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0",
+    "ssim.js": "3.5.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.2.3"

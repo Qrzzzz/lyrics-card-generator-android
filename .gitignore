@@ -13,6 +13,7 @@ captures/
 # Renderer
 renderer/node_modules/
 renderer/dist/
+renderer/golden/diffs/
 
 # Signing and local artifacts
 *.jks
