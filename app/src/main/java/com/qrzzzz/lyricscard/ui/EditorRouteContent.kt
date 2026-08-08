@@ -17,7 +17,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import com.qrzzzz.lyricscard.AppContainer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun EditorRouteContent(
@@ -85,14 +87,16 @@ internal fun EditorRouteContent(
             onExport = {
                 scope.launch {
                     if (editorViewModel.prepareForNavigation()) {
-                        editorViewModel.markNavigationCommitted()
-                        try {
-                            navController.navigate(ExportRoute(state.projectId)) {
-                                launchSingleTop = true
+                        withContext(Dispatchers.Main.immediate) {
+                            editorViewModel.markNavigationCommitted()
+                            try {
+                                navController.navigate(ExportRoute(state.projectId)) {
+                                    launchSingleTop = true
+                                }
+                            } catch (cause: Throwable) {
+                                editorViewModel.navigationFailed()
+                                throw cause
                             }
-                        } catch (cause: Throwable) {
-                            editorViewModel.navigationFailed()
-                            throw cause
                         }
                     }
                 }
@@ -103,11 +107,13 @@ internal fun EditorRouteContent(
 
 private suspend fun EditorViewModel.popAfterSaving(navController: NavHostController) {
     if (!prepareForNavigation()) return
-    markNavigationCommitted()
-    try {
-        if (!navController.popBackStack()) navigationFailed()
-    } catch (cause: Throwable) {
-        navigationFailed()
-        throw cause
+    withContext(Dispatchers.Main.immediate) {
+        markNavigationCommitted()
+        try {
+            if (!navController.popBackStack()) navigationFailed()
+        } catch (cause: Throwable) {
+            navigationFailed()
+            throw cause
+        }
     }
 }

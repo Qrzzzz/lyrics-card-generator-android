@@ -22,7 +22,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.qrzzzz.lyricscard.AppContainer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LyricsCardApp(
@@ -63,8 +65,10 @@ fun LyricsCardApp(
                 onCreateBlank = {
                     scope.launch {
                         homeViewModel.createBlank()?.let { id ->
-                            homeViewModel.commitNavigation {
-                                navController.navigate(EditorRoute(id))
+                            withContext(Dispatchers.Main.immediate) {
+                                homeViewModel.commitNavigation {
+                                    navController.navigate(EditorRoute(id))
+                                }
                             }
                         }
                     }
@@ -72,8 +76,10 @@ fun LyricsCardApp(
                 onCreateSample = {
                     scope.launch {
                         homeViewModel.createSample()?.let { id ->
-                            homeViewModel.commitNavigation {
-                                navController.navigate(EditorRoute(id))
+                            withContext(Dispatchers.Main.immediate) {
+                                homeViewModel.commitNavigation {
+                                    navController.navigate(EditorRoute(id))
+                                }
                             }
                         }
                     }
@@ -81,8 +87,10 @@ fun LyricsCardApp(
                 onOpen = { id ->
                     scope.launch {
                         homeViewModel.openProject(id)?.let { projectId ->
-                            homeViewModel.commitNavigation {
-                                navController.navigate(EditorRoute(projectId))
+                            withContext(Dispatchers.Main.immediate) {
+                                homeViewModel.commitNavigation {
+                                    navController.navigate(EditorRoute(projectId))
+                                }
                             }
                         }
                     }
