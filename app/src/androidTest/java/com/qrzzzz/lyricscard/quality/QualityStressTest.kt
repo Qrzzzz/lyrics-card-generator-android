@@ -15,7 +15,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.StrictMode
 import android.os.SystemClock
-import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -622,20 +621,25 @@ class QualityStressTest {
         val activity = checkNotNull(currentResumedActivity()) {
             "no resumed host before background cycle"
         }
-        appContext.startActivity(
-            Intent(Settings.ACTION_SETTINGS).addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
-            ),
-        )
+        val resumeIntent = Intent(activity.intent).apply {
+            component = activity.componentName
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            )
+        }
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("input keyevent KEYCODE_HOME")
+            .close()
         waitUntil(BACKGROUND_TIMEOUT_MS) {
             activity.lifecycle.currentState == Lifecycle.State.CREATED
         }
         SystemClock.sleep(350)
-        InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("input keyevent KEYCODE_BACK")
-            .close()
+        appContext.startActivity(resumeIntent)
         waitUntil(BACKGROUND_TIMEOUT_MS) {
-            activity.lifecycle.currentState == Lifecycle.State.RESUMED
+            activity.lifecycle.currentState == Lifecycle.State.RESUMED &&
+                activity.hasWindowFocus()
         }
     }
 
