@@ -1,7 +1,9 @@
 package com.qrzzzz.lyricscard.ui
 
+import android.app.UiAutomation
 import android.os.SystemClock
 import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -71,14 +73,17 @@ class AccessibilityFrameworkTest {
         compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.PaneTitle)).assertExists()
     }
 
+    @Suppress("DEPRECATION")
     private fun assertAtf(stage: String) {
         compose.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val root = instrumentation.uiAutomation.rootInActiveWindow
-        assertTrue("ATF could not capture the active accessibility window", root != null)
+        val automation = instrumentation.getUiAutomation(
+            UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES,
+        )
+        val root = waitForAccessibilityRoot(automation)
         try {
             val hierarchy = AccessibilityHierarchyAndroid
-                .newBuilder(requireNotNull(root), instrumentation.targetContext)
+                .newBuilder(root, instrumentation.targetContext)
                 .build()
             val nodeCount = hierarchy.activeWindow?.allViews?.size ?: 0
             assertTrue("ATF captured no virtual accessibility descendants", nodeCount > 1)
@@ -100,7 +105,21 @@ class AccessibilityFrameworkTest {
                     "results=${results.size} assertion=pass",
             )
         } finally {
-            root?.recycle()
+            root.recycle()
+        }
+    }
+
+    private fun waitForAccessibilityRoot(automation: UiAutomation): AccessibilityNodeInfo {
+        val deadline = SystemClock.elapsedRealtime() + UI_TIMEOUT_MS
+        var root = automation.rootInActiveWindow
+        while (root == null && SystemClock.elapsedRealtime() < deadline) {
+            compose.mainClock.advanceTimeBy(POLL_FRAME_MILLIS)
+            compose.waitForIdle()
+            SystemClock.sleep(50)
+            root = automation.rootInActiveWindow
+        }
+        return requireNotNull(root) {
+            "ATF could not capture the active accessibility window within $UI_TIMEOUT_MS ms"
         }
     }
 
