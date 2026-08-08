@@ -70,6 +70,18 @@ class AppShellResourceContractTest {
         assertTrue(build.contains("implementation(libs.androidx.core.splashscreen)"))
     }
 
+    @Test
+    fun `compact landscape and IME shell paths remain explicit`() {
+        val editor = appFile("src/main/java/com/qrzzzz/lyricscard/ui/EditorScreen.kt").readText()
+        val export = appFile("src/main/java/com/qrzzzz/lyricscard/ui/ExportScreen.kt").readText()
+
+        assertTrue(editor.contains("maxWidth >= LyricsCardLayout.wideBreakpoint"))
+        assertTrue(editor.contains("MobileEditorBottomSheet"))
+        assertTrue(editor.contains("WindowInsets.ime"))
+        assertTrue(editor.contains("imePadding()"))
+        assertTrue(export.contains("maxWidth >= LyricsCardLayout.wideBreakpoint"))
+    }
+
     private fun appFile(relative: String, required: Boolean = true): File {
         val root = File(checkNotNull(System.getProperty("user.dir")))
         val candidates = listOf(root.resolve("app/$relative"), root.resolve(relative))
