@@ -1,5 +1,6 @@
 package com.qrzzzz.lyricscard.ui
 
+import com.qrzzzz.lyricscard.R
 import androidx.lifecycle.SavedStateHandle
 import com.qrzzzz.lyricscard.EditorSessionRegistry
 import com.qrzzzz.lyricscard.data.ResolvedNeteaseSong
@@ -157,7 +158,7 @@ class EditorViewModelTest {
 
         assertFalse(sessions.flushActive())
         assertEquals(AutosaveStatus.FAILED, viewModel.uiState.value.autosaveStatus)
-        assertEquals("disk full", viewModel.uiState.value.errorMessage)
+        assertEquals(UiText.resource(R.string.editor_autosave_failed), viewModel.uiState.value.errorMessage)
         assertTrue(store.saved.isEmpty())
     }
 
@@ -313,7 +314,7 @@ class EditorViewModelTest {
             assertTrue(assets.deleteContextWasActive.all { it })
             assertEquals("Replacement song", viewModel.uiState.value.currentProject?.spec?.song?.title)
             assertFalse(viewModel.uiState.value.netease.isResolving)
-            assertFalse(viewModel.uiState.value.netease.message.contains("Cancelled song"))
+            assertFalse(viewModel.uiState.value.netease.message == UiText.Dynamic("Cancelled song"))
         }
 
     @Test
@@ -357,7 +358,10 @@ class EditorViewModelTest {
             assertTrue(assets.deleteContextWasActive.all { it })
             assertEquals(stored.spec.song.title, viewModel.uiState.value.currentProject?.spec?.song?.title)
             assertFalse(viewModel.uiState.value.netease.isResolving)
-            assertFalse(viewModel.uiState.value.netease.message.startsWith("已从网易云导入"))
+            assertEquals(
+                UiText.resource(R.string.editor_error_netease_resolve),
+                viewModel.uiState.value.netease.message,
+            )
         }
 
     @Test
@@ -403,9 +407,14 @@ class EditorViewModelTest {
             assertTrue(assets.deleteContextWasActive.all { it })
             assertEquals(stored.spec, viewModel.uiState.value.currentProject?.spec)
             assertEquals(AutosaveStatus.FAILED, viewModel.uiState.value.autosaveStatus)
-            assertTrue(viewModel.uiState.value.errorMessage.orEmpty().contains("room write failed"))
-            assertTrue(viewModel.uiState.value.netease.message.contains("room write failed"))
-            assertFalse(viewModel.uiState.value.netease.message.startsWith("已从网易云导入"))
+            assertEquals(
+                UiText.resource(R.string.editor_autosave_failed),
+                viewModel.uiState.value.errorMessage,
+            )
+            assertEquals(
+                UiText.resource(R.string.editor_error_netease_resolve),
+                viewModel.uiState.value.netease.message,
+            )
         }
 
     private fun editorViewModel(
@@ -421,7 +430,6 @@ class EditorViewModelTest {
         projectAssets = projectAssets,
         neteaseClient = neteaseClient,
         renderer = renderer,
-        messages = FakeEditorMessages,
         sessions = sessions,
     )
 

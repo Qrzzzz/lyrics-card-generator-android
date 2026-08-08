@@ -5,12 +5,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qrzzzz.lyricscard.EditorAutosaveSession
-import com.qrzzzz.lyricscard.EditorMessageResolver
 import com.qrzzzz.lyricscard.EditorSessionRegistry
 import com.qrzzzz.lyricscard.NeteaseClient
 import com.qrzzzz.lyricscard.ProjectAssets
 import com.qrzzzz.lyricscard.ProjectStore
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.RendererOperations
+import com.qrzzzz.lyricscard.data.NeteaseServiceError
+import com.qrzzzz.lyricscard.data.NeteaseServiceException
 import com.qrzzzz.lyricscard.data.NeteaseSongSearchResult
 import com.qrzzzz.lyricscard.data.ResolvedNeteaseSong
 import com.qrzzzz.lyricscard.model.InvalidRenderSpecException
@@ -55,7 +57,7 @@ data class NeteaseLookupUiState(
     val results: List<NeteaseSongSearchResult> = emptyList(),
     val isSearching: Boolean = false,
     val isResolving: Boolean = false,
-    val message: String = "可按歌曲名搜索，或贴入网易云分享链接",
+    val message: UiText = UiText.resource(R.string.editor_netease_idle),
 )
 
 data class EditorUiState(
@@ -64,7 +66,7 @@ data class EditorUiState(
     val isLoading: Boolean = true,
     val projectUnavailable: Boolean = false,
     val autosaveStatus: AutosaveStatus = AutosaveStatus.SAVED,
-    val errorMessage: String? = null,
+    val errorMessage: UiText? = null,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
     val selectedStep: Int = 0,
@@ -72,7 +74,7 @@ data class EditorUiState(
     val netease: NeteaseLookupUiState = NeteaseLookupUiState(),
     val isImportingCover: Boolean = false,
     val isExtractingPalette: Boolean = false,
-    val paletteError: String? = null,
+    val paletteError: UiText? = null,
     val isLeaving: Boolean = false,
 )
 
@@ -82,7 +84,6 @@ class EditorViewModel(
     private val projectAssets: ProjectAssets,
     private val neteaseClient: NeteaseClient,
     private val renderer: RendererOperations,
-    private val messages: EditorMessageResolver,
     private val sessions: EditorSessionRegistry,
 ) : ViewModel(), EditorAutosaveSession {
     private data class EditorMutationSnapshot(
@@ -92,7 +93,7 @@ class EditorViewModel(
         val editRevision: Long,
         val savedRevision: Long,
         val autosaveStatus: AutosaveStatus,
-        val errorMessage: String?,
+        val errorMessage: UiText?,
     )
 
     private val projectId: String = checkNotNull(savedStateHandle[PROJECT_ID_KEY]) {
@@ -170,7 +171,7 @@ class EditorViewModel(
             val candidate = transform(project.spec)
             project.copy(spec = candidate.requireValid())
         }.getOrElse { cause ->
-            setError(lineLimitMessage(cause) ?: cause.message ?: "设置无效")
+            setError(lineLimitMessage(cause) ?: UiText.resource(R.string.editor_error_invalid_setting))
             return
         }
         if (updated.spec == project.spec) return
@@ -251,7 +252,7 @@ class EditorViewModel(
             } catch (cause: CancellationException) {
                 throw cause
             } catch (cause: Throwable) {
-                setError(cause.message ?: "无法导入封面")
+                setError(UiText.resource(R.string.editor_error_import_cover))
             } finally {
                 _uiState.update { it.copy(isImportingCover = false) }
             }
@@ -272,10 +273,18 @@ class EditorViewModel(
         val normalized = keyword.trim()
         neteaseSearchJob?.cancel()
         if (normalized.isBlank()) {
-            updateNetease { it.copy(results = emptyList(), isSearching = false, message = "请输入歌曲名或歌手") }
+            updateNetease {
+                it.copy(
+                    results = emptyList(),
+                    isSearching = false,
+                    message = UiText.resource(R.string.editor_netease_enter_query),
+                )
+            }
             return
         }
-        updateNetease { it.copy(isSearching = true, message = "正在搜索网易云音乐…") }
+        updateNetease {
+            it.copy(isSearching = true, message = UiText.resource(R.string.editor_netease_searching))
+        }
         neteaseSearchJob = viewModelScope.launch {
             try {
                 val results = neteaseClient.search(normalized)
@@ -284,18 +293,25 @@ class EditorViewModel(
                     it.copy(
                         results = results,
                         isSearching = false,
-                        message = if (results.isEmpty()) {
-                            "没有找到匹配歌曲，可继续手动填写"
-                        } else {
-                            "选择一首歌曲以导入信息与可用歌词"
-                        },
+                        message = UiText.resource(
+                            if (results.isEmpty()) {
+                                R.string.editor_netease_no_results
+                            } else {
+                                R.string.editor_netease_select_result
+                            },
+                        ),
                     )
                 }
             } catch (cause: CancellationException) {
                 throw cause
             } catch (cause: Throwable) {
                 if (_uiState.value.currentProject?.id == projectId) {
-                    updateNetease { it.copy(isSearching = false, message = cause.message ?: "网易云搜索失败") }
+                    updateNetease {
+                        it.copy(
+                            isSearching = false,
+                            message = neteaseFailureText(cause, R.string.editor_error_netease_search),
+                        )
+                    }
                 }
             }
         }
@@ -322,7 +338,9 @@ class EditorViewModel(
             } catch (cause: CancellationException) {
                 throw cause
             } catch (cause: Throwable) {
-                _uiState.update { it.copy(paletteError = cause.message ?: "无法提取颜色") }
+                _uiState.update {
+                    it.copy(paletteError = UiText.resource(R.string.editor_error_extract_palette))
+                }
             } finally {
                 _uiState.update { it.copy(isExtractingPalette = false) }
             }
@@ -343,7 +361,7 @@ class EditorViewModel(
     suspend fun prepareForNavigation(): Boolean {
         val state = _uiState.value
         if (state.isImportingCover || state.isExtractingPalette || state.netease.isResolving) {
-            setError("正在应用封面、歌曲信息或配色，请完成后再离开")
+            setError(UiText.resource(R.string.editor_error_busy_leaving))
             return false
         }
         if (!navigationInFlight.compareAndSet(false, true)) return false
@@ -394,7 +412,7 @@ class EditorViewModel(
     private suspend fun loadProject() {
         _uiState.update { it.copy(isLoading = true, projectUnavailable = false, errorMessage = null) }
         try {
-            val stored = projects.getProject(projectId) ?: error("项目不存在或已被删除")
+            val stored = projects.getProject(projectId) ?: error("Project does not exist")
             resetHistory()
             editRevision = 0L
             savedRevision = 0L
@@ -426,8 +444,7 @@ class EditorViewModel(
                     isLoading = false,
                     projectUnavailable = true,
                     errorMessage = lineLimitMessage(cause, loadingStoredProject = true)
-                        ?: cause.message
-                        ?: "无法打开项目",
+                        ?: UiText.resource(R.string.editor_error_open_project),
                 )
             }
         }
@@ -440,16 +457,18 @@ class EditorViewModel(
     private fun resolveNetease(block: suspend () -> ResolvedNeteaseSong) {
         if (_uiState.value.isLeaving) return
         neteaseResolveJob?.cancel()
-        updateNetease { it.copy(isResolving = true, message = "正在解析歌曲信息、歌词与封面…") }
+        updateNetease {
+            it.copy(isResolving = true, message = UiText.resource(R.string.editor_netease_resolving))
+        }
         neteaseResolveJob = viewModelScope.launch {
             var importedCoverId: String? = null
-            var coverWarning: String? = null
+            var coverWarning = false
             var mutationSnapshot: EditorMutationSnapshot? = null
             try {
                 val resolved = block()
                 val importedLineCount = LyricTextLimits.countPhysicalLines(resolved.lyrics)
                 if (resolved.lyrics.isNotEmpty() && importedLineCount > LyricTextLimits.MAX_LINES) {
-                    val message = messages.lineLimit(
+                    val message = lineLimitText(
                         RenderSpecViolation(
                             path = "content.lyrics",
                             message = "exceeds line limit",
@@ -470,7 +489,7 @@ class EditorViewModel(
                     } catch (cause: CancellationException) {
                         throw cause
                     } catch (cause: Throwable) {
-                        coverWarning = cause.message ?: "封面下载或导入失败"
+                        coverWarning = true
                         null
                     }
                 }
@@ -508,25 +527,35 @@ class EditorViewModel(
                 }
                 val appliedSong = _uiState.value.currentProject?.spec?.song
                 check(appliedSong?.title == nextTitle && (nextCoverId == null || appliedSong.coverAssetId == nextCoverId)) {
-                    "无法应用网易云歌曲信息"
+                    "NetEase import was not applied"
                 }
                 if (!flushAutosave()) {
-                    val message = _uiState.value.errorMessage ?: "无法保存网易云导入结果"
+                    val message = _uiState.value.errorMessage
+                        ?: UiText.resource(R.string.editor_error_save_netease)
                     restoreEditorMutation(checkNotNull(mutationSnapshot), message, restartPendingAutosave = false)
                     mutationSnapshot = null
-                    error(message)
+                    error("NetEase import could not be persisted")
                 }
                 importedCoverId = null
                 mutationSnapshot = null
-                val imported = buildList {
-                    add("歌曲信息")
-                    if (resolved.lyrics.isNotBlank()) add("歌词")
-                    if (nextCoverId != null) add("封面")
-                }.joinToString("、")
-                val resultMessage = buildString {
-                    append("已从网易云导入$imported")
-                    coverWarning?.let { append("；封面未导入：$it") }
-                }
+                val imported = UiText.joined(
+                    R.string.list_separator,
+                    buildList {
+                        add(UiText.resource(R.string.editor_import_part_song))
+                        if (resolved.lyrics.isNotBlank()) {
+                            add(UiText.resource(R.string.editor_import_part_lyrics))
+                        }
+                        if (nextCoverId != null) add(UiText.resource(R.string.editor_import_part_cover))
+                    },
+                )
+                val resultMessage = UiText.resource(
+                    if (coverWarning) {
+                        R.string.editor_netease_import_success_cover_warning
+                    } else {
+                        R.string.editor_netease_import_success
+                    },
+                    imported,
+                )
                 updateNetease { it.copy(isResolving = false, message = resultMessage) }
             } catch (cause: CancellationException) {
                 mutationSnapshot?.let {
@@ -538,13 +567,24 @@ class EditorViewModel(
                 mutationSnapshot?.let {
                     restoreEditorMutation(
                         it,
-                        failureMessage = cause.message ?: "网易云解析失败",
+                        failureMessage = neteaseFailureText(
+                            cause,
+                            R.string.editor_error_netease_resolve,
+                        ),
                         restartPendingAutosave = true,
                     )
                 }
                 importedCoverId?.let { cleanupPendingCover(it, cause) }
                 if (_uiState.value.currentProject?.id == projectId) {
-                    updateNetease { it.copy(isResolving = false, message = cause.message ?: "网易云解析失败") }
+                    updateNetease {
+                        it.copy(
+                            isResolving = false,
+                            message = neteaseFailureText(
+                                cause,
+                                R.string.editor_error_netease_resolve,
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -565,7 +605,7 @@ class EditorViewModel(
 
     private fun restoreEditorMutation(
         snapshot: EditorMutationSnapshot,
-        failureMessage: String?,
+        failureMessage: UiText?,
         restartPendingAutosave: Boolean,
     ) {
         autosaveJob?.cancel()
@@ -642,7 +682,7 @@ class EditorViewModel(
                 _uiState.update {
                     it.copy(
                         autosaveStatus = AutosaveStatus.FAILED,
-                        errorMessage = cause.message ?: "自动保存失败",
+                        errorMessage = UiText.resource(R.string.editor_autosave_failed),
                     )
                 }
             }
@@ -660,7 +700,7 @@ class EditorViewModel(
         if (editRevision == 1L) savedRevision = 0L
     }
 
-    private fun setError(message: String) {
+    private fun setError(message: UiText) {
         _uiState.update { it.copy(errorMessage = message) }
     }
 
@@ -673,9 +713,58 @@ class EditorViewModel(
     private fun lineLimitMessage(
         cause: Throwable,
         loadingStoredProject: Boolean = false,
-    ): String? {
+    ): UiText? {
         val violation = cause.findLineLimitViolation() ?: return null
-        return messages.lineLimit(violation, loadingStoredProject)
+        return lineLimitText(violation, loadingStoredProject)
+    }
+
+    private fun lineLimitText(
+        violation: RenderSpecViolation,
+        loadingStoredProject: Boolean,
+    ): UiText {
+        val field = UiText.resource(
+            if (violation.path == "content.translation") {
+                R.string.lyric_field_translation
+            } else {
+                R.string.lyric_field_original
+            },
+        )
+        return UiText.resource(
+            if (loadingStoredProject) {
+                R.string.error_loaded_lyric_line_limit
+            } else {
+                R.string.error_lyric_line_limit
+            },
+            field,
+            violation.limit ?: LyricTextLimits.MAX_LINES,
+            violation.actual ?: 0,
+        )
+    }
+
+    private fun neteaseFailureText(cause: Throwable, fallback: Int): UiText {
+        val resource = when ((cause as? NeteaseServiceException)?.error) {
+            NeteaseServiceError.INVALID_QUERY -> R.string.network_invalid_query
+            NeteaseServiceError.QUERY_TOO_LONG -> R.string.network_query_too_long
+            NeteaseServiceError.INVALID_SONG_ID -> R.string.network_invalid_song_id
+            NeteaseServiceError.INVALID_LINK -> R.string.network_invalid_link
+            NeteaseServiceError.UNSAFE_URL -> R.string.network_unsafe_url
+            NeteaseServiceError.REDIRECT_NOT_ALLOWED -> R.string.network_redirect_not_allowed
+            NeteaseServiceError.REDIRECT_LOOP -> R.string.network_redirect_loop
+            NeteaseServiceError.TOO_MANY_REDIRECTS -> R.string.network_too_many_redirects
+            NeteaseServiceError.REQUEST_REJECTED -> R.string.network_request_rejected
+            NeteaseServiceError.RATE_LIMITED -> R.string.network_rate_limited
+            NeteaseServiceError.SERVICE_UNAVAILABLE -> R.string.network_service_unavailable
+            NeteaseServiceError.EMPTY_RESPONSE -> R.string.network_empty_response
+            NeteaseServiceError.MALFORMED_RESPONSE -> R.string.network_malformed_response
+            NeteaseServiceError.RESPONSE_TOO_LARGE -> R.string.network_response_too_large
+            NeteaseServiceError.TIMEOUT -> R.string.network_timeout
+            NeteaseServiceError.NETWORK_UNAVAILABLE -> R.string.network_unavailable
+            NeteaseServiceError.DNS_FAILURE -> R.string.network_dns_failure
+            NeteaseServiceError.TLS_FAILURE -> R.string.network_tls_failure
+            NeteaseServiceError.SONG_NOT_FOUND -> R.string.network_song_not_found
+            null -> fallback
+        }
+        return UiText.resource(resource)
     }
 
     companion object {

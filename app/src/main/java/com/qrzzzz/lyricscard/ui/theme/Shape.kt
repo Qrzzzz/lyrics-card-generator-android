@@ -11,3 +11,7 @@ internal val LyricsCardShapes = Shapes(
     large = RoundedCornerShape(20.dp),
     extraLarge = RoundedCornerShape(28.dp),
 )
+
+object LyricsCardShapeTokens {
+    val topSheet = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+}

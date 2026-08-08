@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,6 +43,7 @@ fun LyricsCardApp(
             val state by homeViewModel.uiState.collectAsStateWithLifecycle()
             val scope = rememberCoroutineScope()
             val snackbar = remember { SnackbarHostState() }
+            val context = LocalContext.current
 
             LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                 homeViewModel.onNavigationResumed()
@@ -49,7 +51,7 @@ fun LyricsCardApp(
 
             LaunchedEffect(state.errorMessage) {
                 state.errorMessage?.let {
-                    snackbar.showSnackbar(it)
+                    snackbar.showSnackbar(it.resolve(context))
                     homeViewModel.clearError()
                 }
             }
@@ -104,10 +106,11 @@ fun LyricsCardApp(
             val state by editorViewModel.uiState.collectAsStateWithLifecycle()
             val scope = rememberCoroutineScope()
             val snackbar = remember { SnackbarHostState() }
+            val context = LocalContext.current
 
             LaunchedEffect(state.errorMessage) {
                 state.errorMessage?.let {
-                    snackbar.showSnackbar(it)
+                    snackbar.showSnackbar(it.resolve(context))
                     editorViewModel.clearError()
                 }
             }

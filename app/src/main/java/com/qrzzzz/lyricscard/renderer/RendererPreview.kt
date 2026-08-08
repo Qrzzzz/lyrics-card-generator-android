@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,9 +22,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.model.RenderSpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -67,7 +68,7 @@ fun RendererPreview(
     }
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(MaterialTheme.shapes.large)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
         key(generation) {
@@ -87,18 +88,18 @@ fun RendererPreview(
                     .border(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.58f),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = MaterialTheme.shapes.medium,
                     ),
             )
         }
 
         when (status.phase) {
             RendererStatus.Phase.STARTING -> PreviewStatus(
-                message = status.message,
+                message = stringResource(R.string.renderer_starting),
                 showProgress = true,
             )
             RendererStatus.Phase.ERROR -> PreviewStatus(
-                message = status.message,
+                message = stringResource(R.string.renderer_error),
                 retry = controller::retry,
             )
             else -> Unit
@@ -130,7 +131,7 @@ private fun PreviewStatus(
             retry?.let {
                 FilledTonalButton(onClick = it) {
                     Icon(Icons.Rounded.Refresh, contentDescription = null)
-                    Text("重试", modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(R.string.common_retry), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }

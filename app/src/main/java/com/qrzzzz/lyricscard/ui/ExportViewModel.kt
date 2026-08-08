@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qrzzzz.lyricscard.ExportFiles
 import com.qrzzzz.lyricscard.ProjectStore
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.RendererOperations
 import com.qrzzzz.lyricscard.UserPreferencesStore
 import com.qrzzzz.lyricscard.model.Project
@@ -56,8 +57,8 @@ data class ExportUiState(
     val measuredHeight: Int = 0,
     val operation: ExportOperationState = ExportOperationState.IDLE,
     val exported: ExportedImage? = null,
-    val status: String = "准备导出",
-    val errorMessage: String? = null,
+    val status: UiText = UiText.resource(R.string.export_ready),
+    val errorMessage: UiText? = null,
     val effect: ExportEffect? = null,
 ) {
     val isBusy: Boolean
@@ -92,26 +93,27 @@ class ExportViewModel(
         else -> restoredOperation
     }
     private val initialStatus = when (initialOperation) {
-        ExportOperationState.SUCCESS -> savedStateHandle[STATUS_KEY]
-            ?: initialImage?.let { "已生成 ${it.width} × ${it.height} PNG" }
-            ?: "导出结果已失效"
-        ExportOperationState.CANCELLED -> savedStateHandle[STATUS_KEY] ?: "导出已取消，可立即重试"
+        ExportOperationState.SUCCESS -> restoredText(savedStateHandle, STATUS_KEY)
+            ?: initialImage?.let { UiText.resource(R.string.export_generated, it.width, it.height) }
+            ?: UiText.resource(R.string.export_result_expired)
+        ExportOperationState.CANCELLED -> restoredText(savedStateHandle, STATUS_KEY)
+            ?: UiText.resource(R.string.export_cancelled)
         ExportOperationState.FAILURE -> if (restoredOperation == ExportOperationState.SUCCESS) {
-            "上次导出结果已失效，请重试"
+            UiText.resource(R.string.export_previous_result_expired)
         } else {
-            savedStateHandle[STATUS_KEY] ?: "导出失败，可重试"
+            restoredText(savedStateHandle, STATUS_KEY) ?: UiText.resource(R.string.export_failed_retryable)
         }
-        ExportOperationState.INTERRUPTED -> "上次导出被系统中断，没有自动重试"
-        else -> savedStateHandle[STATUS_KEY] ?: "准备导出"
+        ExportOperationState.INTERRUPTED -> UiText.resource(R.string.export_interrupted_status)
+        else -> restoredText(savedStateHandle, STATUS_KEY) ?: UiText.resource(R.string.export_ready)
     }
     private val initialError = when (initialOperation) {
         ExportOperationState.FAILURE -> if (restoredOperation == ExportOperationState.SUCCESS) {
-            "导出结果文件已不存在，请重试"
+            UiText.resource(R.string.export_result_missing_error)
         } else {
-            savedStateHandle[ERROR_KEY] ?: "上次导出失败，可手动重试"
+            restoredText(savedStateHandle, ERROR_KEY) ?: UiText.resource(R.string.export_previous_failure_error)
         }
-        ExportOperationState.INTERRUPTED -> "上次导出被系统中断，可手动重试"
-        else -> savedStateHandle[ERROR_KEY]
+        ExportOperationState.INTERRUPTED -> UiText.resource(R.string.export_interrupted_error)
+        else -> restoredText(savedStateHandle, ERROR_KEY)
     }
     private val _uiState = MutableStateFlow(
         ExportUiState(
@@ -150,13 +152,13 @@ class ExportViewModel(
                 multiplier = next,
                 operation = ExportOperationState.IDLE,
                 exported = null,
-                status = "准备导出",
+                status = UiText.resource(R.string.export_ready),
                 errorMessage = null,
                 effect = null,
             )
         }
         savedStateHandle[OPERATION_KEY] = ExportOperationState.IDLE.name
-        persistMessages("准备导出", null)
+        persistMessages(UiText.resource(R.string.export_ready), null)
     }
 
     fun setFileName(value: String) {
@@ -190,8 +192,9 @@ class ExportViewModel(
         if (_uiState.value.operation == ExportOperationState.FINALIZING) return
         val job = exportJob ?: return
         if (!job.isActive) return
-        _uiState.update { it.copy(status = "正在取消并恢复渲染器…", errorMessage = null) }
-        persistMessages("正在取消并恢复渲染器…", null)
+        val status = UiText.resource(R.string.export_cancelling)
+        _uiState.update { it.copy(status = status, errorMessage = null) }
+        persistMessages(status, null)
         job.cancel()
     }
 
@@ -206,19 +209,20 @@ class ExportViewModel(
         viewModelScope.launch {
             try {
                 exportFiles.copyTo(image, destination)
-                _uiState.update { it.copy(status = "已保存到所选位置", errorMessage = null) }
-                persistMessages("已保存到所选位置", null)
+                val status = UiText.resource(R.string.export_saved)
+                _uiState.update { it.copy(status = status, errorMessage = null) }
+                persistMessages(status, null)
             } catch (cause: CancellationException) {
                 throw cause
             } catch (cause: Throwable) {
-                val message = cause.message ?: "保存失败"
+                val message = UiText.resource(R.string.export_save_failed)
                 _uiState.update { it.copy(errorMessage = message) }
                 persistMessages(_uiState.value.status, message)
             }
         }
     }
 
-    fun reportExternalActionError(message: String) {
+    fun reportExternalActionError(message: UiText) {
         _uiState.update { it.copy(errorMessage = message) }
         persistMessages(_uiState.value.status, message)
     }
@@ -226,7 +230,7 @@ class ExportViewModel(
     private suspend fun loadProject() {
         _uiState.update { it.copy(isLoading = true, projectUnavailable = false) }
         try {
-            val project = projects.getProject(projectId) ?: error("项目不存在或已被删除")
+            val project = projects.getProject(projectId) ?: error("Project does not exist")
             val defaultMultiplier = if (hadSavedMultiplier) {
                 _uiState.value.multiplier
             } else {
@@ -255,7 +259,7 @@ class ExportViewModel(
         } catch (cause: CancellationException) {
             throw cause
         } catch (cause: Throwable) {
-            val message = cause.message ?: "无法打开项目"
+            val message = UiText.resource(R.string.editor_error_open_project)
             _uiState.update {
                 it.copy(
                     isLoading = false,
@@ -283,7 +287,7 @@ class ExportViewModel(
         launched = viewModelScope.launch(start = CoroutineStart.LAZY) {
             clearPersistedImage()
             persistOperation(ExportOperationState.RUNNING)
-            val runningStatus = "正在生成 ${_uiState.value.multiplier}× PNG…"
+            val runningStatus = UiText.resource(R.string.export_running, _uiState.value.multiplier)
             persistMessages(runningStatus, null)
             _uiState.update {
                 it.copy(
@@ -301,13 +305,14 @@ class ExportViewModel(
                 if (_uiState.value.operation == ExportOperationState.SUCCESS) throw cause
                 clearPersistedImage()
                 persistOperation(ExportOperationState.CANCELLED)
-                persistMessages("导出已取消，可立即重试", null)
+                val cancelledStatus = UiText.resource(R.string.export_cancelled)
+                persistMessages(cancelledStatus, null)
                 _uiState.update {
                     it.copy(
                         operation = ExportOperationState.CANCELLED,
                         exported = null,
                         errorMessage = null,
-                        status = "导出已取消，可立即重试",
+                        status = cancelledStatus,
                         effect = null,
                     )
                 }
@@ -315,14 +320,15 @@ class ExportViewModel(
             } catch (cause: Throwable) {
                 clearPersistedImage()
                 persistOperation(ExportOperationState.FAILURE)
-                val message = cause.message ?: "导出失败"
-                persistMessages("导出失败，可重试", message)
+                val message = UiText.resource(R.string.export_failure)
+                val failureStatus = UiText.resource(R.string.export_failed_retryable)
+                persistMessages(failureStatus, message)
                 _uiState.update {
                     it.copy(
                         operation = ExportOperationState.FAILURE,
                         exported = null,
                         errorMessage = message,
-                        status = "导出失败，可重试",
+                        status = failureStatus,
                         effect = null,
                     )
                 }
@@ -344,7 +350,7 @@ class ExportViewModel(
         image: ExportedImage,
         action: ExportPendingAction?,
     ) = withContext(NonCancellable) {
-        val finalizingStatus = "正在完成缩略图与导出记录…"
+        val finalizingStatus = UiText.resource(R.string.export_finalizing_records)
         persistOperation(ExportOperationState.FINALIZING)
         persistMessages(finalizingStatus, null)
         _uiState.update {
@@ -358,7 +364,7 @@ class ExportViewModel(
         val metadataWarning = recordExport(project, image)
         persistImage(image)
         persistOperation(ExportOperationState.SUCCESS)
-        val successStatus = "已生成 ${image.width} × ${image.height} PNG"
+        val successStatus = UiText.resource(R.string.export_generated, image.width, image.height)
         persistMessages(successStatus, metadataWarning)
         _uiState.update {
             it.copy(
@@ -371,9 +377,9 @@ class ExportViewModel(
         if (action != null) dispatch(action)
     }
 
-    private suspend fun recordExport(project: Project, image: ExportedImage): String? = try {
+    private suspend fun recordExport(project: Project, image: ExportedImage): UiText? = try {
         val thumbnailPath = exportFiles.createThumbnail(project.id, image)
-        check(projects.recordExport(project.id, thumbnailPath)) { "项目已被删除，无法记录导出信息" }
+        check(projects.recordExport(project.id, thumbnailPath)) { "Project no longer exists" }
         projects.getProject(project.id)?.let { refreshed ->
             _uiState.update { it.copy(project = refreshed) }
         }
@@ -381,7 +387,7 @@ class ExportViewModel(
     } catch (cause: CancellationException) {
         throw cause
     } catch (cause: Throwable) {
-        cause.message ?: "图片已生成，但无法更新项目导出记录"
+        UiText.resource(R.string.export_metadata_warning)
     }
 
     private fun dispatch(action: ExportPendingAction) {
@@ -394,9 +400,9 @@ class ExportViewModel(
         savedStateHandle[OPERATION_KEY] = value.name
     }
 
-    private fun persistMessages(status: String, error: String?) {
+    private fun persistMessages(status: UiText, error: UiText?) {
         savedStateHandle[STATUS_KEY] = status
-        if (error == null) savedStateHandle.remove<String>(ERROR_KEY) else savedStateHandle[ERROR_KEY] = error
+        if (error == null) savedStateHandle.remove<UiText>(ERROR_KEY) else savedStateHandle[ERROR_KEY] = error
     }
 
     private fun persistImage(image: ExportedImage) {
@@ -433,6 +439,13 @@ class ExportViewModel(
             val date = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date(timestamp))
             return "$safe-$date.png"
         }
+
+        private fun restoredText(handle: SavedStateHandle, key: String): UiText? =
+            when (val value = handle.get<Any>(key)) {
+                is UiText -> value
+                is String -> UiText.Dynamic(value)
+                else -> null
+            }
 
         private fun restoreExportedImage(handle: SavedStateHandle): ExportedImage? {
             val path = handle.get<String>(EXPORTED_PATH_KEY) ?: return null

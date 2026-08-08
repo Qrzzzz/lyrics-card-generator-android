@@ -1,7 +1,6 @@
 package com.qrzzzz.lyricscard.ui
 
 import android.net.Uri
-import com.qrzzzz.lyricscard.EditorMessageResolver
 import com.qrzzzz.lyricscard.ExportFiles
 import com.qrzzzz.lyricscard.NeteaseClient
 import com.qrzzzz.lyricscard.ProjectAssets
@@ -15,7 +14,6 @@ import com.qrzzzz.lyricscard.model.PaletteSpec
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.ProjectSummary
 import com.qrzzzz.lyricscard.model.ProjectTemplates
-import com.qrzzzz.lyricscard.model.RenderSpecViolation
 import com.qrzzzz.lyricscard.renderer.ExportedImage
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -222,11 +220,6 @@ class FakeExportFiles : ExportFiles {
         clearFailure?.let { throw it }
         return clearBytes
     }
-}
-
-object FakeEditorMessages : EditorMessageResolver {
-    override fun lineLimit(violation: RenderSpecViolation, loadingStoredProject: Boolean): String =
-        "line limit ${violation.actual}/${violation.limit}"
 }
 
 fun Project.toSummary() = ProjectSummary(

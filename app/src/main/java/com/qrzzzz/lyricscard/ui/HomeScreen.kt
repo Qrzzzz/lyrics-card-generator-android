@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -56,9 +55,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.model.ProjectSummary
+import com.qrzzzz.lyricscard.ui.theme.LyricsCardSpacing
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -82,9 +84,9 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("歌词卡片", fontWeight = FontWeight.Black)
+                        Text(stringResource(R.string.home_title))
                         Text(
-                            "Android Alpha 0.2",
+                            stringResource(R.string.home_alpha_label),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -92,7 +94,10 @@ fun HomeScreen(
                 },
                 actions = {
                     IconButton(onClick = onSettings, enabled = !isWorking) {
-                        Icon(Icons.Rounded.Settings, contentDescription = "设置")
+                        Icon(
+                            Icons.Rounded.Settings,
+                            contentDescription = stringResource(R.string.home_settings_description),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -104,7 +109,10 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            contentPadding = PaddingValues(
+                horizontal = LyricsCardSpacing.comfortable,
+                vertical = LyricsCardSpacing.large,
+            ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
@@ -113,7 +121,7 @@ fun HomeScreen(
             item {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "最近项目",
+                    stringResource(R.string.home_recent_projects),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -144,29 +152,28 @@ private fun HeroActions(
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        shape = RoundedCornerShape(28.dp),
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
         Column(
-            modifier = Modifier.padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(LyricsCardSpacing.extraLarge),
+            verticalArrangement = Arrangement.spacedBy(LyricsCardSpacing.large),
         ) {
             Text(
-                "把一句歌词，做成一张值得保存的卡片。",
+                stringResource(R.string.home_hero_title),
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Black,
             )
             Text(
-                "原生编辑、离线预览，最终图片沿用 Windows 版的网页渲染路径。",
+                stringResource(R.string.home_hero_subtitle),
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = onCreateBlank, enabled = enabled) {
                     Icon(Icons.Rounded.Add, contentDescription = null)
-                    Text("空白项目", modifier = Modifier.padding(start = 6.dp))
+                    Text(stringResource(R.string.home_blank_project), modifier = Modifier.padding(start = 6.dp))
                 }
                 FilledTonalButton(onClick = onCreateSample, enabled = enabled) {
                     Icon(Icons.Rounded.TipsAndUpdates, contentDescription = null)
-                    Text("打开示例", modifier = Modifier.padding(start = 6.dp))
+                    Text(stringResource(R.string.home_open_sample), modifier = Modifier.padding(start = 6.dp))
                 }
             }
         }
@@ -179,14 +186,14 @@ private fun EmptyProjects() {
         modifier = Modifier
             .fillMaxWidth()
             .height(180.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(MaterialTheme.shapes.extraLarge)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("还没有项目", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.home_empty_title), style = MaterialTheme.typography.titleMedium)
             Text(
-                "从空白卡片或内置示例开始",
+                stringResource(R.string.home_empty_body),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -217,7 +224,7 @@ private fun ProjectCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled, onClick = onOpen),
-        shape = RoundedCornerShape(22.dp),
+        shape = MaterialTheme.shapes.large,
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -227,7 +234,7 @@ private fun ProjectCard(
             Box(
                 modifier = Modifier
                     .size(width = 84.dp, height = 68.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(MaterialTheme.shapes.medium)
                     .background(
                         Brush.linearGradient(
                             listOf(Color(0xFF6253C8), Color(0xFF2C6BAA), Color(0xFFDC805B)),
@@ -247,35 +254,41 @@ private fun ProjectCard(
                         project.name.take(1).uppercase(),
                         color = Color.White,
                         style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Black,
                     )
                 }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(project.name, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text(
-                    "更新于 ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(project.updatedAt))}",
+                    stringResource(
+                        R.string.home_updated_at,
+                        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                            .format(Date(project.updatedAt)),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Box {
                 IconButton(onClick = { menuOpen = true }, enabled = enabled) {
-                    Icon(Icons.Rounded.MoreVert, contentDescription = "项目菜单")
+                    Icon(
+                        Icons.Rounded.MoreVert,
+                        contentDescription = stringResource(R.string.home_project_menu_description),
+                    )
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("重命名") },
+                        text = { Text(stringResource(R.string.home_rename)) },
                         leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
                         onClick = { menuOpen = false; renameOpen = true },
                     )
                     DropdownMenuItem(
-                        text = { Text("复制") },
+                        text = { Text(stringResource(R.string.home_duplicate)) },
                         leadingIcon = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
                         onClick = { menuOpen = false; onDuplicate() },
                     )
                     DropdownMenuItem(
-                        text = { Text("删除") },
+                        text = { Text(stringResource(R.string.common_delete)) },
                         leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
                         onClick = { menuOpen = false; deleteOpen = true },
                     )
@@ -287,36 +300,44 @@ private fun ProjectCard(
     if (renameOpen) {
         AlertDialog(
             onDismissRequest = { renameOpen = false },
-            title = { Text("重命名项目") },
+            title = { Text(stringResource(R.string.home_rename_project)) },
             text = {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(120) },
                     singleLine = true,
-                    label = { Text("项目名称") },
+                    label = { Text(stringResource(R.string.home_project_name)) },
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = { onRename(name.trim()); renameOpen = false },
                     enabled = enabled && name.isNotBlank(),
-                ) { Text("保存") }
+                ) { Text(stringResource(R.string.common_save)) }
             },
-            dismissButton = { TextButton(onClick = { renameOpen = false }) { Text("取消") } },
+            dismissButton = {
+                TextButton(onClick = { renameOpen = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
     if (deleteOpen) {
         AlertDialog(
             onDismissRequest = { deleteOpen = false },
-            title = { Text("删除“${project.name}”？") },
-            text = { Text("项目数据将从本机删除，此操作无法撤销。") },
+            title = { Text(stringResource(R.string.home_delete_project_title, project.name)) },
+            text = { Text(stringResource(R.string.home_delete_project_body)) },
             confirmButton = {
                 TextButton(
                     onClick = { onDelete(); deleteOpen = false },
                     enabled = enabled,
-                ) { Text("删除") }
+                ) { Text(stringResource(R.string.common_delete)) }
             },
-            dismissButton = { TextButton(onClick = { deleteOpen = false }) { Text("取消") } },
+            dismissButton = {
+                TextButton(onClick = { deleteOpen = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
 }

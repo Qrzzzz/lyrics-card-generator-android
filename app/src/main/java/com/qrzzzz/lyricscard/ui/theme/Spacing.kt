@@ -8,6 +8,7 @@ object LyricsCardSpacing {
     val small = 8.dp
     val medium = 12.dp
     val large = 16.dp
+    val comfortable = 20.dp
     val extraLarge = 24.dp
     val section = 32.dp
 }

@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.NavigateNext
@@ -74,10 +73,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.model.BackgroundMode
 import com.qrzzzz.lyricscard.model.CanvasRatio
 import com.qrzzzz.lyricscard.model.ContentMode
@@ -93,15 +95,20 @@ import com.qrzzzz.lyricscard.model.TextColorMode
 import com.qrzzzz.lyricscard.model.TextColorPreset
 import com.qrzzzz.lyricscard.renderer.RendererController
 import com.qrzzzz.lyricscard.renderer.RendererPreview
+import com.qrzzzz.lyricscard.ui.theme.LyricsCardLayout
+import com.qrzzzz.lyricscard.ui.theme.LyricsCardShapeTokens
 import kotlin.math.roundToInt
 
-private enum class EditorStep(val label: String, val description: String) {
-    CHOOSE_SONG("选择歌曲", "搜索、链接解析或手动填写歌曲信息"),
-    LYRICS("歌词", "整理原文、译文与纯音乐内容"),
-    LAYOUT("布局", "设置方向、比例与卡片元素"),
-    FONT("字体方案", "调整字体、字号、行高与对齐"),
-    VISUAL("视觉", "设置配色、背景、网格与品牌信息"),
-    EXPORT("导出", "确认卡片内容并进入 PNG 输出"),
+private enum class EditorStep(
+    @param:StringRes val label: Int,
+    @param:StringRes val description: Int,
+) {
+    CHOOSE_SONG(R.string.editor_step_choose_song, R.string.editor_step_choose_song_description),
+    LYRICS(R.string.editor_step_lyrics, R.string.editor_step_lyrics_description),
+    LAYOUT(R.string.editor_step_layout, R.string.editor_step_layout_description),
+    FONT(R.string.editor_step_font, R.string.editor_step_font_description),
+    VISUAL(R.string.editor_step_visual, R.string.editor_step_visual_description),
+    EXPORT(R.string.editor_step_export, R.string.editor_step_export_description),
 }
 
 private const val MOBILE_SHEET_EXPANDED_FRACTION = 0.88f
@@ -143,15 +150,20 @@ fun EditorScreen(
                     Column {
                         Text(project.name, maxLines = 1, fontWeight = FontWeight.Bold)
                         Text(
-                            "${selectedStep + 1}/${EditorStep.entries.size} · ${if (state.isLeaving) {
-                                "正在保存并离开…"
+                            stringResource(
+                                R.string.editor_progress_status,
+                                selectedStep + 1,
+                                EditorStep.entries.size,
+                                if (state.isLeaving) {
+                                stringResource(R.string.editor_saving_and_leaving)
                             } else {
                                 when (state.autosaveStatus) {
-                                    AutosaveStatus.SAVED -> "已自动保存"
-                                    AutosaveStatus.SAVING -> "正在自动保存…"
-                                    AutosaveStatus.FAILED -> "自动保存失败"
+                                    AutosaveStatus.SAVED -> stringResource(R.string.editor_autosave_saved)
+                                    AutosaveStatus.SAVING -> stringResource(R.string.editor_autosave_saving)
+                                    AutosaveStatus.FAILED -> stringResource(R.string.editor_autosave_failed)
                                 }
-                            }}",
+                            },
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -159,15 +171,24 @@ fun EditorScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack, enabled = !state.isLeaving) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 actions = {
                     IconButton(onClick = onUndo, enabled = state.canUndo && !state.isLeaving) {
-                        Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = "撤销")
+                        Icon(
+                            Icons.AutoMirrored.Rounded.Undo,
+                            contentDescription = stringResource(R.string.common_undo),
+                        )
                     }
                     IconButton(onClick = onRedo, enabled = state.canRedo && !state.isLeaving) {
-                        Icon(Icons.AutoMirrored.Rounded.Redo, contentDescription = "重做")
+                        Icon(
+                            Icons.AutoMirrored.Rounded.Redo,
+                            contentDescription = stringResource(R.string.common_redo),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -180,7 +201,7 @@ fun EditorScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            val wide = maxWidth >= 840.dp
+            val wide = maxWidth >= LyricsCardLayout.wideBreakpoint
             val showPreview = selectedStep >= EditorStep.LAYOUT.ordinal
             if (wide) {
                 WideEditorLayout(
@@ -354,7 +375,7 @@ private fun MobileEditorBottomSheet(
         scaffoldState = scaffoldState,
         sheetPeekHeight = 112.dp,
         sheetMaxWidth = 840.dp,
-        sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        sheetShape = LyricsCardShapeTokens.topSheet,
         sheetDragHandle = { BottomSheetDefaults.DragHandle() },
         sheetContent = {
             EditorPanelContent(
@@ -414,7 +435,7 @@ private fun EditorProperties(
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(modifier = modifier, shape = RoundedCornerShape(22.dp), tonalElevation = 2.dp) {
+    Surface(modifier = modifier, shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) {
         EditorPanelContent(
             state = state,
             onSelectedStep = onSelectedStep,
@@ -460,7 +481,7 @@ private fun EditorPanelContent(
             onSelectedStep = onSelectedStep,
         )
         Text(
-            EditorStep.entries[selectedStep].description,
+            stringResource(EditorStep.entries[selectedStep].description),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
@@ -506,7 +527,7 @@ private fun EditorStepTabs(
                 onClick = { onSelectedStep(index) },
                 text = {
                     Text(
-                        "${index + 1}. ${step.label}",
+                        stringResource(R.string.editor_step_number, index + 1, stringResource(step.label)),
                         fontWeight = if (index == selectedStep) FontWeight.Bold else null,
                     )
                 },
@@ -560,7 +581,7 @@ private fun EditorStepContent(
                     StylePanel(
                         spec = project.spec,
                         isExtractingPalette = state.isExtractingPalette,
-                        paletteError = state.paletteError,
+                        paletteError = state.paletteError?.asString(),
                         onSpecChange = onSpecChange,
                         onExtractPalette = onExtractPalette,
                     )
@@ -592,10 +613,10 @@ private fun EditorNavigationBar(
                 modifier = Modifier
                     .weight(1f)
                     .height(52.dp),
-                shape = RoundedCornerShape(18.dp),
+                shape = MaterialTheme.shapes.large,
             ) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
-                Text("上一步", modifier = Modifier.padding(start = 6.dp))
+                Text(stringResource(R.string.editor_previous_step), modifier = Modifier.padding(start = 6.dp))
             }
             Button(
                 onClick = onNext,
@@ -603,7 +624,7 @@ private fun EditorNavigationBar(
                 modifier = Modifier
                     .weight(1.5f)
                     .height(52.dp),
-                shape = RoundedCornerShape(18.dp),
+                shape = MaterialTheme.shapes.large,
             ) {
                 Icon(
                     if (selectedStep == EditorStep.entries.lastIndex) {
@@ -614,7 +635,13 @@ private fun EditorNavigationBar(
                     contentDescription = null,
                 )
                 Text(
-                    if (selectedStep == EditorStep.entries.lastIndex) "导出 PNG" else "下一步",
+                    stringResource(
+                        if (selectedStep == EditorStep.entries.lastIndex) {
+                            R.string.editor_export_png
+                        } else {
+                            R.string.editor_next_step
+                        },
+                    ),
                     modifier = Modifier.padding(start = 8.dp),
                     fontWeight = FontWeight.Bold,
                 )
@@ -642,17 +669,17 @@ private fun ChooseSongPanel(
     val clipboard = LocalClipboardManager.current
     val lookupBusy = netease.isSearching || netease.isResolving
     PanelColumn {
-        SectionTitle("网易云选歌")
+        SectionTitle(stringResource(R.string.editor_netease_section))
         Text(
-            "与 Web 版一致，可先按歌名搜索；也可直接贴入网易云分享文本或链接。",
+            stringResource(R.string.editor_netease_help),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
             value = drafts.searchQuery,
             onValueChange = onSearchQueryChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("歌曲名或歌手") },
-            placeholder = { Text("例如：晴天 周杰伦") },
+            label = { Text(stringResource(R.string.editor_netease_query_label)) },
+            placeholder = { Text(stringResource(R.string.editor_netease_query_example)) },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = if (netease.isSearching) {
                 { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
@@ -668,18 +695,20 @@ private fun ChooseSongPanel(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(Icons.Rounded.Search, contentDescription = null)
-            Text("搜索网易云歌曲", modifier = Modifier.padding(start = 8.dp))
+            Text(stringResource(R.string.editor_netease_search), modifier = Modifier.padding(start = 8.dp))
         }
         netease.results.forEach { result ->
             OutlinedButton(
                 onClick = { onResolveNeteaseSong(result.id) },
                 enabled = !lookupBusy,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                shape = MaterialTheme.shapes.medium,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        listOf(result.title, result.artist).filter(String::isNotBlank).joinToString(" · "),
+                        listOf(result.title, result.artist)
+                            .filter(String::isNotBlank)
+                            .joinToString(stringResource(R.string.middle_dot_separator)),
                         fontWeight = FontWeight.Bold,
                     )
                     if (result.album.isNotBlank()) {
@@ -696,8 +725,8 @@ private fun ChooseSongPanel(
             value = drafts.linkInput,
             onValueChange = onLinkInputChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("网易云分享文本或链接") },
-            placeholder = { Text("https://music.163.com/song?id=…") },
+            label = { Text(stringResource(R.string.editor_netease_link_label)) },
+            placeholder = { Text(stringResource(R.string.editor_netease_link_example)) },
             leadingIcon = { Icon(Icons.Rounded.Link, contentDescription = null) },
             minLines = 2,
             maxLines = 4,
@@ -710,7 +739,7 @@ private fun ChooseSongPanel(
                 modifier = Modifier.weight(1f),
             ) {
                 Icon(Icons.Rounded.ContentPaste, contentDescription = null)
-                Text("贴入", modifier = Modifier.padding(start = 6.dp))
+                Text(stringResource(R.string.editor_paste), modifier = Modifier.padding(start = 6.dp))
             }
             Button(
                 onClick = { onResolveNeteaseLink(drafts.linkInput) },
@@ -719,28 +748,28 @@ private fun ChooseSongPanel(
             ) {
                 if (netease.isResolving) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 else Icon(Icons.Rounded.AutoAwesome, contentDescription = null)
-                Text("解析", modifier = Modifier.padding(start = 6.dp))
+                Text(stringResource(R.string.editor_parse), modifier = Modifier.padding(start = 6.dp))
             }
         }
         Text(
-            netease.message,
+            netease.message.asString(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )
 
-        SectionTitle("手动补充")
+        SectionTitle(stringResource(R.string.editor_manual_section))
         OutlinedTextField(
             value = drafts.projectName,
             onValueChange = onProjectNameChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("项目名称") },
+            label = { Text(stringResource(R.string.home_project_name)) },
             singleLine = true,
         )
         OutlinedTextField(
             value = spec.song.title,
             onValueChange = { onSpecChange(spec.copy(song = spec.song.copy(title = it.take(240)))) },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("歌曲标题") },
+            label = { Text(stringResource(R.string.editor_song_title)) },
             singleLine = true,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -748,18 +777,18 @@ private fun ChooseSongPanel(
                 value = spec.song.artist,
                 onValueChange = { onSpecChange(spec.copy(song = spec.song.copy(artist = it.take(240)))) },
                 modifier = Modifier.weight(1f),
-                label = { Text("艺术家") },
+                label = { Text(stringResource(R.string.editor_artist)) },
                 singleLine = true,
             )
             OutlinedTextField(
                 value = spec.song.album,
                 onValueChange = { onSpecChange(spec.copy(song = spec.song.copy(album = it.take(240)))) },
                 modifier = Modifier.weight(1f),
-                label = { Text("专辑") },
+                label = { Text(stringResource(R.string.editor_album)) },
                 singleLine = true,
             )
         }
-        Text("来源平台", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.editor_source_platform), style = MaterialTheme.typography.labelLarge)
         ChoiceChips(
             values = SongSource.entries,
             selected = spec.song.source,
@@ -768,17 +797,25 @@ private fun ChooseSongPanel(
                 onSpecChange(spec.copy(song = spec.song.copy(source = source), branding = spec.branding.copy(platform = source)))
             },
         )
-        SettingSwitch("Explicit 标记", spec.song.explicit) {
+        SettingSwitch(stringResource(R.string.editor_explicit_marker), spec.song.explicit) {
             onSpecChange(spec.copy(song = spec.song.copy(explicit = it)))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = onPickCover, modifier = Modifier.weight(1f)) {
-                Text(if (spec.song.coverAssetId == null) "选择封面" else "替换封面")
+                Text(
+                    stringResource(
+                        if (spec.song.coverAssetId == null) {
+                            R.string.editor_select_cover
+                        } else {
+                            R.string.editor_replace_cover
+                        },
+                    ),
+                )
             }
             if (spec.song.coverAssetId != null) {
                 TextButton(onClick = onRemoveCover) {
                     Icon(Icons.Rounded.Close, contentDescription = null)
-                    Text("移除")
+                    Text(stringResource(R.string.common_remove))
                 }
             }
         }
@@ -790,8 +827,8 @@ private fun ChooseSongPanel(
 private fun LyricsPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
     val instrumental = spec.content.mode == ContentMode.INSTRUMENTAL
     PanelColumn {
-        SectionTitle("歌词内容")
-        SettingSwitch("纯音乐模式", instrumental) { enabled ->
+        SectionTitle(stringResource(R.string.editor_lyrics_content))
+        SettingSwitch(stringResource(R.string.editor_instrumental_mode), instrumental) { enabled ->
             onSpecChange(
                 if (enabled) {
                     spec.copy(
@@ -814,24 +851,24 @@ private fun LyricsPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                 value = spec.content.instrumentalText,
                 onValueChange = { onSpecChange(spec.copy(content = spec.content.copy(instrumentalText = it.take(240)))) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("纯音乐提示文字") },
+                label = { Text(stringResource(R.string.editor_instrumental_text)) },
             )
         } else {
             OutlinedTextField(
                 value = spec.content.lyrics,
                 onValueChange = { onSpecChange(spec.copy(content = spec.content.copy(lyrics = it))) },
                 modifier = Modifier.fillMaxWidth().height(180.dp),
-                label = { Text("原文歌词") },
+                label = { Text(stringResource(R.string.editor_original_lyrics)) },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = {
                     onSpecChange(spec.copy(content = spec.content.copy(lyrics = LyricTextCleaner.removeTimestamps(spec.content.lyrics))))
-                }) { Text("清除时间戳") }
+                }) { Text(stringResource(R.string.editor_clear_timestamps)) }
                 TextButton(onClick = {
                     onSpecChange(spec.copy(content = spec.content.copy(lyrics = LyricTextCleaner.collapseRepeatedBlankLines(spec.content.lyrics))))
-                }) { Text("合并空行") }
+                }) { Text(stringResource(R.string.editor_merge_blank_lines)) }
             }
-            SettingSwitch("显示译文", spec.content.translationEnabled) {
+            SettingSwitch(stringResource(R.string.editor_show_translation), spec.content.translationEnabled) {
                 onSpecChange(spec.copy(content = spec.content.copy(translationEnabled = it)))
             }
             if (spec.content.translationEnabled) {
@@ -839,7 +876,7 @@ private fun LyricsPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                     value = spec.content.translation,
                     onValueChange = { onSpecChange(spec.copy(content = spec.content.copy(translation = it))) },
                     modifier = Modifier.fillMaxWidth().height(150.dp),
-                    label = { Text("译文歌词") },
+                    label = { Text(stringResource(R.string.editor_translation_lyrics)) },
                 )
             }
         }
@@ -849,17 +886,21 @@ private fun LyricsPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
 @Composable
 private fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
     PanelColumn {
-        SectionTitle("画布")
+        SectionTitle(stringResource(R.string.editor_canvas))
         if (spec.content.mode == ContentMode.INSTRUMENTAL) {
             Text(
-                "纯音乐模式固定使用竖版 1:1 画布。关闭纯音乐模式后可选择其他比例。",
+                stringResource(R.string.editor_instrumental_canvas_help),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             ChoiceChips(
                 values = LayoutMode.entries,
                 selected = spec.canvas.layoutMode,
-                label = { if (it == LayoutMode.PORTRAIT) "竖版" else "横版" },
+                label = {
+                    stringResource(
+                        if (it == LayoutMode.PORTRAIT) R.string.common_portrait else R.string.common_landscape,
+                    )
+                },
                 onSelect = { mode ->
                     val canvas = if (mode == LayoutMode.PORTRAIT) {
                         spec.canvas.copy(layoutMode = mode, ratio = CanvasRatio.PORTRAIT_4_5, width = 1080, height = 1350, autoHeight = false)
@@ -869,7 +910,7 @@ private fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                     onSpecChange(spec.copy(canvas = canvas))
                 },
             )
-            Text("比例", style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.editor_ratio), style = MaterialTheme.typography.labelLarge)
             val ratios = if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) {
                 listOf(CanvasRatio.SQUARE, CanvasRatio.PORTRAIT_4_5, CanvasRatio.PORTRAIT_9_16, CanvasRatio.CUSTOM)
             } else {
@@ -889,32 +930,32 @@ private fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     val widthRange = if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) 720..1440 else 1080..3000
                     val heightRange = if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) 720..3200 else 720..1600
-                    NumberField("宽度", spec.canvas.width, widthRange, Modifier.weight(1f)) { width ->
+                    NumberField(stringResource(R.string.editor_width), spec.canvas.width, widthRange, Modifier.weight(1f)) { width ->
                         onSpecChange(spec.copy(canvas = spec.canvas.copy(width = width)))
                     }
-                    NumberField("高度", spec.canvas.height, heightRange, Modifier.weight(1f)) { height ->
+                    NumberField(stringResource(R.string.editor_height), spec.canvas.height, heightRange, Modifier.weight(1f)) { height ->
                         onSpecChange(spec.copy(canvas = spec.canvas.copy(height = height)))
                     }
                 }
                 SettingSwitch(
-                    "竖版自动高度",
+                    stringResource(R.string.editor_auto_height),
                     spec.canvas.autoHeight,
                     enabled = spec.canvas.layoutMode == LayoutMode.PORTRAIT,
                 ) { onSpecChange(spec.copy(canvas = spec.canvas.copy(autoHeight = it))) }
             }
         }
 
-        SectionTitle("元素")
-        SettingSwitch("显示封面", spec.visibility.showCover, enabled = spec.song.coverAssetId != null) {
+        SectionTitle(stringResource(R.string.editor_elements))
+        SettingSwitch(stringResource(R.string.editor_show_cover), spec.visibility.showCover, enabled = spec.song.coverAssetId != null) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showCover = it)))
         }
-        SettingSwitch("显示歌曲信息", spec.visibility.showSongInfo) {
+        SettingSwitch(stringResource(R.string.editor_show_song_info), spec.visibility.showSongInfo) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showSongInfo = it)))
         }
-        SettingSwitch("显示专辑", spec.visibility.showAlbum) {
+        SettingSwitch(stringResource(R.string.editor_show_album), spec.visibility.showAlbum) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showAlbum = it)))
         }
-        LabeledSlider("封面裁切缩放", spec.media.coverCropScale.toFloat(), 1f..2f, "%.2f".format(spec.media.coverCropScale)) {
+        LabeledSlider(stringResource(R.string.editor_cover_crop_scale), spec.media.coverCropScale.toFloat(), 1f..2f, "%.2f".format(spec.media.coverCropScale)) {
             onSpecChange(spec.copy(media = spec.media.copy(coverCropScale = it.toDouble())))
         }
     }
@@ -929,11 +970,15 @@ private fun StylePanel(
     onExtractPalette: () -> Unit,
 ) {
     PanelColumn {
-        SectionTitle("背景")
+        SectionTitle(stringResource(R.string.editor_background))
         ChoiceChips(
             values = BackgroundMode.entries,
             selected = spec.visual.backgroundMode,
-            label = { if (it == BackgroundMode.PALETTE) "调色板" else "渐变" },
+            label = {
+                stringResource(
+                    if (it == BackgroundMode.PALETTE) R.string.editor_palette else R.string.editor_gradient,
+                )
+            },
             onSelect = { onSpecChange(spec.copy(visual = spec.visual.copy(backgroundMode = it))) },
         )
         val coverId = spec.song.coverAssetId
@@ -942,30 +987,43 @@ private fun StylePanel(
             enabled = coverId != null && !isExtractingPalette,
         ) {
             Icon(Icons.Rounded.AutoAwesome, contentDescription = null)
-            Text(if (isExtractingPalette) "正在提取…" else "从封面提取颜色", modifier = Modifier.padding(start = 8.dp))
+            Text(
+                stringResource(
+                    if (isExtractingPalette) R.string.editor_extracting_palette else R.string.editor_extract_palette,
+                ),
+                modifier = Modifier.padding(start = 8.dp),
+            )
         }
         paletteError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        ColorField("主色", spec.visual.palette.dominant) {
+        ColorField(stringResource(R.string.editor_dominant_color), spec.visual.palette.dominant) {
             onSpecChange(spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(dominant = it))))
         }
-        ColorField("辅色", spec.visual.palette.secondary) {
+        ColorField(stringResource(R.string.editor_secondary_color), spec.visual.palette.secondary) {
             onSpecChange(spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(secondary = it))))
         }
-        ColorField("强调色", spec.visual.palette.accent) {
+        ColorField(stringResource(R.string.editor_accent_color), spec.visual.palette.accent) {
             onSpecChange(spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(accent = it))))
         }
-        SectionTitle("网格")
-        SettingSwitch("显示背景网格", spec.visual.gridEnabled) {
+        SectionTitle(stringResource(R.string.editor_grid))
+        SettingSwitch(stringResource(R.string.editor_show_grid), spec.visual.gridEnabled) {
             onSpecChange(spec.copy(visual = spec.visual.copy(gridEnabled = it)))
         }
         if (spec.visual.gridEnabled) {
             ChoiceChips(
                 values = GridDensity.entries,
                 selected = spec.visual.gridDensity,
-                label = { when (it) { GridDensity.SPARSE -> "稀疏"; GridDensity.MEDIUM -> "中等"; GridDensity.DENSE -> "密集" } },
+                label = {
+                    stringResource(
+                        when (it) {
+                            GridDensity.SPARSE -> R.string.editor_grid_sparse
+                            GridDensity.MEDIUM -> R.string.editor_grid_medium
+                            GridDensity.DENSE -> R.string.editor_grid_dense
+                        },
+                    )
+                },
                 onSelect = { onSpecChange(spec.copy(visual = spec.visual.copy(gridDensity = it))) },
             )
-            LabeledSlider("网格透明度", spec.visual.gridOpacity.toFloat(), 0f..0.5f, "${(spec.visual.gridOpacity * 100).roundToInt()}%") {
+            LabeledSlider(stringResource(R.string.editor_grid_opacity), spec.visual.gridOpacity.toFloat(), 0f..0.5f, "${(spec.visual.gridOpacity * 100).roundToInt()}%") {
                 onSpecChange(spec.copy(visual = spec.visual.copy(gridOpacity = it.toDouble())))
             }
         }
@@ -975,40 +1033,60 @@ private fun StylePanel(
 @Composable
 private fun TypographyPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
     PanelColumn {
-        SectionTitle("字体")
+        SectionTitle(stringResource(R.string.editor_font))
         ChoiceChips(
             values = listOf(FontScheme.SANS_HEAVY, FontScheme.SERIF_HEAVY),
             selected = spec.typography.fontScheme,
-            label = { if (it == FontScheme.SANS_HEAVY) "思源黑体" else "思源宋体" },
+            label = {
+                stringResource(
+                    if (it == FontScheme.SANS_HEAVY) R.string.editor_font_sans else R.string.editor_font_serif,
+                )
+            },
             onSelect = { scheme ->
                 val family = if (scheme == FontScheme.SANS_HEAVY) "Source Han Sans SC" else "Source Han Serif SC"
                 onSpecChange(spec.copy(typography = spec.typography.copy(fontScheme = scheme, fontFamily = family)))
             },
         )
-        LabeledSlider("歌词字号", spec.typography.lyricSize.toFloat(), 36f..72f, "${spec.typography.lyricSize}") {
+        LabeledSlider(stringResource(R.string.editor_lyric_size), spec.typography.lyricSize.toFloat(), 36f..72f, "${spec.typography.lyricSize}") {
             onSpecChange(spec.copy(typography = spec.typography.copy(lyricSize = it.roundToInt())))
         }
-        LabeledSlider("行高", spec.typography.lineHeight.toFloat(), 1.1f..1.75f, "%.2f".format(spec.typography.lineHeight)) {
+        LabeledSlider(stringResource(R.string.editor_line_height), spec.typography.lineHeight.toFloat(), 1.1f..1.75f, "%.2f".format(spec.typography.lineHeight)) {
             onSpecChange(spec.copy(typography = spec.typography.copy(lineHeight = it.toDouble())))
         }
-        LabeledSlider("译文字号比例", spec.typography.translationScale.toFloat(), 0.6f..0.9f, "${(spec.typography.translationScale * 100).roundToInt()}%") {
+        LabeledSlider(stringResource(R.string.editor_translation_scale), spec.typography.translationScale.toFloat(), 0.6f..0.9f, "${(spec.typography.translationScale * 100).roundToInt()}%") {
             onSpecChange(spec.copy(typography = spec.typography.copy(translationScale = it.toDouble())))
         }
-        Text("对齐", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.editor_alignment), style = MaterialTheme.typography.labelLarge)
         ChoiceChips(
             values = TextAlignment.entries,
             selected = spec.typography.alignment,
-            label = { when (it) { TextAlignment.LEFT -> "左对齐"; TextAlignment.CENTER -> "居中"; TextAlignment.RIGHT -> "右对齐" } },
+            label = {
+                stringResource(
+                    when (it) {
+                        TextAlignment.LEFT -> R.string.editor_align_left
+                        TextAlignment.CENTER -> R.string.editor_align_center
+                        TextAlignment.RIGHT -> R.string.editor_align_right
+                    },
+                )
+            },
             onSelect = { onSpecChange(spec.copy(typography = spec.typography.copy(alignment = it))) },
         )
-        SettingSwitch("双行标题", spec.typography.twoLineTitle) {
+        SettingSwitch(stringResource(R.string.editor_two_line_title), spec.typography.twoLineTitle) {
             onSpecChange(spec.copy(typography = spec.typography.copy(twoLineTitle = it)))
         }
-        SectionTitle("文字颜色")
+        SectionTitle(stringResource(R.string.editor_text_color))
         ChoiceChips(
             values = TextColorMode.entries,
             selected = spec.typography.textColorMode,
-            label = { when (it) { TextColorMode.AUTO -> "自动"; TextColorMode.PRESET -> "预设"; TextColorMode.CUSTOM -> "自定义" } },
+            label = {
+                stringResource(
+                    when (it) {
+                        TextColorMode.AUTO -> R.string.editor_color_auto
+                        TextColorMode.PRESET -> R.string.editor_color_preset
+                        TextColorMode.CUSTOM -> R.string.common_custom
+                    },
+                )
+            },
             onSelect = { mode ->
                 val custom = if (mode == TextColorMode.CUSTOM) spec.typography.customTextColor ?: "#FFFFFF" else spec.typography.customTextColor
                 onSpecChange(spec.copy(typography = spec.typography.copy(textColorMode = mode, customTextColor = custom)))
@@ -1018,10 +1096,10 @@ private fun TypographyPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit
             TextColorMode.PRESET -> ChoiceChips(
                 values = listOf(TextColorPreset.WHITE, TextColorPreset.BLACK, TextColorPreset.WARM_WHITE, TextColorPreset.CREAM),
                 selected = spec.typography.textColorPreset,
-                label = { preset -> preset.name.lowercase().replace('_', ' ') },
+                label = ::textColorPresetLabel,
                 onSelect = { onSpecChange(spec.copy(typography = spec.typography.copy(textColorPreset = it))) },
             )
-            TextColorMode.CUSTOM -> ColorField("自定义文字颜色", spec.typography.customTextColor ?: "#FFFFFF") {
+            TextColorMode.CUSTOM -> ColorField(stringResource(R.string.editor_custom_text_color), spec.typography.customTextColor ?: "#FFFFFF") {
                 onSpecChange(spec.copy(typography = spec.typography.copy(customTextColor = it)))
             }
             TextColorMode.AUTO -> Unit
@@ -1032,8 +1110,8 @@ private fun TypographyPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit
 @Composable
 private fun BrandingPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
     PanelColumn {
-        SectionTitle("平台与署名")
-        SettingSwitch("显示平台 Logo", spec.visibility.showPlatformBadge, enabled = spec.branding.platform != SongSource.UNKNOWN) {
+        SectionTitle(stringResource(R.string.editor_platform_attribution))
+        SettingSwitch(stringResource(R.string.editor_show_platform_logo), spec.visibility.showPlatformBadge, enabled = spec.branding.platform != SongSource.UNKNOWN) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showPlatformBadge = it)))
         }
         ChoiceChips(
@@ -1042,19 +1120,19 @@ private fun BrandingPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) 
             label = ::songSourceLabel,
             onSelect = { onSpecChange(spec.copy(branding = spec.branding.copy(platform = it))) },
         )
-        SettingSwitch("显示 Shared by", spec.visibility.showSharedBy) {
+        SettingSwitch(stringResource(R.string.editor_show_shared_by), spec.visibility.showSharedBy) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showSharedBy = it)))
         }
         if (spec.visibility.showSharedBy) {
             OutlinedTextField(
                 value = spec.branding.sharedByName,
                 onValueChange = { onSpecChange(spec.copy(branding = spec.branding.copy(sharedByName = it.take(240)))) },
-                label = { Text("分享者名称") },
+                label = { Text(stringResource(R.string.editor_sharer_name)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
         }
-        SettingSwitch("显示 Generated watermark", spec.visibility.showGeneratedWatermark) {
+        SettingSwitch(stringResource(R.string.editor_show_generated_watermark), spec.visibility.showGeneratedWatermark) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showGeneratedWatermark = it)))
         }
     }
@@ -1066,17 +1144,38 @@ private fun ExportStepPanel(project: Project) {
     val songReady = spec.song.title.isNotBlank() || spec.song.artist.isNotBlank()
     val contentReady = spec.content.mode == ContentMode.INSTRUMENTAL || spec.content.lyrics.isNotBlank()
     PanelColumn {
-        SectionTitle("导出前确认")
-        Text(project.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-        ReadinessRow("歌曲信息", songReady, if (songReady) "已填写" else "仍可返回第一步补充")
-        ReadinessRow("卡片内容", contentReady, if (contentReady) "已准备" else "歌词为空")
+        SectionTitle(stringResource(R.string.editor_pre_export_check))
+        Text(project.name, style = MaterialTheme.typography.titleLarge)
         ReadinessRow(
-            "画布",
+            stringResource(R.string.editor_song_info),
+            songReady,
+            stringResource(
+                if (songReady) R.string.editor_filled else R.string.editor_return_to_first_step,
+            ),
+        )
+        ReadinessRow(
+            stringResource(R.string.editor_card_content),
+            contentReady,
+            stringResource(if (contentReady) R.string.editor_ready else R.string.editor_lyrics_empty),
+        )
+        ReadinessRow(
+            stringResource(R.string.editor_canvas),
             true,
-            "${spec.canvas.width} × ${spec.canvas.height} · ${if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) "竖版" else "横版"}",
+            stringResource(
+                R.string.editor_canvas_summary,
+                spec.canvas.width,
+                spec.canvas.height,
+                stringResource(
+                    if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) {
+                        R.string.common_portrait
+                    } else {
+                        R.string.common_landscape
+                    },
+                ),
+            ),
         )
         Text(
-            "点击下方“导出 PNG”后，可选择标准/高清倍率、文件名，并保存或分享图片。",
+            stringResource(R.string.editor_export_help),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -1086,7 +1185,7 @@ private fun ExportStepPanel(project: Project) {
 private fun ReadinessRow(label: String, ready: Boolean, detail: String) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.medium,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -1113,7 +1212,7 @@ private fun PanelColumn(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun SectionTitle(value: String) {
-    Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+    Text(value, style = MaterialTheme.typography.titleMedium)
 }
 
 @Composable
@@ -1156,7 +1255,7 @@ private fun LabeledSlider(
 private fun <T> ChoiceChips(
     values: List<T>,
     selected: T,
-    label: (T) -> String,
+    label: @Composable (T) -> String,
     onSelect: (T) -> Unit,
 ) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1210,7 +1309,7 @@ private fun ColorField(label: String, value: String, onValidValue: (String) -> U
         trailingIcon = {
             Surface(
                 modifier = Modifier.size(24.dp),
-                shape = RoundedCornerShape(8.dp),
+                shape = MaterialTheme.shapes.small,
                 color = runCatching { cssHexColor(value) }
                     .getOrDefault(MaterialTheme.colorScheme.surfaceVariant),
             ) {}
@@ -1218,22 +1317,40 @@ private fun ColorField(label: String, value: String, onValidValue: (String) -> U
     )
 }
 
-private fun songSourceLabel(source: SongSource) = when (source) {
-    SongSource.UNKNOWN -> "未知"
-    SongSource.QQ -> "QQ 音乐"
-    SongSource.NETEASE -> "网易云"
-    SongSource.APPLE -> "Apple Music"
-    SongSource.SPOTIFY -> "Spotify"
+@Composable
+private fun songSourceLabel(source: SongSource) = stringResource(when (source) {
+    SongSource.UNKNOWN -> R.string.common_unknown
+    SongSource.QQ -> R.string.brand_qq_music
+    SongSource.NETEASE -> R.string.brand_netease
+    SongSource.APPLE -> R.string.brand_apple_music
+    SongSource.SPOTIFY -> R.string.brand_spotify
+})
+
+@Composable
+private fun textColorPresetLabel(preset: TextColorPreset) = stringResource(when (preset) {
+    TextColorPreset.WHITE -> R.string.editor_color_white
+    TextColorPreset.BLACK -> R.string.editor_color_black
+    TextColorPreset.WARM_WHITE -> R.string.editor_color_warm_white
+    TextColorPreset.CREAM -> R.string.editor_color_cream
+    TextColorPreset.CHARCOAL -> R.string.editor_color_charcoal
+    TextColorPreset.SOFT_BLUE -> R.string.editor_color_soft_blue
+    TextColorPreset.SOFT_GOLD -> R.string.editor_color_soft_gold
+})
+
+@Composable
+private fun ratioLabel(ratio: CanvasRatio) = when (ratio) {
+    CanvasRatio.CUSTOM -> stringResource(R.string.common_custom)
+    else -> ratio.contractLabel()
 }
 
-private fun ratioLabel(ratio: CanvasRatio) = when (ratio) {
+private fun CanvasRatio.contractLabel() = when (this) {
     CanvasRatio.SQUARE -> "1:1"
     CanvasRatio.PORTRAIT_4_5 -> "4:5"
     CanvasRatio.PORTRAIT_9_16 -> "9:16"
     CanvasRatio.LANDSCAPE_16_9 -> "16:9"
     CanvasRatio.LANDSCAPE_21_9 -> "21:9"
     CanvasRatio.LANDSCAPE_3_2 -> "3:2"
-    CanvasRatio.CUSTOM -> "自定义"
+    CanvasRatio.CUSTOM -> error("Custom ratio has a localized label")
 }
 
 private val HEX_COLOR = Regex("^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$")

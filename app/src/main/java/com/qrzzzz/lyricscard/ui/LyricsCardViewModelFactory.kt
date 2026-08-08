@@ -21,7 +21,6 @@ class LyricsCardViewModelFactory(
             projectAssets = container.projectAssets,
             neteaseClient = container.netease,
             renderer = container.renderer,
-            messages = container.editorMessages,
             sessions = container.editorSessions,
         )
 

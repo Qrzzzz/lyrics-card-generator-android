@@ -76,6 +76,7 @@ class ThemeContractTest {
             LyricsCardSpacing.small,
             LyricsCardSpacing.medium,
             LyricsCardSpacing.large,
+            LyricsCardSpacing.comfortable,
             LyricsCardSpacing.extraLarge,
             LyricsCardSpacing.section,
         )

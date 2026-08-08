@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -48,13 +47,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.renderer.ExportedImage
 import com.qrzzzz.lyricscard.renderer.RendererController
 import com.qrzzzz.lyricscard.renderer.RendererPreview
+import com.qrzzzz.lyricscard.ui.theme.LyricsCardLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -73,10 +75,11 @@ fun ExportScreen(
     onRetry: () -> Unit,
     onSaveDestination: (android.net.Uri) -> Unit,
     onEffectConsumed: (Long) -> Unit,
-    onExternalActionError: (String) -> Unit,
+    onExternalActionError: (UiText) -> Unit,
 ) {
     val project = checkNotNull(state.project)
     val context = LocalContext.current
+    val defaultFileName = stringResource(R.string.export_default_file_name)
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/png"),
@@ -88,7 +91,7 @@ fun ExportScreen(
         val effect = state.effect ?: return@LaunchedEffect
         try {
             when (effect.action) {
-                ExportPendingAction.SAVE -> saveLauncher.launch(ensurePng(state.fileName))
+                ExportPendingAction.SAVE -> saveLauncher.launch(ensurePng(state.fileName, defaultFileName))
                 ExportPendingAction.SHARE -> {
                     val image = state.exported
                     if (image != null) shareImage(context, image)
@@ -96,11 +99,13 @@ fun ExportScreen(
             }
         } catch (cause: Throwable) {
             onExternalActionError(
-                cause.message ?: if (effect.action == ExportPendingAction.SAVE) {
-                    "无法打开文件选择器"
-                } else {
-                    "无法打开分享面板"
-                },
+                UiText.resource(
+                    if (effect.action == ExportPendingAction.SAVE) {
+                        R.string.export_error_open_file_picker
+                    } else {
+                        R.string.export_error_open_share_sheet
+                    },
+                ),
             )
         } finally {
             onEffectConsumed(effect.id)
@@ -112,10 +117,13 @@ fun ExportScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("导出图片", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.export_title), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack, enabled = !state.isBusy) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -127,7 +135,7 @@ fun ExportScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            val wide = maxWidth >= 840.dp
+            val wide = maxWidth >= LyricsCardLayout.wideBreakpoint
             if (wide) {
                 Row(
                     modifier = Modifier
@@ -210,8 +218,8 @@ private fun ExportControls(
     exported: ExportedImage?,
     busy: Boolean,
     canCancel: Boolean,
-    status: String,
-    error: String?,
+    status: UiText,
+    error: UiText?,
     onSave: () -> Unit,
     onShare: () -> Unit,
     onCancel: () -> Unit,
@@ -227,7 +235,7 @@ private fun ExportControls(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            Text("输出设置", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+            Text(stringResource(R.string.export_output_settings), style = MaterialTheme.typography.titleLarge)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -235,7 +243,21 @@ private fun ExportControls(
                     FilterChip(
                         selected = multiplier == value,
                         onClick = { onMultiplier(value) },
-                        label = { Text("${value}× ${if (value == 1) "标准" else "高清"}") },
+                        label = {
+                            Text(
+                                stringResource(
+                                    R.string.export_scale_label,
+                                    value,
+                                    stringResource(
+                                        if (value == 1) {
+                                            R.string.common_standard
+                                        } else {
+                                            R.string.common_high_definition
+                                        },
+                                    ),
+                                ),
+                            )
+                        },
                         enabled = !busy,
                     )
                 }
@@ -244,12 +266,18 @@ private fun ExportControls(
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(18.dp),
+                shape = MaterialTheme.shapes.large,
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("最终尺寸", style = MaterialTheme.typography.labelLarge)
-                    Text("$finalWidth × $finalHeight px", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                    Text("预计解码内存 ${"%.1f".format(estimateMb)} MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.export_final_size), style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        stringResource(R.string.export_final_dimensions, finalWidth, finalHeight),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    Text(
+                        stringResource(R.string.export_memory_estimate, estimateMb),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -258,8 +286,12 @@ private fun ExportControls(
                 value = fileName,
                 onValueChange = { onFileName(it.take(80)) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("文件名") },
-                suffix = { if (!fileName.endsWith(".png", true)) Text(".png") },
+                label = { Text(stringResource(R.string.export_file_name)) },
+                suffix = {
+                    if (!fileName.endsWith(".png", true)) {
+                        Text(stringResource(R.string.file_extension_png))
+                    }
+                },
                 singleLine = true,
                 enabled = !busy,
             )
@@ -274,17 +306,21 @@ private fun ExportControls(
                         decodePreviewBitmap(exported.file.absolutePath)
                     }
                 }
-                Card(shape = RoundedCornerShape(18.dp)) {
+                Card(shape = MaterialTheme.shapes.large) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Text("导出结果预览", modifier = Modifier.padding(start = 8.dp), fontWeight = FontWeight.Bold)
+                            Text(
+                                stringResource(R.string.export_result_preview),
+                                modifier = Modifier.padding(start = 8.dp),
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                         val previewBitmap = bitmap
                         if (previewBitmap != null) {
                             Image(
                                 bitmap = previewBitmap,
-                                contentDescription = "导出的图片",
+                                contentDescription = stringResource(R.string.exported_image_description),
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -297,7 +333,7 @@ private fun ExportControls(
         }
         item {
             Text(
-                error ?: status,
+                error?.asString() ?: status.asString(),
                 color = if (error == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
             )
         }
@@ -305,7 +341,7 @@ private fun ExportControls(
             item {
                 OutlinedButton(onClick = onRetry, enabled = !busy) {
                     Icon(Icons.Rounded.Refresh, contentDescription = null)
-                    Text("重试导出", modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(R.string.export_retry), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
@@ -313,7 +349,10 @@ private fun ExportControls(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = onSave, modifier = Modifier.weight(1f), enabled = !busy) {
                     Icon(Icons.Rounded.Download, contentDescription = null)
-                    Text(if (busy) "生成中…" else "保存", modifier = Modifier.padding(start = 6.dp))
+                    Text(
+                        stringResource(if (busy) R.string.export_generating else R.string.common_save),
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
                 }
                 if (busy) {
                     OutlinedButton(
@@ -323,14 +362,16 @@ private fun ExportControls(
                     ) {
                         Icon(Icons.Rounded.Close, contentDescription = null)
                         Text(
-                            if (canCancel) "取消" else "正在完成",
+                            stringResource(
+                                if (canCancel) R.string.common_cancel else R.string.export_finalizing,
+                            ),
                             modifier = Modifier.padding(start = 6.dp),
                         )
                     }
                 } else {
                     OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Rounded.Share, contentDescription = null)
-                        Text("分享", modifier = Modifier.padding(start = 6.dp))
+                        Text(stringResource(R.string.common_share), modifier = Modifier.padding(start = 6.dp))
                     }
                 }
             }
@@ -343,14 +384,18 @@ private fun shareImage(context: android.content.Context, image: ExportedImage) {
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = image.mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
-        clipData = ClipData.newUri(context.contentResolver, "Lyrics Card PNG", uri)
+        clipData = ClipData.newUri(
+            context.contentResolver,
+            context.getString(R.string.export_clip_label),
+            uri,
+        )
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(intent, "分享歌词卡片"))
+    context.startActivity(Intent.createChooser(intent, context.getString(R.string.export_share_chooser)))
 }
 
-private fun ensurePng(value: String): String {
-    val clean = value.ifBlank { "lyrics-card.png" }.replace(INVALID_FILE_CHARS, "-")
+private fun ensurePng(value: String, fallbackName: String): String {
+    val clean = value.ifBlank { fallbackName }.replace(INVALID_FILE_CHARS, "-")
     return if (clean.endsWith(".png", true)) clean else "$clean.png"
 }
 

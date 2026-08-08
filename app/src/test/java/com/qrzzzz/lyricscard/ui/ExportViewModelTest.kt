@@ -1,5 +1,6 @@
 package com.qrzzzz.lyricscard.ui
 
+import com.qrzzzz.lyricscard.R
 import androidx.lifecycle.SavedStateHandle
 import com.qrzzzz.lyricscard.data.UserPreferences
 import com.qrzzzz.lyricscard.model.Project
@@ -103,7 +104,7 @@ class ExportViewModelTest {
         assertEquals(ExportOperationState.INTERRUPTED, viewModel.uiState.value.operation)
         assertEquals(0, renderer.exportCalls)
         assertNull(viewModel.uiState.value.exported)
-        assertTrue(viewModel.uiState.value.errorMessage.orEmpty().contains("中断"))
+        assertEquals(UiText.resource(R.string.export_interrupted_error), viewModel.uiState.value.errorMessage)
 
         viewModel.retry()
         advanceUntilIdle()
@@ -141,8 +142,8 @@ class ExportViewModelTest {
                 ExportViewModel.EXPORTED_WIDTH_KEY to handle.get<Int>(ExportViewModel.EXPORTED_WIDTH_KEY),
                 ExportViewModel.EXPORTED_HEIGHT_KEY to handle.get<Int>(ExportViewModel.EXPORTED_HEIGHT_KEY),
                 ExportViewModel.EXPORTED_MIME_KEY to handle.get<String>(ExportViewModel.EXPORTED_MIME_KEY),
-                ExportViewModel.STATUS_KEY to handle.get<String>(ExportViewModel.STATUS_KEY),
-                ExportViewModel.ERROR_KEY to handle.get<String>(ExportViewModel.ERROR_KEY),
+                ExportViewModel.STATUS_KEY to handle.get<UiText>(ExportViewModel.STATUS_KEY),
+                ExportViewModel.ERROR_KEY to handle.get<UiText>(ExportViewModel.ERROR_KEY),
             ),
         )
         val restoredRenderer = FakeRendererOperations()
@@ -160,7 +161,7 @@ class ExportViewModelTest {
         assertEquals("my-card.png", restored.uiState.value.fileName)
         assertEquals(ExportOperationState.SUCCESS, restored.uiState.value.operation)
         assertEquals(path, restored.uiState.value.exported?.file?.absolutePath)
-        assertEquals("已保存到所选位置", restored.uiState.value.status)
+        assertEquals(UiText.resource(R.string.export_saved), restored.uiState.value.status)
         assertEquals(0, restoredRenderer.exportCalls)
     }
 
@@ -183,7 +184,7 @@ class ExportViewModelTest {
 
         assertEquals(ExportOperationState.FAILURE, viewModel.uiState.value.operation)
         assertNull(viewModel.uiState.value.exported)
-        assertFalse(viewModel.uiState.value.errorMessage.isNullOrBlank())
+        assertNotNull(viewModel.uiState.value.errorMessage)
     }
 
     @Test
@@ -200,14 +201,14 @@ class ExportViewModelTest {
         advanceUntilIdle()
 
         assertEquals(ExportOperationState.FAILURE, first.uiState.value.operation)
-        assertEquals("renderer session lost", first.uiState.value.errorMessage)
+        assertEquals(UiText.resource(R.string.export_failure), first.uiState.value.errorMessage)
 
         val restoredHandle = SavedStateHandle(
             mapOf(
                 ExportViewModel.PROJECT_ID_KEY to project.id,
                 ExportViewModel.OPERATION_KEY to handle.get<String>(ExportViewModel.OPERATION_KEY),
-                ExportViewModel.STATUS_KEY to handle.get<String>(ExportViewModel.STATUS_KEY),
-                ExportViewModel.ERROR_KEY to handle.get<String>(ExportViewModel.ERROR_KEY),
+                ExportViewModel.STATUS_KEY to handle.get<UiText>(ExportViewModel.STATUS_KEY),
+                ExportViewModel.ERROR_KEY to handle.get<UiText>(ExportViewModel.ERROR_KEY),
             ),
         )
         val restoredRenderer = FakeRendererOperations()
@@ -215,8 +216,8 @@ class ExportViewModelTest {
         runCurrent()
 
         assertEquals(ExportOperationState.FAILURE, restored.uiState.value.operation)
-        assertEquals("导出失败，可重试", restored.uiState.value.status)
-        assertEquals("renderer session lost", restored.uiState.value.errorMessage)
+        assertEquals(UiText.resource(R.string.export_failed_retryable), restored.uiState.value.status)
+        assertEquals(UiText.resource(R.string.export_failure), restored.uiState.value.errorMessage)
         assertEquals(0, restoredRenderer.exportCalls)
     }
 
@@ -287,7 +288,7 @@ class ExportViewModelTest {
 
         assertEquals(ExportOperationState.SUCCESS, viewModel.uiState.value.operation)
         assertNotNull(viewModel.uiState.value.exported)
-        assertTrue(viewModel.uiState.value.errorMessage.orEmpty().contains("metadata unavailable"))
+        assertEquals(UiText.resource(R.string.export_metadata_warning), viewModel.uiState.value.errorMessage)
         val stored = store.getProject(project.id)
         assertNull(stored?.thumbnailPath)
         assertNull(stored?.lastExportedAt)
@@ -309,7 +310,7 @@ class ExportViewModelTest {
         assertEquals(ExportOperationState.SUCCESS, viewModel.uiState.value.operation)
         assertEquals(1, renderer.exportCalls)
         assertEquals(0, store.recordExportCalls)
-        assertTrue(viewModel.uiState.value.errorMessage.orEmpty().contains("atomic thumbnail failed"))
+        assertEquals(UiText.resource(R.string.export_metadata_warning), viewModel.uiState.value.errorMessage)
 
         exportFiles.createThumbnailBlock = { projectId, image ->
             File(image.file.parentFile, "$projectId-thumbnail.png").absolutePath

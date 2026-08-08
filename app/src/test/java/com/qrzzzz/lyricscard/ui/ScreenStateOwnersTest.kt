@@ -1,5 +1,6 @@
 package com.qrzzzz.lyricscard.ui
 
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.data.UserPreferences
 import com.qrzzzz.lyricscard.model.ProjectTemplates
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -54,7 +55,10 @@ class ScreenStateOwnersTest {
 
         assertTrue(viewModel.uiState.value.preferences.darkMode)
         assertEquals(1, viewModel.uiState.value.preferences.defaultExportScale)
-        assertEquals("已清理 2.0 MB 导出缓存", viewModel.uiState.value.cacheStatus)
+        assertEquals(
+            UiText.resource(R.string.settings_cache_cleared, 2.0),
+            viewModel.uiState.value.cacheStatus,
+        )
         assertFalse(viewModel.uiState.value.isClearingCache)
     }
 }

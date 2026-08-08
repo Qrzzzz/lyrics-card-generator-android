@@ -3,6 +3,7 @@ package com.qrzzzz.lyricscard.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qrzzzz.lyricscard.ProjectStore
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.model.ProjectSummary
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -17,7 +18,7 @@ data class HomeUiState(
     val projects: List<ProjectSummary> = emptyList(),
     val isLoading: Boolean = true,
     val isWorking: Boolean = false,
-    val errorMessage: String? = null,
+    val errorMessage: UiText? = null,
 )
 
 class HomeViewModel(
@@ -35,7 +36,7 @@ class HomeViewModel(
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            errorMessage = cause.message ?: "无法读取项目",
+                            errorMessage = UiText.resource(R.string.home_error_read_projects),
                         )
                     }
                 }
@@ -45,27 +46,27 @@ class HomeViewModel(
         }
     }
 
-    suspend fun createBlank(): String? = runNavigationOperation("无法创建项目") {
+    suspend fun createBlank(): String? = runNavigationOperation(R.string.home_error_create_project) {
         projects.createBlank().id
     }
 
-    suspend fun createSample(): String? = runNavigationOperation("无法创建示例") {
+    suspend fun createSample(): String? = runNavigationOperation(R.string.home_error_create_sample) {
         projects.createSample().id
     }
 
-    suspend fun openProject(id: String): String? = runNavigationOperation("无法打开项目") {
-        checkNotNull(projects.getProject(id)) { "项目不存在或已被删除" }.id
+    suspend fun openProject(id: String): String? = runNavigationOperation(R.string.home_error_open_project) {
+        checkNotNull(projects.getProject(id)) { "Project does not exist" }.id
     }
 
-    suspend fun duplicateProject(id: String): Boolean = runOperation("复制失败") {
+    suspend fun duplicateProject(id: String): Boolean = runOperation(R.string.home_error_duplicate) {
         projects.duplicate(id) != null
     } ?: false
 
-    suspend fun renameProject(id: String, name: String): Boolean = runOperation("重命名失败") {
+    suspend fun renameProject(id: String, name: String): Boolean = runOperation(R.string.home_error_rename) {
         projects.rename(id, name)
     } ?: false
 
-    suspend fun deleteProject(id: String): Boolean = runOperation("删除失败") {
+    suspend fun deleteProject(id: String): Boolean = runOperation(R.string.home_error_delete) {
         projects.delete(id)
     } ?: false
 
@@ -91,7 +92,7 @@ class HomeViewModel(
         if (navigationCommitted.compareAndSet(true, false)) releaseOperation()
     }
 
-    private suspend fun <T> runNavigationOperation(defaultMessage: String, block: suspend () -> T): T? {
+    private suspend fun <T> runNavigationOperation(defaultMessage: Int, block: suspend () -> T): T? {
         if (!beginNavigation()) return null
         return try {
             block()
@@ -99,13 +100,13 @@ class HomeViewModel(
             releaseOperation()
             throw cause
         } catch (cause: Throwable) {
-            _uiState.update { it.copy(errorMessage = cause.message ?: defaultMessage) }
+            _uiState.update { it.copy(errorMessage = UiText.resource(defaultMessage)) }
             releaseOperation()
             null
         }
     }
 
-    private suspend fun <T> runOperation(defaultMessage: String, block: suspend () -> T): T? {
+    private suspend fun <T> runOperation(defaultMessage: Int, block: suspend () -> T): T? {
         if (!operationInFlight.compareAndSet(false, true)) return null
         _uiState.update { it.copy(isWorking = true, errorMessage = null) }
         return try {
@@ -113,7 +114,7 @@ class HomeViewModel(
         } catch (cause: CancellationException) {
             throw cause
         } catch (cause: Throwable) {
-            _uiState.update { it.copy(errorMessage = cause.message ?: defaultMessage) }
+            _uiState.update { it.copy(errorMessage = UiText.resource(defaultMessage)) }
             null
         } finally {
             releaseOperation()

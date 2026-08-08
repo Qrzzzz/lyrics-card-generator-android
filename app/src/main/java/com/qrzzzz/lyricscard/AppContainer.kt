@@ -12,7 +12,6 @@ import com.qrzzzz.lyricscard.data.UserPreferences
 import com.qrzzzz.lyricscard.data.UserPreferencesRepository
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.ProjectSummary
-import com.qrzzzz.lyricscard.model.RenderSpecViolation
 import com.qrzzzz.lyricscard.renderer.ExportedImage
 import com.qrzzzz.lyricscard.renderer.ProjectAssetStore
 import com.qrzzzz.lyricscard.renderer.RendererController
@@ -35,7 +34,6 @@ interface AppContainer {
     val renderer: RendererOperations
     val exportFiles: ExportFiles
     val editorSessions: EditorSessionRegistry
-    val editorMessages: EditorMessageResolver
 
     fun start()
     fun close()
@@ -107,10 +105,6 @@ class EditorSessionRegistry {
     suspend fun flushActive(): Boolean = active?.flushAutosave() ?: true
 }
 
-interface EditorMessageResolver {
-    fun lineLimit(violation: RenderSpecViolation, loadingStoredProject: Boolean): String
-}
-
 class DefaultAppContainer(context: Context) : AppContainer {
     private val appContext = context.applicationContext
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -144,7 +138,6 @@ class DefaultAppContainer(context: Context) : AppContainer {
     override val renderer: RendererOperations by lazy { AndroidRendererOperations(rendererController) }
     override val exportFiles: ExportFiles = AndroidExportFiles(appContext, nativeAssetStore)
     override val editorSessions = EditorSessionRegistry()
-    override val editorMessages: EditorMessageResolver = AndroidEditorMessageResolver(appContext)
 
     override fun start() {
         applicationScope.launch {
@@ -162,28 +155,6 @@ class DefaultAppContainer(context: Context) : AppContainer {
         applicationScope.cancel()
         if (rendererControllerDelegate.isInitialized()) rendererControllerDelegate.value.close()
         if (databaseDelegate.isInitialized()) databaseDelegate.value.close()
-    }
-}
-
-class AndroidEditorMessageResolver(private val context: Context) : EditorMessageResolver {
-    override fun lineLimit(violation: RenderSpecViolation, loadingStoredProject: Boolean): String {
-        val field = context.getString(
-            if (violation.path == "content.translation") {
-                R.string.lyric_field_translation
-            } else {
-                R.string.lyric_field_original
-            },
-        )
-        return context.getString(
-            if (loadingStoredProject) {
-                R.string.error_loaded_lyric_line_limit
-            } else {
-                R.string.error_lyric_line_limit
-            },
-            field,
-            violation.limit ?: com.qrzzzz.lyricscard.model.LyricTextLimits.MAX_LINES,
-            violation.actual ?: 0,
-        )
     }
 }
 
