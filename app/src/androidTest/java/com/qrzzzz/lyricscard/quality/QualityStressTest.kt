@@ -140,9 +140,7 @@ class QualityStressTest {
             created.forEach { file ->
                 if (file.exists()) assertTrue("stress export cleanup failed", file.delete())
             }
-            binding.close()
-            scenario.close()
-            controller.close()
+            closeRendererOnMain(binding, scenario, controller)
         }
     }
 
@@ -289,9 +287,7 @@ class QualityStressTest {
         } finally {
             previousPolicy?.let { policy -> scenario.onActivity { StrictMode.setThreadPolicy(policy) } }
             violationExecutor.shutdownNow()
-            binding.close()
-            scenario.close()
-            controller.close()
+            closeRendererOnMain(binding, scenario, controller)
             store.clear()
             runBlocking { container.projects.delete(project.id) }
         }
@@ -371,9 +367,20 @@ class QualityStressTest {
             exported?.file?.let { file -> if (file.exists()) assertTrue("large-cover export cleanup failed", file.delete()) }
             assetId?.let { id -> runBlocking { assetStore.delete(id) } }
             if (sourceFile.exists()) assertTrue("large cover source cleanup failed", sourceFile.delete())
-            binding.close()
+            closeRendererOnMain(binding, scenario, controller)
+        }
+    }
+
+    private fun closeRendererOnMain(
+        binding: RendererBinding,
+        scenario: ActivityScenario<ComponentActivity>,
+        controller: RendererController,
+    ) {
+        binding.close()
+        try {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { controller.close() }
+        } finally {
             scenario.close()
-            controller.close()
         }
     }
 
