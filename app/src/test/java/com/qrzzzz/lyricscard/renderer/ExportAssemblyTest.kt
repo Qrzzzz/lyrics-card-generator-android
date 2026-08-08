@@ -1,8 +1,14 @@
 package com.qrzzzz.lyricscard.renderer
 
 import java.util.Base64
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -47,5 +53,39 @@ class ExportAssemblyTest {
         assembly.abort()
 
         assertFalse(part.exists())
+    }
+
+    @Test
+    fun `queued chunks preserve order while assembly runs on the io scope`() = runBlocking {
+        val source = ByteArray(900_000) { index -> (index % 239).toByte() }
+        val part = temporaryFolder.root.resolve("queued.png.part")
+        val assembly = ExportAssembly(part, temporaryFolder.root.resolve("queued.png"))
+        val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val failures = mutableListOf<Throwable>()
+        val queue = QueuedExportAssembly(assembly, ioScope) { cause ->
+            synchronized(failures) { failures += cause }
+        }
+        val chunks = source.asList().chunked(384 * 1024).map { values -> values.toByteArray() }
+
+        try {
+            chunks.forEachIndexed { index, bytes ->
+                assertTrue(
+                    queue.offer(
+                        index = index,
+                        total = chunks.size,
+                        byteLength = bytes.size,
+                        encoded = Base64.getEncoder().encodeToString(bytes),
+                    ),
+                )
+            }
+            queue.seal()
+            queue.awaitDrained()
+
+            assertTrue(synchronized(failures) { failures.isEmpty() })
+            assertArrayEquals(source, assembly.finish(source.size.toLong(), chunks.size).readBytes())
+        } finally {
+            assembly.abort()
+            ioScope.cancel()
+        }
     }
 }

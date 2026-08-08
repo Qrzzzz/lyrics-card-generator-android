@@ -37,6 +37,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -172,8 +174,9 @@ class RendererController private constructor(
 
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val exportIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<RendererEnvelope>>()
-    private val exportAssemblies = ConcurrentHashMap<String, ExportAssembly>()
+    private val exportAssemblies = ConcurrentHashMap<String, QueuedExportAssembly>()
     private val operationMutex = Mutex()
     private val _status = MutableStateFlow(RendererStatus())
     val status: StateFlow<RendererStatus> = _status.asStateFlow()
@@ -446,8 +449,7 @@ class RendererController private constructor(
         activeSessionId = null
         pending.values.forEach { it.cancel() }
         pending.clear()
-        exportAssemblies.values.forEach(ExportAssembly::abort)
-        exportAssemblies.clear()
+        closeExportAssemblies()
         destroyWebView()
         scope.cancel()
     }
@@ -485,8 +487,18 @@ class RendererController private constructor(
         val requestId = UUID.randomUUID().toString()
         val result = CompletableDeferred<RendererEnvelope>()
         val assembly = withContext(Dispatchers.IO) { createExportAssembly(spec) }
+        lateinit var queuedAssembly: QueuedExportAssembly
+        queuedAssembly = QueuedExportAssembly(
+            assembly = assembly,
+            ioScope = exportIoScope,
+            onFailure = { cause ->
+                scope.launch {
+                    failExportAssembly(requestId, sessionId, queuedAssembly, cause)
+                }
+            },
+        )
         pending[requestId] = result
-        exportAssemblies[requestId] = assembly
+        exportAssemblies[requestId] = queuedAssembly
         var completedNormally = false
         try {
             withContext(Dispatchers.Main.immediate) {
@@ -496,15 +508,16 @@ class RendererController private constructor(
             if (completed.type != "exportCompleted") {
                 throw RendererException("渲染器返回了意外结果：${completed.type}")
             }
+            queuedAssembly.awaitDrained()
             val image = finalizeExport(completed.payload.jsonObject, spec, assembly)
             completedNormally = true
             return image
         } finally {
             pending.remove(requestId)
-            exportAssemblies.remove(requestId)
+            exportAssemblies.remove(requestId, queuedAssembly)
             if (!result.isCompleted) sendCancel(requestId, sessionId)
             if (!completedNormally) {
-                withContext(NonCancellable + Dispatchers.IO) { assembly.abort() }
+                withContext(NonCancellable + Dispatchers.IO) { queuedAssembly.abortAndJoin() }
             }
         }
     }
@@ -574,7 +587,7 @@ class RendererController private constructor(
                 val assembly = exportAssemblies[envelope.requestId] ?: return
                 runCatching {
                     val payload = envelope.payload.jsonObject
-                    assembly.accept(
+                    val accepted = assembly.offer(
                         index = payload["index"]?.jsonPrimitive?.intOrNull
                             ?: throw RendererException("导出分块缺少序号"),
                         total = payload["total"]?.jsonPrimitive?.intOrNull
@@ -584,15 +597,9 @@ class RendererController private constructor(
                         encoded = payload["base64"]?.jsonPrimitive?.contentOrNull
                             ?: throw RendererException("导出分块缺少数据"),
                     )
+                    if (!accepted) throw RendererException("导出分块队列已关闭或达到上限")
                 }.onFailure { cause ->
-                    exportAssemblies.remove(envelope.requestId)
-                    assembly.abort()
-                    val failure = if (cause is RendererException) cause else {
-                        RendererException(cause.message ?: "导出分块无效", cause)
-                    }
-                    _status.value = RendererStatus(RendererStatus.Phase.ERROR, failure.message ?: "导出分块无效")
-                    pending.remove(envelope.requestId)?.completeExceptionally(failure)
-                    scope.launch { sendCancel(envelope.requestId, sessionId) }
+                    failExportAssembly(envelope.requestId, sessionId, assembly, cause)
                 }
             }
             "renderError" -> {
@@ -600,15 +607,36 @@ class RendererController private constructor(
                 if (result != null) {
                     val payload = envelope.payload.jsonObject
                     val message = payload["message"]?.jsonPrimitive?.contentOrNull ?: "渲染失败"
-                    exportAssemblies.remove(envelope.requestId)?.abort()
+                    exportAssemblies.remove(envelope.requestId)?.abortAsync()
                     _status.value = RendererStatus(RendererStatus.Phase.ERROR, message)
                     result?.completeExceptionally(RendererException(message))
                 }
             }
-            "exportCompleted", "measured", "paletteExtracted", "pong" -> {
+            "exportCompleted" -> {
+                val assembly = exportAssemblies[envelope.requestId] ?: return
+                assembly.seal()
+                completePending(envelope)
+            }
+            "measured", "paletteExtracted", "pong" -> {
                 completePending(envelope)
             }
         }
+    }
+
+    private fun failExportAssembly(
+        requestId: String,
+        sessionId: Long,
+        assembly: QueuedExportAssembly,
+        cause: Throwable,
+    ) {
+        if (!exportAssemblies.remove(requestId, assembly)) return
+        assembly.abortAsync()
+        val failure = if (cause is RendererException) cause else {
+            RendererException(cause.message ?: "导出分块无效", cause)
+        }
+        _status.value = RendererStatus(RendererStatus.Phase.ERROR, failure.message ?: "导出分块无效")
+        pending.remove(requestId)?.completeExceptionally(failure)
+        scope.launch { sendCancel(requestId, sessionId) }
     }
 
     private fun completePending(envelope: RendererEnvelope) {
@@ -779,8 +807,7 @@ class RendererController private constructor(
         activeSessionId = null
         pending.values.forEach { it.completeExceptionally(failure) }
         pending.clear()
-        exportAssemblies.values.forEach(ExportAssembly::abort)
-        exportAssemblies.clear()
+        abortExportAssemblies()
         stopPreviewJobs(restoreInFlight = restorePreview)
         destroyWebView(loadBlank)
         return true
@@ -848,6 +875,25 @@ class RendererController private constructor(
         ByteArrayInputStream("Blocked by Lyrics Card renderer policy".toByteArray()),
     )
 
+    private fun abortExportAssemblies() {
+        val assemblies = exportAssemblies.values.toSet()
+        exportAssemblies.clear()
+        assemblies.forEach(QueuedExportAssembly::abortAsync)
+    }
+
+    private fun closeExportAssemblies() {
+        val assemblies = exportAssemblies.values.toSet()
+        exportAssemblies.clear()
+        if (assemblies.isEmpty()) {
+            exportIoScope.cancel()
+            return
+        }
+        exportIoScope.launch {
+            assemblies.forEach { assembly -> assembly.abortAndJoin() }
+            exportIoScope.cancel()
+        }
+    }
+
     private fun CoroutineScope.launchSafely(block: suspend CoroutineScope.() -> Unit): Job =
         launch {
             runCatching { block() }.onFailure { cause ->
@@ -878,6 +924,64 @@ class RendererController private constructor(
         )
         val MIN_PNG_BYTES = (PNG_SIGNATURE.size + PNG_IEND_TRAILER.size).toLong()
     }
+}
+
+internal class QueuedExportAssembly(
+    val assembly: ExportAssembly,
+    private val ioScope: CoroutineScope,
+    private val onFailure: (Throwable) -> Unit,
+) {
+    private val chunks = Channel<ExportChunk>(capacity = MAX_EXPORT_CHUNKS)
+    @Volatile
+    private var failure: Throwable? = null
+    private val worker = ioScope.launch {
+        try {
+            for (chunk in chunks) {
+                assembly.accept(
+                    index = chunk.index,
+                    total = chunk.total,
+                    byteLength = chunk.byteLength,
+                    encoded = chunk.encoded,
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            failure = cause
+            chunks.cancel()
+            onFailure(cause)
+        }
+    }
+
+    fun offer(index: Int, total: Int, byteLength: Int, encoded: String): Boolean =
+        chunks.trySend(ExportChunk(index, total, byteLength, encoded)).isSuccess
+
+    fun seal() {
+        chunks.close()
+    }
+
+    suspend fun awaitDrained() {
+        worker.join()
+        failure?.let { throw it }
+    }
+
+    suspend fun abortAndJoin() {
+        chunks.cancel()
+        worker.cancelAndJoin()
+        assembly.abort()
+    }
+
+    fun abortAsync() {
+        chunks.cancel()
+        ioScope.launch { abortAndJoin() }
+    }
+
+    private data class ExportChunk(
+        val index: Int,
+        val total: Int,
+        val byteLength: Int,
+        val encoded: String,
+    )
 }
 
 internal class ExportAssembly(
