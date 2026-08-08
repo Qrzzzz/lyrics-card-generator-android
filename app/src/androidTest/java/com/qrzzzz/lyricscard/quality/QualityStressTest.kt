@@ -3,6 +3,12 @@ package com.qrzzzz.lyricscard.quality
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.net.Uri
 import android.os.Debug
 import android.os.StrictMode
 import android.os.SystemClock
@@ -34,7 +40,14 @@ import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.ceil
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -283,6 +296,86 @@ class QualityStressTest {
         }
     }
 
+    @Test
+    fun c_largeCoverImportDownsamplesPreviewsAndExportsOnFourGbDevice() {
+        val assetStore = ProjectAssetStore(appContext)
+        val controller = RendererController(appContext, assetStore)
+        val scenario = ActivityScenario.launch(ComponentActivity::class.java)
+        val binding = RendererBinding(controller, scenario)
+        val sourceFile = File(appContext.cacheDir, "quality-large-cover.jpg")
+        var assetId: String? = null
+        var exported: ExportedImage? = null
+
+        try {
+            binding.attach()
+            waitForRenderer(controller)
+            updateSpecAndAwaitPreview(controller, releaseStressSpec())
+            forceIdleGc()
+            val before = memorySample("large-cover-before")
+
+            writeLargeDeterministicCover(sourceFile)
+            val sourceBounds = decodeBounds(sourceFile)
+            assertEquals(LARGE_COVER_EDGE, sourceBounds.first)
+            assertEquals(LARGE_COVER_EDGE, sourceBounds.second)
+            val sourceBytes = sourceFile.length()
+            assertTrue("large cover source was empty", sourceBytes > 0L)
+
+            assetId = runBlocking { assetStore.importCover(Uri.fromFile(sourceFile)) }
+            val response = checkNotNull(assetStore.openForWebView(checkNotNull(assetId))) {
+                "stored cover was unavailable to the renderer"
+            }
+            val stored = response.data.use { input -> BitmapFactory.decodeStream(input) }
+            assertNotNull("stored cover did not decode", stored)
+            checkNotNull(stored).useRecycled {
+                assertEquals(STORED_COVER_EDGE, it.width)
+                assertEquals(STORED_COVER_EDGE, it.height)
+            }
+
+            val spec = releaseStressSpec().copy(
+                song = releaseStressSpec().song.copy(
+                    title = "Large cover quality fixture",
+                    coverAssetId = assetId,
+                ),
+                canvas = releaseStressSpec().canvas.copy(autoHeight = false, height = 1_080),
+            )
+            updateSpecAndAwaitPreview(controller, spec)
+            val measurement = runBlocking { controller.measure(spec) }
+            val image = runBlocking { controller.exportPng(spec, 2) }
+            exported = image
+            assertPng(image, measurement.width * 2, measurement.height * 2)
+            assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+            val exportDirectory = File(appContext.cacheDir, "exports")
+            assertFalse(
+                "large-cover export left a partial file",
+                exportDirectory.listFiles().orEmpty().any { it.name.endsWith(".part") || it.name.endsWith(".tmp") },
+            )
+
+            updateSpecAndAwaitPreview(controller, spec.copy(song = spec.song.copy(coverAssetId = null)))
+            runBlocking { assetStore.delete(checkNotNull(assetId)) }
+            assetId = null
+            assertTrue("large cover source cleanup failed", sourceFile.delete())
+            forceIdleGc()
+            val idle = memorySample("large-cover-idle-gc")
+            assertTrue(
+                "large-cover PSS did not return within 20 percent: before=${before.totalPssKb} idle=${idle.totalPssKb}",
+                idle.totalPssKb <= ceil(before.totalPssKb * 1.20).toInt(),
+            )
+            Log.i(
+                QUALITY_TAG,
+                "large-cover-summary source=${sourceBounds.first}x${sourceBounds.second} " +
+                    "stored=${STORED_COVER_EDGE}x$STORED_COVER_EDGE sourceBytes=$sourceBytes " +
+                    "export=${measurement.width * 2}x${measurement.height * 2} rendererErrors=0 partialFiles=0",
+            )
+        } finally {
+            exported?.file?.let { file -> if (file.exists()) assertTrue("large-cover export cleanup failed", file.delete()) }
+            assetId?.let { id -> runBlocking { assetStore.delete(id) } }
+            if (sourceFile.exists()) assertTrue("large cover source cleanup failed", sourceFile.delete())
+            binding.close()
+            scenario.close()
+            controller.close()
+        }
+    }
+
     private fun releaseStressSpec(): RenderSpec = RenderSpec().copy(
         content = RenderSpec().content.copy(
             lyrics = (1..16).joinToString("\n") { index -> "耐久导出行 $index" },
@@ -291,6 +384,63 @@ class QualityStressTest {
         ),
         canvas = RenderSpec().canvas.copy(pixelRatio = 2),
     )
+
+    private fun writeLargeDeterministicCover(target: File) {
+        val bitmap = Bitmap.createBitmap(LARGE_COVER_EDGE, LARGE_COVER_EDGE, Bitmap.Config.RGB_565)
+        try {
+            val canvas = Canvas(bitmap)
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+            val tile = LARGE_COVER_EDGE / LARGE_COVER_TILES
+            repeat(LARGE_COVER_TILES) { row ->
+                repeat(LARGE_COVER_TILES) { column ->
+                    paint.color = Color.rgb(
+                        (row * 29 + column * 11) and 0xff,
+                        (row * 7 + column * 31) and 0xff,
+                        (row * 19 + column * 13) and 0xff,
+                    )
+                    canvas.drawRect(
+                        (column * tile).toFloat(),
+                        (row * tile).toFloat(),
+                        ((column + 1) * tile).toFloat(),
+                        ((row + 1) * tile).toFloat(),
+                        paint,
+                    )
+                }
+            }
+            target.outputStream().use { output ->
+                assertTrue("large cover encoding failed", bitmap.compress(Bitmap.CompressFormat.JPEG, 94, output))
+            }
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    private fun decodeBounds(file: File): Pair<Int, Int> {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, options)
+        return options.outWidth to options.outHeight
+    }
+
+    private fun updateSpecAndAwaitPreview(controller: RendererController, spec: RenderSpec) = runBlocking {
+        val completion = async(start = CoroutineStart.UNDISPATCHED) {
+            controller.status
+                .map { status: RendererStatus -> status.phase }
+                .dropWhile { phase -> phase != RendererStatus.Phase.RENDERING }
+                .drop(1)
+                .first { phase -> phase == RendererStatus.Phase.READY }
+        }
+        controller.updateSpec(spec)
+        withTimeout(30_000) { completion.await() }
+        assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+    }
+
+    private inline fun Bitmap.useRecycled(block: (Bitmap) -> Unit) {
+        try {
+            block(this)
+        } finally {
+            recycle()
+        }
+    }
 
     private fun mutateForEndurance(spec: RenderSpec, phase: Int): RenderSpec = spec.copy(
         content = spec.content.copy(
@@ -426,6 +576,9 @@ class QualityStressTest {
         const val BACKGROUND_INTERVAL_MS = 90L * 1_000L
         const val RECREATION_INTERVAL_MS = 3L * 60L * 1_000L
         const val MEMORY_INTERVAL_MS = 5L * 60L * 1_000L
+        const val LARGE_COVER_EDGE = 4_096
+        const val LARGE_COVER_TILES = 32
+        const val STORED_COVER_EDGE = 2_048
         val PNG_SIGNATURE = byteArrayOf(
             0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
         )
