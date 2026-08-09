@@ -1,130 +1,97 @@
-# Lyrics Card Generator Android — Release Quality Gate (2026-08-08)
+# Lyrics Card Generator Android — 工作流 G2 质量门报告（2026-08-09）
 
-- 执行时区：Asia/Shanghai
-- Gate 2 基线：`b41a2e00606f5b970b553301c7911cae646c3c66`
-- 候选分支：`codex/quality-device-hardening`
-- 本报告候选 HEAD：`b65d2a150fe075872fdb7156fc4224f961857421`
-- 自动化结论：**PASS**
-- 整体结论：**BLOCKED**（只因 Gate 2 唯一一次 Xiaomi 安装被设备安全策略阻断；本任务按约束未重试）
-- 独立 Reviewer：**PENDING**
+> 结论：**FIX REQUIRED / AUTOMATION FAIL**
+> 实体小米设备：**EXTERNAL / PHYSICAL BLOCKED**（按任务边界未再次尝试）
 
-## A. Scope / candidate
+- 时区：Asia/Shanghai
+- 锁定基线：`b1fa76d78731188f1607657d71e44010d07b5740`
+- 分支：`codex/quality-device-hardening-recovery`
+- 最终 renderer binary commit：`553556b538347298c4a6558fdb7d17a45c28e85d`
+- 最终 ProductionDebug APK SHA-256：`af5f1d8d8c4b32c9a4fab49e4d80db1a317c21dc0d81b1f26ef17dd82f996783`
+- 最终 ProductionDebug test APK SHA-256：`b2b06a540fce7fb556aeb2d9981a9f412903d9c059c102bd55af023cd71c60f3`
+- 最终阻断：API30 fresh-install serif 1×→2× probe 在执行导出前的 `measure/spec` 请求触发既有 8 秒超时，1/1 失败。
+- 纠正额度：2/2 已用尽；按总指挥边界，不重跑、不再修改产品或 harness。
+- 独立 Reviewer：由总指挥另开任务；本报告不冒充独立 review。
 
-输入硬门槛按 detached-worktree 规则通过：
+## A. Scope
+
+本工作流只负责从干净 `b1fa76d…` 精确重建 API30 renderer “最佳 A”最小修复，并执行静态、Golden、API26/API30 及后续设备质量门。开始时已证明：
 
 ```powershell
 git rev-parse HEAD
-git rev-parse refs/heads/codex/integration-gate2
-git branch --contains HEAD
-git status --porcelain=v1
+git rev-parse refs/heads/codex/quality-device-hardening
+git status --short
 ```
 
-`HEAD` 与 `refs/heads/codex/integration-gate2` 均精确为 `b41a2e00606f5b970b553301c7911cae646c3c66`，输入工作树 clean；随后从该提交创建 `codex/quality-device-hardening`。未执行 push、PR、tag、signing、GitHub Release、商店发布或公开文档发布。
+前两条均精确返回 `b1fa76d78731188f1607657d71e44010d07b5740`，新 worktree clean。旧 G dirty worktree与旧产物目录只读取证，未复制整批 dirty changes，未 cherry-pick dirty changes，未修改主工作区。
 
-本 Gate 不增加产品功能。以下约束保持：六步编辑、persistent BottomSheet、仅 1x/2x、二态 dark、500 ms autosave、50 条历史；Compose → RenderSpec → trusted local WebView → React/CSS → PNG；Room v2、v1→v2、rendererVersion 兼容 ID、UDF/AppContainer、FINALIZING 原子提交与 single Room update。
+未执行 push、PR、merge、tag、Release、商店发布或实体小米设备重试。
 
-## B. Changes / fixes
+## B. Changes
 
-| Commit | 范围 | 可执行证据 |
-|---|---|---|
-| `55ad8bc` | 新增 30-case deterministic pixel Golden、锁定 Playwright/pixelmatch/SSIM 依赖；auto-height 量测收敛 | Windows Chromium 151；30/30 PNG exact |
-| `ade2585` | 新增 Accessibility Test Framework、AVD matrix smoke、20 次导出与 30 分钟压力测试 | API 36 connected 21/21 |
-| `bf041e2` | Home/Editor/Export/Settings pane title | semantics/ATF/connected PASS |
-| `2547366` | Base64 chunk 落盘改为有界 IO queue，移出主线程 | StrictMode 0；20/20；JVM recovery/assembly PASS |
-| `80acb27` | API 26 WebView 使用 origin-bound `WebMessagePort` fallback；Blob 读取兼容 FileReader | API 26 WebView 69 smoke PASS；transport/security tests PASS |
-| `775dc2d` | matrix smoke 同步、阶段日志与清理稳定化 | API 26/30/33/36 PASS |
-| `7509055` | 异步导航提交回到 Main dispatcher | connected navigation PASS |
-| `b83ed6f` | ATF 导航流程稳定化 | API 33 TalkBack+ATF PASS |
-| `f865ead` | rename focus、搜索结果/设置/导出 action semantics 最小修复 | 13 项 UI 定向套件及 21 项全套 PASS |
-| `9ddcbe1` | 真实 Activity 横竖屏、设备 density、font 1.3/2.0、IME、Compose 主时钟轮询 | 20 秒 UI 门限下 PASS |
-| `d69f31c` | 移除 preview/card 强制高密度合成层提示，修复 WebView renderer memory crash | 20/20 2x PASS；30/30 Golden exact |
-| `f167202` | 压力测试按 `measure()` 实际 auto-height 验证 2x PNG 尺寸 | 2080×5544 压力输出通过 PNG 校验 |
-| `b65d2a1` | Golden source/fixture 文本 fingerprint 统一 CRLF→LF，字体二进制仍按原字节 | Unicode/ASCII 两 worktree 指纹一致，双方 30/30 exact |
+### 提交
 
-补充验收约束已落实：Compose 轮询通过 `compose.mainClock.advanceTimeBy(...)` 推进；`AvdMatrixSmokeTest.UI_TIMEOUT_MS` 与 `AccessibilityFrameworkTest.UI_TIMEOUT_MS` 均为原始 `20_000L`，没有保留无证据的 60 秒 UI 门限。renderer 专用导出等待仍按独立 renderer timeout 管理。
-
-## C. Invariants / Golden methodology
-
-### Protected trees and renderer invariants
-
-```powershell
-git diff --name-only b41a2e00606f5b970b553301c7911cae646c3c66..HEAD -- app/src/main/java/com/qrzzzz/lyricscard/data app/schemas
-git diff --name-only 55ad8bc..HEAD -- renderer/golden/reference
-```
-
-两条命令均为空：Room/data/schema protected tree 未改；初始 Golden baseline 建立后 30 张 reference PNG 未被更新。产品 renderer 的变化仅为：auto-height 固定点量测、API 26 安全消息通道兼容、移除造成高密度 compositor crash 的两个强制 layer hint。未改用 Compose Canvas；trusted origin/no-network、generation/latest-wins、export mutex、Base64 chunks、PNG validation、timeout/cancel/recovery/shared WebView 语义均由 renderer/JVM/connected tests 覆盖。
-
-### Golden reference environment
-
-| 项 | 固定值 |
+| Commit | 变更 |
 |---|---|
-| Browser | Playwright Chromium `151.0.7922.34` |
-| Platform | `win32` |
-| Viewport | `1280×960` |
-| Device scale | `1` |
-| Locale / timezone | `en-US` / `UTC` |
-| Color / motion | light / reduced motion |
-| Chromium args | `--disable-lcd-text`, `--font-render-hinting=none`, `--force-color-profile=srgb` |
-| Fonts | repo 内 Source Han Sans/Serif Heavy 与 license |
-| Pixel threshold | pixelmatch threshold `0.02`；mismatch ratio ≤ `0.0005` |
-| Similarity threshold | SSIM ≥ `0.9995` |
-| Source fingerprint | `4f76f1c39f6018b035e267ad6b583c28e9c5120f3e264dd10075c7bdd36c66ca` |
-| Fixture fingerprint | `0476356f485da8a91773a37888b35c3ff7d50c63d1169b2e612bae9e0c8a2a8c` |
+| `f9d39b0` | 重建字体去重、family 单槽缓存、DOM/SVG 单槽缓存、可复用 canvas、Image/Canvas 清理、根 Blob 单次 ArrayBuffer 读取与可取消分块。 |
+| `ae45074` | 将 API30 retained-memory verdict 锁定为同阶段 app+renderer aggregate；增加 serif 1×→2× probe。app-only 仅保留诊断。 |
+| `bf905a0` | 第一轮纠正：Image source 在 `drawImage` 后、`canvas.toBlob` 前释放。 |
+| `553556b` | 第二轮且最后一轮纠正：新增 yield 使用 WebView69 可用的 `setTimeout`，不再使用 `globalThis`；增加针对性回归测试。 |
 
-Golden 比较读取真实 expected PNG，渲染 actual PNG 后同时执行尺寸、pixelmatch mismatch ratio、SSIM 与 byte-exact 检查；不是 HTML/JSON/hash 替代品。当前 30 张 PNG 共 62.43 MiB。最终实际结果全部为 `exact=true`、mismatch ratio `0.00000000`、SSIM `1.00000000`。
+### Renderer 最小实现
 
-30 个可审计 fixture：
+- 删除未使用的 `Source Han Sans/Serif Heavy Local` 字体别名；保留主 family、OTF 文件和像素语义。
+- 字体 CSS 使用按实际 family 键控的单槽缓存：同 family 复用，切换替换，失败不缓存，生命周期清空。
+- SVG/source 使用 DOM revision、spec、cover、auto-height、lifecycle 键控的单槽缓存。静态检查确认 DOM 构建不读取 `pixelRatio`，因此未将其加入 DOM 缓存键。
+- 保留 app-lifecycle reusable canvas；每次导出清像素，lifecycle 结束时归零。
+- 保留 `canvas.toBlob`；根 Blob 只读一次完整 ArrayBuffer，再以 `Uint8Array.subarray` 分块；不使用 `blob.slice()` 子 Blob。
+- 保留 WebView69 `FileReader.readAsArrayBuffer` fallback；分块间显式 `setTimeout(..., 0)` 让出事件循环，使 cancellation 可生效。
+- Image source 在 draw 后、PNG encode 前释放；finally 中保留幂等清理。
 
-1. `portrait-square-cjk-left-auto`
-2. `portrait-four-five-bilingual-center-preset`
-3. `portrait-nine-sixteen-latin-right-custom-no-cover`
-4. `landscape-sixteen-nine-long-serif`
-5. `landscape-twenty-one-nine-punctuation-emoji`
-6. `landscape-three-two-minimal-branding`
-7. `portrait-custom-fixed`
-8. `portrait-custom-auto-height`
-9. `instrumental-with-cover`
-10. `instrumental-without-cover`
-11. `translation-off-traditional-cjk`
-12. `translation-on-spanish`
-13. `lyrics-without-song-info`
-14. `platform-qq-badge`
-15. `platform-netease-badge`
-16. `platform-apple-badge`
-17. `platform-spotify-badge`
-18. `shared-by-without-platform`
-19. `watermark-without-footer-badges`
-20. `grid-sparse-palette`
-21. `grid-medium-gradient`
-22. `grid-dense-gradient`
-23. `serif-center-cream`
-24. `sans-right-soft-blue`
-25. `custom-text-color`
-26. `long-lyrics-twenty-lines`
-27. `empty-lyrics-localized-fallback`
-28. `explicit-two-line-title`
-29. `square-two-x-export`
-30. `landscape-sixteen-nine-two-x-export`
+### Golden
 
-覆盖 1:1、4:5、9:16、16:9、21:9、3:2、custom、auto-height、lyrics/instrumental、translation、cover/no-cover、长 metadata、CJK/Latin/punctuation/emoji、left/center/right、sans/serif、auto/preset/custom text color、palette/gradient/grid、platform/shared-by/watermark 与 1x/2x。
+只更新了证据允许的两张 serif PNG；另外 28 张 SHA-256 不变：
 
-## D. Commands and exact automated counts
+| Golden | 旧 SHA-256 | 新 SHA-256 |
+|---|---|---|
+| `landscape-sixteen-nine-long-serif.png` | `d816ac616aa825f0bb3ed623dcbeccb3f13c2b50d91cfee59f2e068b34dbd9d7` | `542a07f8e9b2b7dd5208120b8a4390fad8dd5c2a087ab2eef7dcb3d2822d2fbc` |
+| `serif-center-cream.png` | `ac0e38f3b18f5a2c946d8f3f7391aae910c38c11b0159d3ce1fce31ec0e480b8` | `65c174a2b94d52c40216459ab8c0c17cf073489ce58a69ab08ac83c39af0e53a` |
 
-### Renderer final HEAD (`C:\CodexTmp\lcg-quality-staging-20260808\renderer`)
+- 最终 source fingerprint：`2572dcf40b96dc55914e31b4c0db903871ca50b21c5be2b9a9928151e0e0fb74`
+- fixture fingerprint：`0476356f485da8a91773a37888b35c3ff7d50c63d1169b2e612bae9e0c8a2a8c`
+- fresh serif 与同页 sans→serif 每轮均 byte-exact，SHA-256 均为 `542a07f…d2fbc`。
+
+## C. Invariants preserved
+
+以下既有契约未改变：
+
+- trusted local origin、no-network、wrong-origin rejection；
+- session/generation/latest-wins；
+- export mutex；
+- PNG MIME、尺寸、签名与正式落盘验证；
+- bounded chunk size 与既有错误契约；
+- cancellation、partial cleanup 与 renderer recovery 语义；
+- `canvas.toBlob` 输出路径；
+- API26 WebMessagePort/FileReader 兼容路径。
+
+未采用 Object/Blob URL SVG、toDataURL 输出、decoded-image cache、1×1 retirement、CDP GC、固定延迟、主动 reload/kill WebView、WOFF2 考古或阈值修改。
+
+## D. Tests actually run
+
+### 最终 clean renderer commit
 
 ```powershell
-npm ci --no-fund
-npm audit
+cd C:\CodexTmp\lcg-g2-recovery-build-f9d39b0\renderer
 npm run check
 npm run golden:test
 ```
 
-- `npm ci`: 117 packages installed；118 audited；0 vulnerabilities。
-- `npm audit`: 0 vulnerabilities。
-- renderer: 8/8 suites、60/60 tests，typecheck/validator/build PASS。
-- Golden: 30/30 cases exact PASS；没有运行 `golden:update`。
+- renderer：8/8 suites，78/78 tests，typecheck/validator/build PASS。
+- production bundle：未出现 `globalThis`。
+- Golden：最终实现连续三轮 30/30 exact；提交后 ASCII clean worktree 再跑一轮 30/30 exact，全部 PASS。
+- 30 张 PNG 与第二轮纠正前已审核基线相比 `changed_count=0`。
 
-### Android JVM / APK / release / lint final HEAD
+### Android/JVM/release/lint/R8
 
 ```powershell
 .\gradlew.bat `
@@ -132,173 +99,125 @@ npm run golden:test
   :app:testProductionDebugUnitTest `
   :app:assembleAlphaDebugAndroidTest `
   :app:assembleProductionDebugAndroidTest `
+  :app:assembleProductionDebug `
   :app:assembleProductionRelease `
+  :app:bundleProductionRelease `
   :app:lintProductionRelease `
   --rerun-tasks --console=plain
 ```
 
-- Gradle：`BUILD SUCCESSFUL in 1m 18s`；194/194 tasks executed。
-- AlphaDebug JVM：31 suites / 141 tests / 0 failures / 0 errors / 0 skipped。
-- ProductionDebug JVM：31 suites / 141 tests / 0 failures / 0 errors / 0 skipped。
-- 两套 androidTest APK：PASS。
-- `assembleProductionRelease`：PASS；候选为 unsigned APK（本任务禁止 signing）。
-- R8/resource shrinking：`minifyProductionReleaseWithR8`、`convertShrunkResourcesToBinaryProductionRelease`、`optimizeProductionReleaseResources` 均执行。
-- lint：0 errors；33 warnings。warning 分类为 GradleDependency 11、NewerVersionAvailable 6、UnusedResources 5、UseKtx 3、RequiresFeature 2、ExifInterface 2、AndroidGradlePluginVersion 1、ObsoleteSdkInt 1、DiscouragedApi 1、DataExtractionRules 1；未为非阻断升级提示扩大范围。
+- Gradle：216/216 tasks executed，`BUILD SUCCESSFUL in 1m 18s`。
+- AlphaDebug JVM：31 suites / 143 tests / 0 failures / 0 errors / 0 skipped。
+- ProductionDebug JVM：31 suites / 143 tests / 0 failures / 0 errors / 0 skipped。
+- 两套 test APK、ProductionDebug APK、ProductionRelease unsigned APK、AAB：PASS。
+- R8、resource shrinking：PASS。
+- lint：34 个非阻断 issue，0 Fatal，0 Error。
 
-### API 36 full connected gate
+最终构建产物：
 
-```powershell
-$env:ANDROID_SERIAL='emulator-5556'
-.\gradlew.bat :app:connectedProductionDebugAndroidTest '-Pandroid.injected.device.serial=emulator-5556'
-```
-
-- 21/21 tests；0 failures/errors/skips。
-- XML suite time：2076.178 s；Gradle wall time：34m49s。
-- 20 次 2x：149.557 s。
-- 30 分钟编辑：1807.380 s testcase；内部 wall-clock assertion 为 1,800,021 ms。
-- 关键 UI 定向回归另有 13/13 PASS（90.955 s）。
-- API 36 外部进程恢复：后台后 `am kill` 使旧 PID 消失；cold relaunch 恢复到第 4 步，返回第 1 步后 synthetic search draft 精确保留。
-
-21 项覆盖：renderer lifecycle/shared WebView、Home 无 WebView、ATF、font 1/2、landscape+IME、Activity recreation、matrix 1x/2x、Home actions/dialog、Editor 六步/search/invalid inputs/slider/retry、Export 1x/2x/busy/failure/success/cancel/save/share actions、Settings 两态/quality/safe-area/cache、20-export、30-minute endurance。
-
-## E. AVD / API / WebView / Accessibility matrix
-
-SDK 只读盘点结果：Emulator `36.6.11.0` stable；WHPX `10.0.26200` installed and usable；C 盘执行前 23.32 GiB 可用。安装/保留的稳定 system image：
-
-- API 26：`system-images;android-26;google_apis;x86_64` rev 16
-- API 30：`system-images;android-30;google_apis_playstore;x86_64` rev 10
-- API 33：`system-images;android-33;google_apis_playstore;x86_64` rev 9
-- API 36：`system-images;android-36;google_apis_playstore;x86_64` rev 7
-
-所有测试 AVD 位于 `C:\CodexTmp\lcg-quality-avds-20260808`，config 默认 2G，但每次启动显式 `-memory 4096`；设备运行时 `dumpsys meminfo` 均确认约 4 GiB。实际启动模板：
-
-```powershell
-Start-Process -WindowStyle Hidden `
-  -FilePath "$env:ANDROID_SDK_ROOT\emulator\emulator.exe" `
-  -ArgumentList @('-avd', $avd, '-port', '5556', '-memory', '4096',
-    '-no-window', '-no-audio', '-no-snapshot-load', '-no-snapshot-save',
-    '-wipe-data', '-no-boot-anim', '-gpu', 'host', '-netfast')
-```
-
-始终一台启动、测试、关机后才进入下一台。
-
-| API | Image / ABI | Runtime RAM | Android | WebView | Boot / install | Final smoke | Accessibility |
-|---|---|---:|---|---|---|---|---|
-| 26 | Google APIs rev16 / x86_64 | 4,042,036K | 8.0.0 / 26 | 69.0.3497.100 | PASS / 两 APK PASS | 1/1，35.269 s | TalkBack/Scanner absent；Compose semantics+ATF alternative |
-| 30 | Play Store rev10 / x86_64 | 4,023,600K | 11 / 30 | 83.0.4103.106 | PASS / 两 APK PASS | 1/1，22.191 s | TalkBack/Scanner absent；Compose semantics+ATF alternative |
-| 33 | Play Store rev9 / x86_64 | 4,007,916K | 13 / 33 | 109.0.5414.123 | PASS / 两 APK PASS | TalkBack on：1/1，25.005 s | `com.google.android.marvin.talkback` 14.2.0.618048417；ATF 1/1，3.818 s；Scanner absent |
-| 36 | Play Store rev7 / x86_64 | 4,013,816K | 16 / 36 | 133.0.6943.137 | PASS / 两 APK PASS | matrix 1/1，21.228 s；full 21/21 | TalkBack 16.0.0.738667889 present；Scanner absent；ATF included in full suite |
-
-API 33 TalkBack 执行命令与核心步骤：
-
-```powershell
-adb -s emulator-5556 shell settings put secure enabled_accessibility_services `
-  com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService
-adb -s emulator-5556 shell settings put secure accessibility_enabled 1
-adb -s emulator-5556 shell am instrument -w -r `
-  -e class com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest `
-  com.qrzzzz.lyricscard.debug.test/androidx.test.runner.AndroidJUnitRunner
-adb -s emulator-5556 shell am instrument -w -r `
-  -e class com.qrzzzz.lyricscard.ui.AccessibilityFrameworkTest `
-  com.qrzzzz.lyricscard.debug.test/androidx.test.runner.AndroidJUnitRunner
-```
-
-服务启用状态下走 Home ready → 新建 → 六步 direct/back/next → Step 3 renderer ready → 1x → 2x → Export route → Home；随后 ATF 检查 Home → Editor → Export → Settings。Accessibility Scanner 的标准包 `com.google.android.apps.accessibility.auditor` 不存在，未伪报 PASS；使用 Espresso Accessibility Test Framework 替代。
-
-Compose/instrumentation 还真实覆盖 compact/medium/expanded、wide landscape、Activity portrait/landscape、fontScale 1.0/1.3/2.0、实际 IME inset 与 48dp touch target；检查 heading、paneTitle、selected/disabled、Role.Switch/Button、合并 semantics、decorative null、dialog action/focus、live-region error/polite 状态。
-
-进程恢复没有只用 Activity recreation 代替：API 36 上先进入 Editor 第 4 步并写入 synthetic draft，HOME 后执行 `adb -s emulator-5556 shell am kill com.qrzzzz.lyricscard.debug`；PID 2631 消失，重新启动报告 `LaunchState: COLD` 且恢复原 task。新 PID 4014 恢复第 4 步，切回第 1 步后 draft `process-restore-42` 精确存在。
-
-## F. 20-export and 30-minute performance
-
-### 20 consecutive real 2x exports
-
-fixture 为 16 行双语、auto-height；先 `measure()` 后验证真实 2080×5544 PNG。warmup 不计入 20 次。
-
-| Stage | PSS KB | RSS KB | Java PSS KB | Native PSS KB | Graphics PSS KB | Export files | `.part`/`.tmp` |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| before | 247,361 | 396,092 | 13,752 | 20,552 | 0 | 0 | 0 |
-| 5 | 249,749 | 392,384 | 21,540 | 19,340 | 0 | 5 | 0 |
-| 10 | 249,457 | 392,000 | 21,548 | 19,368 | 0 | 10 | 0 |
-| 20 | 233,500 | 366,776 | 17,148 | 19,520 | 0 | 20 | 0 |
-| idle + GC | 228,564 | 362,052 | 13,752 | 19,520 | 0 | 20 | 0 |
-
-- Success 20/20；renderer crash/error 0；OOM 0；partial/temp 0。
-- 峰值 PSS 相对 warmed baseline +0.97%；idle+GC 相对 baseline -7.60%。
-- StrictMode app-main-thread disk read/write violations：0。
-
-### Real 30-minute high-frequency editing
-
-| Stage | PSS KB | RSS KB | Java PSS KB | Native PSS KB | Graphics PSS KB |
-|---|---:|---:|---:|---:|---:|
-| start | 246,469 | 383,052 | 13,860 | 19,252 | 0 |
-| 5m | 256,953 | 395,292 | 19,172 | 21,452 | 0 |
-| 10m | 260,022 | 398,660 | 18,476 | 21,468 | 0 |
-| 15m | 259,260 | 397,976 | 18,264 | 21,512 | 0 |
-| 20m | 257,090 | 395,748 | 18,688 | 21,532 | 0 |
-| 25m | 259,924 | 398,732 | 18,204 | 21,556 | 0 |
-| idle + GC | 239,078 | 376,888 | 13,916 | 21,620 | 0 |
-
-- Duration：1,800,021 ms；operations：14,801；Activity recreation/orientation：9；background/resume：19。
-- 峰值 PSS +5.50%；10→15→20→25 分钟为平台而非单调增长；idle+GC 相对 start -3.00%。
-- ANR/FATAL/OOM/WebView renderer crash：0；renderer recovery error：0；partial file：0。
-- 最终 `flushAutosave()` 成功；Room 读取的 name/spec 与 Editor 最终 state 精确一致。
-- StrictMode app-main-thread disk read/write violations：0。
-
-主线程边界静态复核：thumbnail、export preview decode、image import/resize、cache traversal/delete、SAF copy、diagnostics 与 renderer chunk/finalization 均在 `Dispatchers.IO`/IO queue；production Room 未开启 main-thread queries。20-export 与 30-minute 的 StrictMode listener 对 app stack 违规计数均为 0。
-
-### Frame / shared WebView evidence
-
-- connected `RendererUiLifecycleTest`：Home 不创建 WebView；进入 Step 3 后创建且跨六步与 Export 重用同一实例。
-- API 36 冷进程、首次 WebView、preview 与 1x/2x export 混合窗口：68 frames，30 janky（44.12%），P50 17 ms、P90 150 ms、P99 1000 ms。该窗口记录首次初始化/导出尖峰，保留为观察项，不冒充稳态。
-- renderer 预热后，真实六步横向导航、视觉操作与上下滚动：88 frames，5 janky（5.68%）；P50/P90 17 ms、P95 18 ms、P99 19 ms；missed vsync 0；slow bitmap upload 0。
-- 结合 30 分钟无 ANR/crash、稳定 PSS 与 shared-WebView identity，没有发现持续性整屏重组或 AndroidView 重建；未做无证据微优化。
-
-### Save / share / cancel / retry contracts
-
-- Renderer 在 AVD 上真实导出 1x/2x；PNG MIME、dimensions 与完整性均验证。
-- API 36 实际解析到 Print、Drive、Maps、Messages、Photos、Bluetooth、Gmail 等 image/png targets，并打开 `android/com.android.internal.app.ResolverActivity`；只验证 chooser，没有向第三方实际发送。
-- API 36 实际打开 `com.google.android.documentsui/com.android.documentsui.picker.PickActivity` 的 `ACTION_CREATE_DOCUMENT`，随后取消。
-- App 的 stream URI、ClipData、read grant、ActivityNotFound error、SAF cancel/failure/retry、busy/finalizing/cancel/no-duplicate 由双 variant JVM 与 connected UI state tests 覆盖。
-
-## G. Remaining external blockers
-
-Gate 2 对物理 Xiaomi API 36 的唯一安装尝试返回 `INSTALL_FAILED_USER_RESTRICTED`，因此设备侧为 0 tests。按明确约束，本 Gate 未再次安装、未修改 USB 安装/未知来源/MIUI 优化/安全策略，也未向该序列号执行测试命令。
-
-结论分离：
-
-- **Quality automation：PASS**（AVD API 26/30/33/36、Golden、Accessibility/ATF、JVM、connected、stress、release/lint/R8 全门通过）。
-- **Physical-device verification：external BLOCKED**（Xiaomi 安全策略）。
-- **Overall：BLOCKED**。
-
-## H. Commit / workspace / artifacts
-
-当前分支提交（从 Gate 2 base 起）：
-
-```text
-55ad8bc test(renderer): add deterministic pixel golden gate
-ade2585 test(android): add accessibility matrix and release stress gates
-bf041e2 fix(a11y): announce screen pane titles
-2547366 fix(renderer): move export chunk writes off main thread
-80acb27 fix(renderer): support API 26 WebView transport
-775dc2d test(android): stabilize API matrix smoke
-7509055 fix(navigation): commit async routes on main
-b83ed6f test(a11y): harden ATF navigation flow
-f865ead fix(a11y): stabilize focus and action semantics
-9ddcbe1 test(android): exercise real windows and synchronized UI
-d69f31c fix(renderer): avoid forced high-density preview layers
-f167202 test(android): measure auto-height stress exports
-b65d2a1 test(renderer): normalize golden source fingerprints
-```
-
-脱敏证据与产物：`C:\CodexTmp\lcg-quality-artifacts-20260808-final`（94 files；APK、R8/resource mappings、lint/JVM/connected XML、npm/Golden/Gradle/AVD/performance/process-restoration logs）。
-
-| Artifact | Size | SHA-256 |
+| Artifact | Bytes | SHA-256 |
 |---|---:|---|
-| `app-alpha-debug-androidTest.apk` | 4,723,928 | `BAB4FAA23774C4AC1AA69F5C3C02CB7E1F63B09C06707592F7465B45A23361F0` |
-| `app-production-debug-androidTest.apk` | 4,723,948 | `9D6450ECD49FB108AB6783DA1B2662C799394105EE8F6F74DEA128F0CAB4972D` |
-| `app-production-release-unsigned.apk` | 45,157,201 | `63842A3F4F8D942AFEF83B2A4C3E5804C0CBA201055E3D28CE29F31E92B4CD01` |
-| `mapping.txt` | 35,679,776 | `4BD16B1108EDFB6BD7004404F404DEC5FD2E0AD4F7BD97A7969EBF815D46CB49` |
-| `resources.txt` | 179,190 | `B4162CC11298249CED08C67DF7F8353A462656F2982D92ABC32AE0550304FEF0` |
+| `app-production-debug.apk` | 62,747,363 | `af5f1d8d8c4b32c9a4fab49e4d80db1a317c21dc0d81b1f26ef17dd82f996783` |
+| `app-production-debug-androidTest.apk` | 4,754,504 | `b2b06a540fce7fb556aeb2d9981a9f412903d9c059c102bd55af023cd71c60f3` |
+| `app-alpha-debug-androidTest.apk` | 4,754,488 | `fa566e267f6adbc46198f3ff6c66e5e15cbd33dede6bbdb463a17095b883d5f6` |
+| `app-production-release-unsigned.apk` | 45,157,865 | `e35e7235b07b7aca55e9592c44ec41e09a9faa4f566d2c9e53b9be883bd58c96` |
+| `app-production-release.aab` | 39,916,322 | `828d4113c315a58fa12fd5558ad3b1338b0eba39bfd0c8eb042c4c61751b94a7` |
 
-稳定 SDK system images 可保留。独立 Reviewer 完成后删除 `C:\CodexTmp\lcg-quality-avds-20260808` 与 `C:\CodexTmp\lcg-quality-staging-20260808`；证据目录保留。最终要求：主 worktree clean；不 push/PR/tag/release。
+### 最终设备命令骨架
+
+```powershell
+adb -s emulator-5554 install -r -t app-production-debug.apk
+adb -s emulator-5554 install -r -t app-production-debug-androidTest.apk
+adb -s emulator-5554 shell sha256sum <device-base.apk>
+adb -s emulator-5554 shell am instrument -w -r `
+  -e class <test-selector> `
+  com.qrzzzz.lyricscard.debug.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+最终 API26 选择器：
+
+- `com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest`：PASS 1/1，29.897 s。
+- `com.qrzzzz.lyricscard.ui.ArchitectureRestorationTest`：PASS 1/1，10.788 s。
+- `com.qrzzzz.lyricscard.ui.AccessibilityFrameworkTest`：PASS 1/1，12.953 s。
+
+最终 API30 选择器：
+
+- `QualityStressTest#a_serifOneXThenTwoXProbeUsesTheSameRendererLifecycle`：**FAIL 1/1**，11.414 s；`TimeoutCancellationException: Timed out waiting for 8000 ms`。
+- 按锁定规则，最终 binary 的 20×、core smoke、recovery、ATF 均未继续执行。
+
+## E. Device validation
+
+| API | AVD / image | Runtime RAM | WebView | Device APK hash | 结果 |
+|---|---|---:|---|---|---|
+| 26 | `lcg_quality_api26`; Google APIs x86_64 rev16; Android 8.0.0 | 4,042,036 KB | Chrome/WebView `69.0.3497.100` | host/device 均 `af5f1d8…96783` | smoke、恢复、ATF 各 1/1 PASS；无 `globalThis`、OOM、code 5、`.part/.tmp`。 |
+| 30 | `lcg_quality_api30`; Play Store x86_64 rev10; Android 11 | 4,023,600 KB | `83.0.4103.106` | host/device 均 `af5f1d8…96783` | fresh-install serif probe 1/1 FAIL；在 20× 之前 STOP。 |
+| 33 | `lcg_quality_api33`; Play Store x86_64 rev9 | 未进入最终 binary gate | 未进入最终 binary gate | 未安装最终 binary | NOT RUN：由 API30 STOP 触发。 |
+| 36 | `lcg_quality_api36`; Play Store x86_64 rev7 | 未进入最终 binary gate | 未进入最终 binary gate | 未安装最终 binary | NOT RUN：full connected、20×、真实 30 分钟均未执行。 |
+
+API33 TalkBack 核心流未在最终 binary 上执行，因为 API30 强制 STOP 先发生；不得沿用旧 binary 的 TalkBack 结果。
+
+实体小米设备缺失单列为 `EXTERNAL / PHYSICAL BLOCKED`，没有把它包装成自动化失败，也未再次尝试。
+
+## F. Remaining issues
+
+1. **阻断**：最终 binary 在 fresh API30 首次 serif probe 的 pre-export `measure/spec` 请求超过既有 8 秒 timeout。失败发生在任何 1×/2× PNG 成功证据之前。
+2. 纠正额度已经用完，且总指挥明确要求此后任何产品或 harness 失败立即停止；因此本工作流不得继续改代码或重跑。
+3. 最终 binary 尚缺 API30 20×/core/recovery/ATF、API33 core/recovery/ATF/TalkBack、API36 full connected/20×/30-minute。
+4. 独立 Reviewer 仍由总指挥单独执行。
+
+严格 verdict：**FIX REQUIRED / AUTOMATION FAIL**。不得标记 `AUTOMATION PASS`、`READY` 或仅因实体设备缺失而 `BLOCKED`。
+
+## G. Cross-workstream impacts
+
+- 产品变更仅位于 renderer；Android 产品接口、安全边界、数据库 schema 和 release 配置未改变。
+- `QualityStressTest` 增加 serif probe，并把 app-only 内存值降为诊断；最终 verdict 使用 host 同阶段 app+renderer aggregate。
+- Golden 只有两张 serif PNG 更新；任何消费 Golden 的 Reviewer 应使用本报告中的新 SHA。
+- 其他负责人不得复用 `bf905a0` 或旧 G dirty binary 的设备结果为 `553556b` 背书。
+- 当前候选不是公开发布级最终候选；后续工作必须从 API30 首次 spec/measure timeout 这一事实开始。
+
+## H. Commit / workspace state
+
+- renderer binary commit：`553556b538347298c4a6558fdb7d17a45c28e85d`。
+- 修改范围：12 个受控文件，包括 renderer source/tests/Golden、Golden 脚本和 `QualityStressTest`；无未预期产品文件。
+- ASCII 构建 worktree 与主执行 worktree在最终 binary commit 上均已验证 clean；本报告为后续 docs-only 变更。
+- 未 push、未 PR、未 merge、未 tag、未 Release。
+
+## Superseded evidence — 不得冒充最终证据
+
+### 旧 G dirty 试验
+
+只读目录：`C:\CodexTmp\lcg-quality-artifacts-20260808-final`
+
+- `matrix-api30-single-read-blob-release-ascii-fixed-20260809`：旧“最佳 A”；按锁定 aggregate 口径重算 warmed app+renderer `532,700 KB` → idle+GC `614,805 KB`，`+15.41%`。它不是 clean G2 最终 binary。
+- `matrix-api30-direct-base64-release-ascii-fixed-20260809`、`matrix-api30-decoded-image-cache-release-ascii-fixed-20260809`、`matrix-api30-image-retirement-flush-release-ascii-fixed-20260809`：RED/被否决试验，未带入本实现。
+- Object/Blob URL、toDataURL 输出、decoded-image cache、1×1 retirement 等均不得恢复。
+
+### G2 superseded clean candidates
+
+| Candidate | 状态 | 说明 |
+|---|---|---|
+| `ae45074` | RED / superseded | Image source 释放晚于旧最佳 A；API30 20× aggregate warmed `546,992 KB` → idle+GC `804,540 KB`，`+47.08%`。 |
+| `bf905a0` | PASS but superseded | 修正 Image 释放时序后，API30 20/20 成功；但随后 API26 证明 `globalThis` 不兼容，因此该 binary 不再有效。 |
+| `553556b` | FINAL FAIL | API26 兼容恢复；最终 API30 fresh probe 1/1 spec/measure timeout，按规则停止。 |
+
+`bf905a0` 的 20× 诊断时间序列仅用于说明收敛历史，不用于最终 verdict：
+
+| Stage | App PSS KB | Renderer PSS KB | Aggregate PSS KB |
+|---|---:|---:|---:|
+| warmed | 238,603 | 345,892 | 584,495 |
+| after 5（采样距标记 -5,797 ms） | 242,894 | 710,468 | 953,362 |
+| after 10 | 242,284 | 544,353 | 786,637 |
+| after 20 | 240,052 | 469,894 | 709,946 |
+| idle + GC | 229,097 | 469,894 | 698,991 |
+
+该 superseded run 的 warmed→idle+GC 为 `+114,496 KB / +19.59%`；中途 aggregate peak `1,185,365 KB` 后回落，无 OOM/code 5/partial。由于最终 renderer binary 已变更，这组数据不能替代 `553556b` 的 20×；最终 binary 没有 20× 数据。
+
+## Evidence paths
+
+- G2 证据根目录：`C:\CodexTmp\lcg-quality-g2-recovery-018a-20260809`
+- 最终 API26：`api26-final2-smoke-553556b-*`、`api26-final2-restoration-553556b-*`、`api26-final2-atf-553556b-*`
+- 最终 API30 阻断：`api30-final2-probe-553556b-instrumentation.log`、`api30-final2-probe-553556b-logcat.txt`、`api30-final2-probe-553556b-memory.csv`
+- superseded 20×：`api30-correction1-20x-bf905a0-stage-memory.csv` 及同前缀 logcat/instrumentation/memory 文件
+- 最终构建：`C:\CodexTmp\lcg-g2-recovery-build-f9d39b0\app\build\outputs`
+- JVM：`C:\CodexTmp\lcg-g2-recovery-build-f9d39b0\app\build\test-results`
+- lint：`C:\CodexTmp\lcg-g2-recovery-build-f9d39b0\app\build\reports\lint-results-productionRelease.html`
