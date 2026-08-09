@@ -56,11 +56,11 @@ describe("export sizing", () => {
     expectCanvasCleared(canvas);
   });
 
-  it("releases the decoded SVG and clears canvas after successful PNG encoding", async () => {
+  it("releases the decoded SVG before successful PNG encoding and clears the canvas", async () => {
     const png = new Blob(["png"], { type: "image/png" });
     const image = fakeImage();
     const canvas = fakeDrawableCanvas(image, (callback) => {
-      expect(image.src).toBe("data:image/svg+xml,fixture");
+      expect(image.src).toBe("");
       callback(png);
     });
 

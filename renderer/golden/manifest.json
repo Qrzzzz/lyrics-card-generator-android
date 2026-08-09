@@ -1,7 +1,7 @@
 {
   "datasetVersion": "release-pixel-golden-v1",
   "browserVersion": "151.0.7922.34",
-  "sourceFingerprint": "8f3a248eaa16ae788cb509471e2b683fad4b0c582472ef3e2093c6d4ee6ff234",
+  "sourceFingerprint": "912bf66d8f021fea36d9170bf5e0347891482b022b5fd21a6d39b8766054f500",
   "fixtureFingerprint": "0476356f485da8a91773a37888b35c3ff7d50c63d1169b2e612bae9e0c8a2a8c",
   "environment": {
     "platform": "win32",

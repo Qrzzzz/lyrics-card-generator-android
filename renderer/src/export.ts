@@ -206,6 +206,9 @@ export async function drawImageAndEncodePngAndClear(
       throw new Error("Canvas 2D context is unavailable");
     }
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    // The canvas owns the drawn pixels now. Drop the SVG-backed Image before
+    // PNG readback so old WebView does not retain both decoded surfaces.
+    releaseDecodedImage(image);
     return await encodeCanvasAsPng(canvas);
   } finally {
     releaseDecodedImage(image);
