@@ -138,16 +138,45 @@ class QualityStressTest {
             val expectedWidth = measurement.width * 2
             val expectedHeight = measurement.height * 2
 
-            val warmup = runBlocking { controller.exportPng(spec, 2) }
-            assertPng(warmup, expectedWidth, expectedHeight)
-            assertTrue("warmup export was not removed", warmup.file.delete())
-            forceIdleGc()
+            val warmupSamples = mutableListOf<MemorySample>()
+            var warmupExports = 0
+            while (
+                warmupExports < MAX_EXPORT_WARMUP_EXPORTS &&
+                !hasStableWarmupWindow(warmupSamples)
+            ) {
+                repeat(EXPORT_WARMUP_BATCH_SIZE) {
+                    val warmup = runBlocking { controller.exportPng(spec, 2) }
+                    assertPng(warmup, expectedWidth, expectedHeight)
+                    assertTrue("warmup export was not removed", warmup.file.delete())
+                    assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+                }
+                warmupExports += EXPORT_WARMUP_BATCH_SIZE
+                forceIdleGc()
+                warmupSamples += memorySample(
+                    stage = "export-warmup-$warmupExports",
+                    exportDirectory = exportDirectory,
+                    filesBefore = filesBefore,
+                )
+            }
+            assertTrue(
+                "export memory did not stabilize during bounded warmup: " +
+                    warmupSamples.joinToString { it.totalPssKb.toString() },
+                hasStableWarmupWindow(warmupSamples),
+            )
 
             runOnResumedActivity { activity ->
                 strictModeMonitor.install()
             }
 
-            val before = memorySample("export-before", exportDirectory, filesBefore)
+            val before = warmupSamples.last()
+            Log.i(
+                QUALITY_TAG,
+                "memory-warmup stable=true exports=$warmupExports " +
+                    "samplesKb=${warmupSamples.joinToString { it.totalPssKb.toString() }} " +
+                    "windowPercent=$EXPORT_WARMUP_STABILITY_PERCENT",
+            )
+            Log.i(QUALITY_TAG, "host-memory-window stage=baseline durationMs=$HOST_MEMORY_WINDOW_MS")
+            SystemClock.sleep(HOST_MEMORY_WINDOW_MS)
             var successful = 0
             for (attempt in 1..20) {
                 val image = runBlocking { controller.exportPng(spec, 2) }
@@ -168,12 +197,19 @@ class QualityStressTest {
             forceIdleGc()
             val idle = memorySample("export-idle-gc", exportDirectory, filesBefore)
             val pssLimit = ceil(before.totalPssKb * 1.20).toInt()
+            assertTrue(
+                "app-only PSS did not return within 20 percent of the stable warmed baseline: " +
+                    "baseline=${before.totalPssKb} idle=${idle.totalPssKb} limit=$pssLimit",
+                idle.totalPssKb <= pssLimit,
+            )
             Log.i(
                 QUALITY_TAG,
-                "memory-diagnostic process=app-only beforePssKb=${before.totalPssKb} " +
-                    "idleGcPssKb=${idle.totalPssKb} within20Percent=${idle.totalPssKb <= pssLimit} " +
-                    "verdictSource=host-app-plus-renderer-aggregate",
+                "memory-gate process=app-only baselinePssKb=${before.totalPssKb} " +
+                    "idleGcPssKb=${idle.totalPssKb} limitPssKb=$pssLimit within20Percent=true " +
+                    "verdictSource=instrumentation-app-only",
             )
+            Log.i(QUALITY_TAG, "host-memory-window stage=final durationMs=$HOST_MEMORY_WINDOW_MS")
+            SystemClock.sleep(HOST_MEMORY_WINDOW_MS)
             strictModeMonitor.assertNoAppViolations()
             Log.i(QUALITY_TAG, "export-summary success=$successful rendererErrors=0 partialFiles=0")
         } finally {
@@ -655,6 +691,14 @@ class QualityStressTest {
         }
     }
 
+    private fun hasStableWarmupWindow(samples: List<MemorySample>): Boolean {
+        if (samples.size < EXPORT_WARMUP_STABLE_SAMPLES) return false
+        val recent = samples.takeLast(EXPORT_WARMUP_STABLE_SAMPLES).map { it.totalPssKb }
+        val minimum = recent.min()
+        val maximum = recent.max()
+        return maximum <= ceil(minimum * (1.0 + EXPORT_WARMUP_STABILITY_PERCENT / 100.0)).toInt()
+    }
+
     private fun backgroundAndResume(
         scenario: ActivityScenario<ComponentActivity>,
         cycleIndex: Int,
@@ -854,6 +898,11 @@ class QualityStressTest {
         const val BACKGROUND_TIMEOUT_MS = 20_000L
         const val MAIN_THREAD_TIMEOUT_MS = 20_000L
         const val SCENARIO_CLEANUP_TIMEOUT_MS = 30_000L
+        const val EXPORT_WARMUP_BATCH_SIZE = 5
+        const val EXPORT_WARMUP_STABLE_SAMPLES = 3
+        const val MAX_EXPORT_WARMUP_EXPORTS = 30
+        const val EXPORT_WARMUP_STABILITY_PERCENT = 5
+        const val HOST_MEMORY_WINDOW_MS = 15_000L
         const val STABLE_ACTIVITY_CHECKS = 10
         const val REATTACH_REGRESSION_CYCLES = 12
         const val DETACHED_SPEC_TIMEOUT_CROSSING_MS = 8_500L

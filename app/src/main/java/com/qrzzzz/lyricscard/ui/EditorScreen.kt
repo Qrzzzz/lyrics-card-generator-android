@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Redo
@@ -40,7 +38,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -320,11 +317,7 @@ private fun CompactEditorBottomSheet(
             skipHiddenState = true,
         )
         val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
-        val density = LocalDensity.current
         val imeInsets = rememberLyricsImeInsets()
-        val effectiveImeWindowInsets = WindowInsets(
-            bottom = with(density) { imeInsets.effectiveBottomPx.toDp() },
-        )
         val imeVisible = imeInsets.isVisible
 
         LaunchedEffect(imeVisible, sheetState.currentValue) {
@@ -343,9 +336,8 @@ private fun CompactEditorBottomSheet(
                 EditorPanelContent(
                     state = state,
                     actions = actions,
-                    modifier = Modifier
-                        .height(sheetHeight)
-                        .windowInsetsPadding(effectiveImeWindowInsets),
+                    imeInsets = imeInsets,
+                    modifier = Modifier.height(sheetHeight),
                 )
             },
         ) {

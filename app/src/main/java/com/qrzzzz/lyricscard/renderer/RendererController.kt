@@ -5,9 +5,11 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebMessage
 import android.webkit.WebMessagePort
@@ -141,8 +143,21 @@ internal interface RendererBridge {
 
 private class WebViewRendererBridge : RendererBridge {
     private var listenerAttached = false
+    private var javascriptInterfaceAttached = false
+    private var javascriptInterfaceView: WebView? = null
     private var fallbackPort: WebMessagePort? = null
     private var fallbackOnMessage: ((String) -> Unit)? = null
+    private val api26JavascriptBridge = object {
+        @JavascriptInterface
+        fun postMessage(message: String) {
+            val view = javascriptInterfaceView ?: return
+            view.post {
+                if (javascriptInterfaceView === view && view.url == RENDERER_URL) {
+                    fallbackOnMessage?.invoke(message)
+                }
+            }
+        }
+    }
 
     override fun attach(view: WebView, onMessage: (String) -> Unit): Boolean {
         listenerAttached = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
@@ -156,6 +171,14 @@ private class WebViewRendererBridge : RendererBridge {
                     message.data?.let(onMessage)
                 }
             }
+        } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
+            // Chrome 69 on API 26 retains the native side of large WebMessagePort transfers.
+            // The interface is accepted only on the exact navigation-locked local document;
+            // its packaged CSP forbids child frames, network content, workers, and objects.
+            fallbackOnMessage = onMessage
+            javascriptInterfaceView = view
+            view.addJavascriptInterface(api26JavascriptBridge, BRIDGE_OBJECT)
+            javascriptInterfaceAttached = true
         } else {
             fallbackOnMessage = onMessage
         }
@@ -163,7 +186,7 @@ private class WebViewRendererBridge : RendererBridge {
     }
 
     override fun onMainFrameLoaded(view: WebView, onFailure: (Throwable) -> Unit) {
-        if (listenerAttached || fallbackPort != null) return
+        if (listenerAttached || javascriptInterfaceAttached || fallbackPort != null) return
 
         val nonce = UUID.randomUUID().toString()
         val ports = runCatching { view.createWebMessageChannel() }
@@ -203,7 +226,7 @@ private class WebViewRendererBridge : RendererBridge {
 
     override fun send(view: WebView, envelope: RendererEnvelope) {
         val json = RenderSpecJson.format.encodeToString(envelope)
-        if (listenerAttached) {
+        if (listenerAttached || javascriptInterfaceAttached) {
             val quoted = JsonPrimitive(json).toString()
             val script = "window.LyricsCardRenderer && window.LyricsCardRenderer.receive(JSON.parse($quoted));"
             view.evaluateJavascript(script, null)
@@ -217,7 +240,12 @@ private class WebViewRendererBridge : RendererBridge {
         if (listenerAttached) {
             runCatching { WebViewCompat.removeWebMessageListener(view, BRIDGE_OBJECT) }
         }
+        if (javascriptInterfaceAttached) {
+            runCatching { view.removeJavascriptInterface(BRIDGE_OBJECT) }
+        }
         listenerAttached = false
+        javascriptInterfaceAttached = false
+        javascriptInterfaceView = null
         fallbackOnMessage = null
         fallbackPort?.let { port -> runCatching { port.close() } }
         fallbackPort = null

@@ -73,6 +73,7 @@ class AppShellResourceContractTest {
     @Test
     fun `compact landscape and IME shell paths remain explicit`() {
         val editor = appFile("src/main/java/com/qrzzzz/lyricscard/ui/EditorScreen.kt").readText()
+        val editorNavigation = appFile("src/main/java/com/qrzzzz/lyricscard/ui/EditorNavigation.kt").readText()
         val export = appFile("src/main/java/com/qrzzzz/lyricscard/ui/ExportScreen.kt").readText()
         val imeInsets = appFile("src/main/java/com/qrzzzz/lyricscard/ui/LyricsImeInsets.kt").readText()
         val adaptive = appFile("src/main/java/com/qrzzzz/lyricscard/ui/WindowAdaptive.kt").readText()
@@ -84,7 +85,8 @@ class AppShellResourceContractTest {
         assertTrue(editor.contains("LyricsWindowWidth.MEDIUM"))
         assertTrue(editor.contains("LyricsWindowWidth.EXPANDED"))
         assertTrue(editor.contains("rememberLyricsImeInsets()"))
-        assertTrue(editor.contains("windowInsetsPadding(effectiveImeWindowInsets)"))
+        assertTrue(editor.contains("imeInsets = imeInsets"))
+        assertTrue(editorNavigation.contains("windowInsetsPadding(effectiveImeWindowInsets)"))
         assertTrue(imeInsets.contains("WindowInsets.ime"))
         assertTrue(imeInsets.contains("WindowInsetsCompat.Type.ime()"))
         assertTrue(imeInsets.contains("Build.VERSION.SDK_INT == Build.VERSION_CODES.O"))

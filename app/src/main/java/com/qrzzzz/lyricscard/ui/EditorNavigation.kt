@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -28,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -72,9 +75,14 @@ internal fun EditorPanelContent(
     state: EditorUiState,
     actions: EditorScreenActions,
     modifier: Modifier = Modifier,
+    imeInsets: LyricsImeInsets = rememberLyricsImeInsets(),
 ) {
     val selectedStep = state.selectedStep
-    Column(modifier = modifier) {
+    val density = LocalDensity.current
+    val effectiveImeWindowInsets = WindowInsets(
+        bottom = with(density) { imeInsets.effectiveBottomPx.toDp() },
+    )
+    Column(modifier = modifier.windowInsetsPadding(effectiveImeWindowInsets)) {
         Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
             EditorStepNavigation(
                 selectedStep = selectedStep,

@@ -309,7 +309,10 @@ class AppShellAccessibilityTest {
             )
             logImeStage(startedAt, "editor-ime-ready")
             assertTrue("effective IME inset did not become visible", effectiveImeBottomPx.intValue > 0)
-            assertDisplayedInsideViewport(text(R.string.editor_next_step))
+            assertTextDisplayedInsideImeVisibleViewport(
+                value = text(R.string.editor_next_step),
+                effectiveImeBottomPx = effectiveImeBottomPx.intValue,
+            )
 
             compose.activityRule.scenario.onActivity { activity ->
                 Log.i(
@@ -353,6 +356,10 @@ class AppShellAccessibilityTest {
             compose.onNodeWithTag(EXPORT_SAVE_ACTION_TAG)
                 .assertIsDisplayed()
             assertMinimumHeight(EXPORT_SAVE_ACTION_TAG, MIN_TOUCH_TARGET_DP)
+            assertTagDisplayedInsideImeVisibleViewport(
+                tag = EXPORT_SAVE_ACTION_TAG,
+                effectiveImeBottomPx = effectiveImeBottomPx.intValue,
+            )
             logImeStage(startedAt, "assertions-complete")
         } finally {
             logImeStage(startedAt, "controller-close-begin")
@@ -427,6 +434,42 @@ class AppShellAccessibilityTest {
         Log.i(IME_TAG, "stage=action-bounds label=$value viewport=$viewport action=$bounds")
         assertTrue("$value starts outside viewport", bounds.left >= viewport.left && bounds.top >= viewport.top)
         assertTrue("$value ends outside viewport", bounds.right <= viewport.right && bounds.bottom <= viewport.bottom)
+    }
+
+    private fun assertTextDisplayedInsideImeVisibleViewport(
+        value: String,
+        effectiveImeBottomPx: Int,
+    ) {
+        val bounds = compose.onNodeWithText(value).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertBoundsInsideImeVisibleViewport(value, bounds, effectiveImeBottomPx)
+    }
+
+    private fun assertTagDisplayedInsideImeVisibleViewport(
+        tag: String,
+        effectiveImeBottomPx: Int,
+    ) {
+        val bounds = compose.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertBoundsInsideImeVisibleViewport(tag, bounds, effectiveImeBottomPx)
+    }
+
+    private fun assertBoundsInsideImeVisibleViewport(
+        label: String,
+        bounds: androidx.compose.ui.geometry.Rect,
+        effectiveImeBottomPx: Int,
+    ) {
+        val viewport = compose.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
+        val visibleBottom = viewport.bottom - effectiveImeBottomPx
+        Log.i(
+            IME_TAG,
+            "stage=ime-action-bounds label=$label viewport=$viewport action=$bounds " +
+                "effectiveImeBottomPx=$effectiveImeBottomPx visibleBottom=$visibleBottom",
+        )
+        assertTrue("$label starts outside viewport", bounds.left >= viewport.left && bounds.top >= viewport.top)
+        assertTrue("$label ends outside viewport width", bounds.right <= viewport.right)
+        assertTrue(
+            "$label bottom ${bounds.bottom} was below IME-visible bottom $visibleBottom",
+            bounds.bottom <= visibleBottom,
+        )
     }
 
     private fun assertMinimumHeight(tag: String, minimumDp: Float) {
