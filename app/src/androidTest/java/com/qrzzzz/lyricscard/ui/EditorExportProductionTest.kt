@@ -521,11 +521,11 @@ class EditorExportProductionTest {
                 .performScrollTo()
                 .performClick()
             var platformImeBottomPx = 0
-            waitForCondition(UI_TIMEOUT_MS) {
+            waitForCondition(IME_TIMEOUT_MS) {
                 platformImeBottomPx = currentPlatformImeBottom()
                 platformImeBottomPx > 0
             }
-            waitForCondition(UI_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
+            waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
             widthField.performTextReplacement("900")
 
             val screen = compose.onNodeWithTag(EDITOR_SCREEN_TAG).fetchSemanticsNode().boundsInRoot
@@ -637,6 +637,7 @@ class EditorExportProductionTest {
     private companion object {
         const val COMPACT_IME_VIEWPORT_TAG = "compact-ime-viewport"
         const val UI_TIMEOUT_MS = 20_000L
+        const val IME_TIMEOUT_MS = 5_000L
         const val ORIENTATION_TIMEOUT_MS = 5_000L
         const val POLL_FRAME_MILLIS = 100L
     }
