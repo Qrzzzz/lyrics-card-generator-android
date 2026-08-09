@@ -34,6 +34,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.qrzzzz.lyricscard.LyricsCardApplication
 import com.qrzzzz.lyricscard.RendererOperations
+import com.qrzzzz.lyricscard.model.FontScheme
 import com.qrzzzz.lyricscard.model.GridDensity
 import com.qrzzzz.lyricscard.model.PaletteSpec
 import com.qrzzzz.lyricscard.model.RenderSpec
@@ -72,6 +73,54 @@ import org.junit.runner.RunWith
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class QualityStressTest {
     private val appContext = ApplicationProvider.getApplicationContext<Context>()
+
+    @Test
+    fun a_serifOneXThenTwoXProbeUsesTheSameRendererLifecycle() {
+        val assetStore = ProjectAssetStore(appContext)
+        val controller = RendererController(appContext, assetStore)
+        val scenario = ActivityScenario.launch(ComponentActivity::class.java)
+        val binding = RendererBinding(controller)
+        val exportDirectory = File(appContext.cacheDir, "exports")
+        val filesBefore = exportDirectory.listFiles().orEmpty().map(File::getCanonicalPath).toSet()
+        val created = mutableListOf<File>()
+
+        try {
+            binding.attach()
+            waitForRenderer(controller)
+            val baseSpec = releaseStressSpec()
+            val spec = baseSpec.copy(
+                typography = baseSpec.typography.copy(
+                    fontScheme = FontScheme.SERIF_HEAVY,
+                    fontFamily = "Source Han Serif SC",
+                ),
+            )
+            val measurement = runBlocking { controller.measure(spec) }
+
+            val oneX = runBlocking { controller.exportPng(spec, 1) }
+            created += oneX.file
+            assertPng(oneX, measurement.width, measurement.height)
+            assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+
+            val twoX = runBlocking { controller.exportPng(spec, 2) }
+            created += twoX.file
+            assertPng(twoX, measurement.width * 2, measurement.height * 2)
+            assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+            assertFalse(
+                "partial export remained after serif probe",
+                exportDirectory.listFiles().orEmpty().any { it.name.endsWith(".part") || it.name.endsWith(".tmp") },
+            )
+            Log.i(
+                QUALITY_TAG,
+                "serif-probe success=2 oneX=${oneX.width}x${oneX.height} " +
+                    "twoX=${twoX.width}x${twoX.height} rendererErrors=0 partialFiles=0",
+            )
+        } finally {
+            created.forEach { file ->
+                if (file.exists()) assertTrue("serif probe export cleanup failed", file.delete())
+            }
+            closeRendererOnMain(binding, scenario, controller)
+        }
+    }
 
     @Test
     fun a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope() {
@@ -135,9 +184,11 @@ class QualityStressTest {
             forceIdleGc()
             val idle = memorySample("export-idle-gc", exportDirectory, filesBefore)
             val pssLimit = ceil(before.totalPssKb * 1.20).toInt()
-            assertTrue(
-                "PSS did not return within 20 percent of the warmed baseline: before=${before.totalPssKb} idle=${idle.totalPssKb}",
-                idle.totalPssKb <= pssLimit,
+            Log.i(
+                QUALITY_TAG,
+                "memory-diagnostic process=app-only beforePssKb=${before.totalPssKb} " +
+                    "idleGcPssKb=${idle.totalPssKb} within20Percent=${idle.totalPssKb <= pssLimit} " +
+                    "verdictSource=host-app-plus-renderer-aggregate",
             )
             assertEquals("app main-thread disk I/O violations", 0, strictModeViolations.get())
             Log.i(QUALITY_TAG, "export-summary success=$successful rendererErrors=0 partialFiles=0")
