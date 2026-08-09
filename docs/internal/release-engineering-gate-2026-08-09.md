@@ -15,6 +15,65 @@
 
 开工前 worktree clean，HEAD 与要求起点完全一致，目标分支此前不存在。整个 H 未运行 adb、emulator、AVD 或实体设备命令，未 push、PR、merge、tag、创建 GitHub Release 或执行商店发布；当前小米设备未触碰。
 
+## Reviewer H metadata repair
+
+Reviewer H thread `019fe675-c369-7730-88d6-a822c829fbba` 审查 immutable baseline `a8bf6e08d8fdf3f00795de7ba9e46d39e5ca0f59` 后只确认一个 blocking finding：release workflow 使用 `sdkVersion` 解析固定 `aapt2 36.1.0` 的输出，但该工具实际输出字段为 `minSdkVersion`。除这一项外 Reviewer H 没有 blocking finding。
+
+修复只把 APK minSdk regex 改为按行精确匹配 `minSdkVersion`，并让读取失败信息列出 package/version/minSdkVersion/targetSdkVersion；没有改动 Gradle、Renderer、应用代码、variant、签名选择或 artifact 内容。repair commit 由本文件进入提交后在 H repair 交付中记录，commit 不能在自身内容中自引用。
+
+对真实 Production Release APK 运行固定 `aapt2 36.1.0 dump badging`，原始 identity 行为：
+
+```text
+package: name='com.qrzzzz.lyricscard' versionCode='10000' versionName='1.0.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+minSdkVersion:'26'
+targetSdkVersion:'36'
+```
+
+修复后的 workflow regex 从该原始输出解析得到 `com.qrzzzz.lyricscard / 10000 / 1.0.0 / 26 / 36`。
+
+### Disposable signed workflow fixture
+
+在 ignored `build/reviewer-h-signing-fixture` 中新建 2,666-byte 标准 Android debug keystore 测试夹具，仅使用公开默认 debug 凭据；夹具 SHA-256 为 `9b248aeeec47b14c73b7a1b12b2c503789368a29a5e7940b8693347909b4ae16`。它不是 production keystore，也未读取或输出任何真实 secret。
+
+使用该夹具运行 release workflow 的 Production build tasks 后，`:app:signingReport` 为：
+
+```text
+productionDebug=debug
+productionRelease=productionRelease
+```
+
+从 repaired workflow 直接提取并执行完整 `Verify and stage signed production assets` run block，共 106 行 PowerShell，未使用改写后的替代脚本。该 block 完成 APK/AAB metadata、APK/AAB signature、asset allow-list、mapping、metadata、SHA256SUMS 与逐项 hash recheck。模拟 signed artifacts 为：
+
+| Fixture artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| signed Production APK | 45,166,057 | `bc8b82958bdb12dcd4f5a2d6be0f9f0d3599776863ad7e8a5a24ab99e550ffad` |
+| signed Production AAB | 39,924,425 | `03639c1151b3b4fa47c282395181e1f355fe70f116003afc2dd9939f8d5ede5e` |
+| R8 mapping | 35,736,554 | `3b4fdcde20b4478252d9b7bafb8ba82f5c3b731d283872867f449d590976d816` |
+| release metadata | 352 | `5a499bf7cbdd6e23be17050180276bb0c9e2511d2b47c84303055fb2387d49b2` |
+| SHA256SUMS | 382 | `7a9c1503f8eff72687fbbed7f74c2b1bd3bdb791526019d6095645be64d727de` |
+
+`SHA256SUMS` 覆盖 APK、AAB、mapping 与 metadata 共四项并逐项复算一致；metadata 为 package `com.qrzzzz.lyricscard`、versionCode `10000`、versionName `1.0.0`、minSdk `26`、targetSdk `36`、signing `verified`。这里的 `verified` 只描述模拟夹具验签结果，不代表 production signing。
+
+取证后先以精确 pathspec dry-run，确认只会删除 `build/reviewer-h-signing-fixture/` 与 `release-assets/`，随后删除两者并验证均不存在。最终 `:app:clean` 又删除模拟 signed build outputs，并在无 signing variables 环境中重建 unsigned artifacts。
+
+### Repair regression run
+
+本次新跑而非复用的门：
+
+- SnakeYAML 2.4 实际解析 CI/release YAML，jobs 分别为 `quality-gate` 与 `signed-candidate`；
+- CI 4 个、release 8 个 PowerShell run blocks 全部 parse error 0；
+- `npm.cmd ci`：117 packages、0 vulnerabilities；`npm.cmd run check`：8/8 suites、78/78 tests、TypeScript/validator/Vite build 全部成功；
+- signed fixture workflow build：179 actionable tasks，其中 16 executed、163 up-to-date；完整 metadata/staging block 新跑成功；
+- 最终 unsigned clean gate：`:app:clean :app:test :app:lintProductionRelease :app:assembleProductionRelease :app:bundleProductionRelease :app:dumpProductionReleaseBundleManifest --rerun-tasks --no-parallel --no-daemon --stacktrace --console=plain`，179/179 tasks executed，`BUILD SUCCESSFUL in 2m 53s`；
+- 四个 JVM variants 各 31 suites / 143 tests，总计 572 tests，0 failure/error/skipped；
+- `lintProductionRelease` 为 0 error、35 warning；R8 minification、resource shrinking、35,736,554-byte mapping 均存在；
+- 最终 APK 与实际 AAB manifest 都解析为 `com.qrzzzz.lyricscard / 10000 / 1.0.0 / 26 / 36`；
+- Renderer `dist` 与 Gradle generated renderer 的 8 个文件逐项 hash 相同。
+
+最终 repair working-tree unsigned artifacts 保持：APK `e35e7235b07b7aca55e9592c44ec41e09a9faa4f566d2c9e53b9be883bd58c96`（45,157,865 bytes），AAB `038ba3179be6887ea2c8e7b0fa77026546f2fc696d540e05685503fe8cec1ac2`（39,916,315 bytes）；`apksigner` 与 `jarsigner` 分别确认 `DOES NOT VERIFY` / `jar is unsigned`。这些仍不是可公开分发的 production-signed artifacts。
+
+本 repair 没有运行任何设备命令，也不改变下文 G、真机、production secret 与独立 Final Reviewer 未决门。
+
 ## Implemented scope
 
 ### CI

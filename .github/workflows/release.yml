@@ -175,10 +175,10 @@ jobs:
           $badging = (& $aapt2 dump badging $apk.FullName 2>&1 | Out-String)
           if ($LASTEXITCODE -ne 0) { throw 'aapt2 could not inspect the production APK.' }
           $packageMatch = [regex]::Match($badging, "package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'")
-          $minMatch = [regex]::Match($badging, "sdkVersion:'([^']+)'")
+          $minMatch = [regex]::Match($badging, "(?m)^minSdkVersion:'([^']+)'\r?$")
           $targetMatch = [regex]::Match($badging, "targetSdkVersion:'([^']+)'")
           if (-not $packageMatch.Success -or -not $minMatch.Success -or -not $targetMatch.Success) {
-            throw 'Could not read package/version/SDK metadata from the production APK.'
+            throw 'Could not read package/version/minSdkVersion/targetSdkVersion from the production APK.'
           }
           if ($packageMatch.Groups[1].Value -ne $applicationId -or
               $packageMatch.Groups[2].Value -ne $versionCode -or
