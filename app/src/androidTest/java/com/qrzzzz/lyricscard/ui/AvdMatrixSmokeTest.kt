@@ -229,7 +229,7 @@ class AvdMatrixSmokeTest {
 
     private companion object {
         const val UI_TIMEOUT_MS = 20_000L
-        const val RENDERER_TIMEOUT_MS = 30_000L
+        const val RENDERER_TIMEOUT_MS = 20_000L
         const val NAVIGATION_SETTLE_MS = 1_000L
         const val POLL_FRAME_MILLIS = 100L
         const val QUALITY_TAG = "LCG_QUALITY"
