@@ -16,6 +16,7 @@ renderer/dist/
 renderer/golden/diffs/
 
 # Signing and local artifacts
+release-signing.properties
 *.jks
 *.keystore
 *.apk

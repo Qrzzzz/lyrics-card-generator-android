@@ -1,50 +1,84 @@
-name: Android Alpha Release
+name: Production Release Candidate
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing release tag to build and publish
+      commit:
+        description: Full 40-character candidate commit SHA
         required: true
+        type: string
+      version:
+        description: Expected production versionName
+        required: true
+        default: '1.0.0'
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: production-candidate-${{ inputs.commit }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: windows-latest
-    timeout-minutes: 30
-    env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-      GH_TOKEN: ${{ github.token }}
+  signed-candidate:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    environment: production-signing
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out immutable candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+          persist-credentials: false
 
-      - uses: actions/setup-java@v4
+      - name: Verify candidate identity and source version
+        shell: pwsh
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          $requested = $env:CANDIDATE_COMMIT.ToLowerInvariant()
+          if ($requested -notmatch '^[0-9a-f]{40}$') { throw 'commit must be a full 40-character SHA.' }
+          if ($env:EXPECTED_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'version must be a production x.y.z version.' }
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($actual -ne $requested) { throw "Checked out '$actual', expected '$requested'." }
+          $gradle = Get-Content 'app/build.gradle.kts' -Raw
+          $versionName = [regex]::Match($gradle, 'versionName\s*=\s*"([^"]+)"').Groups[1].Value
+          $versionCode = [regex]::Match($gradle, 'versionCode\s*=\s*(\d+)').Groups[1].Value
+          $applicationId = [regex]::Match($gradle, 'applicationId\s*=\s*"([^"]+)"').Groups[1].Value
+          $minSdk = [regex]::Match($gradle, 'minSdk\s*=\s*(\d+)').Groups[1].Value
+          $targetSdk = [regex]::Match($gradle, 'targetSdk\s*=\s*(\d+)').Groups[1].Value
+          if (-not $versionName -or -not $versionCode -or -not $applicationId -or -not $minSdk -or -not $targetSdk) {
+            throw 'Could not read the production release metadata from app/build.gradle.kts.'
+          }
+          if ($versionName -ne $env:EXPECTED_VERSION) {
+            throw "Requested version '$env:EXPECTED_VERSION' does not match Gradle version '$versionName'."
+          }
+          $changes = @(git status --porcelain=v1 --untracked-files=all)
+          if ($changes.Count -ne 0) { throw 'The checked-out candidate is not clean.' }
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: renderer/package-lock.json
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3 # v4.4.2
+        with:
+          cache-read-only: true
 
-      - name: Install Android 16 QPR2 SDK
+      - name: Install pinned Android SDK packages
         shell: pwsh
         run: |
           $sdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
@@ -53,44 +87,192 @@ jobs:
           & $sdkManager.FullName 'platforms;android-36.1' 'build-tools;36.1.0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify release tag
-        id: version
+      - name: Verify renderer
+        working-directory: renderer
         shell: pwsh
+        run: |
+          npm.cmd ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm.cmd run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Decode production signing store
+        shell: pwsh
+        env:
+          LYRICS_CARD_KEYSTORE_BASE64: ${{ secrets.LYRICS_CARD_KEYSTORE_BASE64 }}
+          LYRICS_CARD_STORE_PASSWORD: ${{ secrets.LYRICS_CARD_STORE_PASSWORD }}
+          LYRICS_CARD_KEY_ALIAS: ${{ secrets.LYRICS_CARD_KEY_ALIAS }}
+          LYRICS_CARD_KEY_PASSWORD: ${{ secrets.LYRICS_CARD_KEY_PASSWORD }}
+        run: |
+          $values = @(
+            $env:LYRICS_CARD_KEYSTORE_BASE64,
+            $env:LYRICS_CARD_STORE_PASSWORD,
+            $env:LYRICS_CARD_KEY_ALIAS,
+            $env:LYRICS_CARD_KEY_PASSWORD
+          )
+          if ($values.Where({ [string]::IsNullOrWhiteSpace($_) }).Count -ne 0) {
+            throw 'The production-signing environment is missing one or more required secrets.'
+          }
+          $signingDirectory = Join-Path $env:RUNNER_TEMP 'lyrics-card-signing'
+          New-Item -ItemType Directory -Path $signingDirectory -Force | Out-Null
+          try {
+            $bytes = [Convert]::FromBase64String($env:LYRICS_CARD_KEYSTORE_BASE64)
+            [IO.File]::WriteAllBytes((Join-Path $signingDirectory 'production.jks'), $bytes)
+          } catch {
+            throw 'The production keystore secret could not be decoded.'
+          }
+
+      - name: Run production release gates and sign APK/AAB
+        shell: pwsh
+        env:
+          LYRICS_CARD_STORE_FILE: ${{ runner.temp }}\lyrics-card-signing\production.jks
+          LYRICS_CARD_STORE_PASSWORD: ${{ secrets.LYRICS_CARD_STORE_PASSWORD }}
+          LYRICS_CARD_KEY_ALIAS: ${{ secrets.LYRICS_CARD_KEY_ALIAS }}
+          LYRICS_CARD_KEY_PASSWORD: ${{ secrets.LYRICS_CARD_KEY_PASSWORD }}
+        run: |
+          .\gradlew.bat :app:test :app:lintProductionRelease :app:assembleProductionRelease :app:bundleProductionRelease :app:dumpProductionReleaseBundleManifest --no-parallel --no-daemon --stacktrace --console=plain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify build did not dirty tracked sources
+        shell: pwsh
+        run: |
+          $changes = @(git status --porcelain=v1 --untracked-files=all)
+          if ($changes.Count -ne 0) {
+            $changes | Write-Output
+            throw 'The production build changed the source tree.'
+          }
+
+      - name: Verify and stage signed production assets
+        id: assets
+        shell: pwsh
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
         run: |
           $gradle = Get-Content 'app/build.gradle.kts' -Raw
           $versionName = [regex]::Match($gradle, 'versionName\s*=\s*"([^"]+)"').Groups[1].Value
-          $alphaSuffix = [regex]::Match($gradle, 'versionNameSuffix\s*=\s*"([^"]+)"').Groups[1].Value
-          if (-not $versionName -or -not $alphaSuffix) { throw 'Could not read the Alpha version from app/build.gradle.kts' }
-          $version = "$versionName$alphaSuffix"
-          $expectedTag = "v$version"
-          if ($env:RELEASE_TAG -ne $expectedTag) { throw "Release tag '$env:RELEASE_TAG' does not match Gradle version '$expectedTag'" }
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "prerelease=$($alphaSuffix -match '(?i)(alpha|beta|rc)')" >> $env:GITHUB_OUTPUT
+          $versionCode = [regex]::Match($gradle, 'versionCode\s*=\s*(\d+)').Groups[1].Value
+          $applicationId = [regex]::Match($gradle, 'applicationId\s*=\s*"([^"]+)"').Groups[1].Value
+          $minSdk = [regex]::Match($gradle, 'minSdk\s*=\s*(\d+)').Groups[1].Value
+          $targetSdk = [regex]::Match($gradle, 'targetSdk\s*=\s*(\d+)').Groups[1].Value
+          if ($versionName -ne $env:EXPECTED_VERSION) { throw 'The built source version changed during the job.' }
 
-      - name: Verify renderer
-        working-directory: renderer
-        run: npm ci && npm run check
+          $apkCandidates = @(Get-ChildItem 'app/build/outputs/apk/production/release' -Filter '*.apk' -File | Where-Object { $_.Name -notmatch '(?i)unsigned|alpha|debug' })
+          $bundleCandidates = @(Get-ChildItem 'app/build/outputs/bundle/productionRelease' -Filter '*.aab' -File | Where-Object { $_.Name -notmatch '(?i)alpha|debug' })
+          if ($apkCandidates.Count -ne 1) { throw 'Expected exactly one signed production release APK.' }
+          if ($bundleCandidates.Count -ne 1) { throw 'Expected exactly one signed production release AAB.' }
+          $apk = $apkCandidates[0]
+          $bundle = $bundleCandidates[0]
 
-      - name: Test and build installable Alpha APK
-        shell: pwsh
-        run: .\gradlew.bat :app:testAlphaDebugUnitTest :app:assembleAlphaDebug
+          $sdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $env:ANDROID_SDK_ROOT }
+          $buildTools = Join-Path $sdkRoot 'build-tools\36.1.0'
+          $aapt2 = Join-Path $buildTools 'aapt2.exe'
+          $apkSigner = Join-Path $buildTools 'apksigner.bat'
+          if (-not (Test-Path -LiteralPath $aapt2) -or -not (Test-Path -LiteralPath $apkSigner)) {
+            throw 'Pinned Android artifact inspection tools were not found.'
+          }
 
-      - name: Prepare release assets
-        id: assets
+          $badging = (& $aapt2 dump badging $apk.FullName 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'aapt2 could not inspect the production APK.' }
+          $packageMatch = [regex]::Match($badging, "package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'")
+          $minMatch = [regex]::Match($badging, "sdkVersion:'([^']+)'")
+          $targetMatch = [regex]::Match($badging, "targetSdkVersion:'([^']+)'")
+          if (-not $packageMatch.Success -or -not $minMatch.Success -or -not $targetMatch.Success) {
+            throw 'Could not read package/version/SDK metadata from the production APK.'
+          }
+          if ($packageMatch.Groups[1].Value -ne $applicationId -or
+              $packageMatch.Groups[2].Value -ne $versionCode -or
+              $packageMatch.Groups[3].Value -ne $versionName -or
+              $minMatch.Groups[1].Value -ne $minSdk -or
+              $targetMatch.Groups[1].Value -ne $targetSdk) {
+            throw 'Production APK metadata does not match the Gradle release configuration.'
+          }
+
+          $bundleManifestPath = 'app/build/reports/production-release-bundle-manifest.xml'
+          if (-not (Test-Path -LiteralPath $bundleManifestPath)) {
+            throw 'The bundletool AAB manifest report was not produced.'
+          }
+          [xml]$bundleManifest = Get-Content -LiteralPath $bundleManifestPath -Raw
+          $androidNamespace = 'http://schemas.android.com/apk/res/android'
+          $bundleRoot = $bundleManifest.manifest
+          $bundleUsesSdk = $bundleRoot.'uses-sdk'
+          $bundlePackage = $bundleRoot.GetAttribute('package')
+          $bundleVersionCode = $bundleRoot.GetAttribute('versionCode', $androidNamespace)
+          $bundleVersionName = $bundleRoot.GetAttribute('versionName', $androidNamespace)
+          $bundleMinSdk = $bundleUsesSdk.GetAttribute('minSdkVersion', $androidNamespace)
+          $bundleTargetSdk = $bundleUsesSdk.GetAttribute('targetSdkVersion', $androidNamespace)
+          if ($bundlePackage -ne $applicationId -or
+              $bundleVersionCode -ne $versionCode -or
+              $bundleVersionName -ne $versionName -or
+              $bundleMinSdk -ne $minSdk -or
+              $bundleTargetSdk -ne $targetSdk) {
+            throw 'Production AAB metadata does not match the Gradle release configuration.'
+          }
+
+          & $apkSigner verify --verbose $apk.FullName | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Production APK signature verification failed.' }
+          $bundleVerification = (& jarsigner -verify $bundle.FullName 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0 -or $bundleVerification -notmatch '(?i)jar verified' -or $bundleVerification -match '(?i)jar is unsigned') {
+            throw 'Production AAB signature verification failed.'
+          }
+
+          $assetDirectory = New-Item -ItemType Directory -Path 'release-assets' -Force
+          $apkName = "lyrics-card-generator-android-$versionName.apk"
+          $bundleName = "lyrics-card-generator-android-$versionName.aab"
+          Copy-Item -LiteralPath $apk.FullName -Destination (Join-Path $assetDirectory.FullName $apkName)
+          Copy-Item -LiteralPath $bundle.FullName -Destination (Join-Path $assetDirectory.FullName $bundleName)
+          $mapping = 'app/build/outputs/mapping/productionRelease/mapping.txt'
+          if (Test-Path -LiteralPath $mapping) {
+            Copy-Item -LiteralPath $mapping -Destination (Join-Path $assetDirectory.FullName 'mapping.txt')
+          }
+
+          [ordered]@{
+            commit = $env:CANDIDATE_COMMIT.ToLowerInvariant()
+            package = $applicationId
+            versionName = $versionName
+            versionCode = [int]$versionCode
+            minSdk = [int]$minSdk
+            targetSdk = [int]$targetSdk
+            apk = $apkName
+            aab = $bundleName
+            signing = 'verified'
+          } | ConvertTo-Json | Set-Content (Join-Path $assetDirectory.FullName 'release-metadata.json') -Encoding utf8
+
+          $files = @(Get-ChildItem -LiteralPath $assetDirectory.FullName -File | Sort-Object Name)
+          if ($files.Name -match '(?i)alpha|debug|unsigned') { throw 'A non-production artifact entered the release asset set.' }
+          $sumLines = foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          $sumPath = Join-Path $assetDirectory.FullName 'SHA256SUMS'
+          $sumLines | Set-Content -LiteralPath $sumPath -Encoding ascii
+          foreach ($line in Get-Content -LiteralPath $sumPath) {
+            $parts = $line -split '  ', 2
+            $actualHash = (Get-FileHash -LiteralPath (Join-Path $assetDirectory.FullName $parts[1]) -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actualHash -ne $parts[0]) { throw "SHA-256 verification failed for '$($parts[1])'." }
+          }
+
+          "version=$versionName" >> $env:GITHUB_OUTPUT
+          "short_sha=$($env:CANDIDATE_COMMIT.Substring(0, 12).ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      - name: Remove temporary signing material
+        if: ${{ always() }}
         shell: pwsh
         run: |
-          $assetDir = New-Item -ItemType Directory -Path release-assets -Force
-          $apk = Get-ChildItem 'app/build/outputs/apk/alpha/debug/*.apk' | Select-Object -First 1
-          if (-not $apk) { throw 'Alpha APK was not produced' }
-          $assetName = "lyrics-card-generator-android-${{ steps.version.outputs.version }}.apk"
-          $assetPath = Join-Path $assetDir.FullName $assetName
-          Copy-Item $apk.FullName $assetPath
-          $hash = (Get-FileHash $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $assetName" | Set-Content (Join-Path $assetDir.FullName 'SHA256SUMS.txt') -Encoding ascii
+          $runnerRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\') + '\'
+          $signingDirectory = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_TEMP 'lyrics-card-signing'))
+          if (-not $signingDirectory.StartsWith($runnerRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Refusing to clean a signing path outside RUNNER_TEMP.'
+          }
+          if (Test-Path -LiteralPath $signingDirectory) {
+            Remove-Item -LiteralPath $signingDirectory -Recurse -Force
+          }
 
-      - name: Publish GitHub Release
-        shell: pwsh
-        run: |
-          $releaseArgs = @('release', 'create', $env:RELEASE_TAG, 'release-assets/*.apk', 'release-assets/SHA256SUMS.txt', '--verify-tag', '--generate-notes', '--title', $env:RELEASE_TAG)
-          if ('${{ steps.version.outputs.prerelease }}' -eq 'True') { $releaseArgs += '--prerelease' }
-          gh @releaseArgs
+      - name: Upload signed production candidate
+        if: ${{ success() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: production-candidate-${{ steps.assets.outputs.version }}-${{ steps.assets.outputs.short_sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: release-assets/*

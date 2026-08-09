@@ -1,0 +1,6 @@
+# Copy this file to release-signing.properties for a local signed production build.
+# release-signing.properties is ignored by Git. Do not commit real values.
+LYRICS_CARD_STORE_FILE=C:/absolute/path/to/production-keystore.jks
+LYRICS_CARD_STORE_PASSWORD=replace-locally
+LYRICS_CARD_KEY_ALIAS=replace-locally
+LYRICS_CARD_KEY_PASSWORD=replace-locally

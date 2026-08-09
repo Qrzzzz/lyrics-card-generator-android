@@ -1,5 +1,7 @@
 import org.gradle.api.tasks.Exec
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.ByteArrayOutputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -12,6 +14,36 @@ plugins {
 
 val rendererAssetsRoot = layout.buildDirectory.dir("generated/renderer/assets")
 val rendererOutputDirectory = rendererAssetsRoot.map { it.dir("renderer") }
+
+val productionSigningPropertyFile = rootProject.file("release-signing.properties")
+val productionSigningProperties = Properties().apply {
+    if (productionSigningPropertyFile.isFile) {
+        productionSigningPropertyFile.inputStream().use(::load)
+    }
+}
+val productionSigningKeys = listOf(
+    "LYRICS_CARD_STORE_FILE",
+    "LYRICS_CARD_STORE_PASSWORD",
+    "LYRICS_CARD_KEY_ALIAS",
+    "LYRICS_CARD_KEY_PASSWORD",
+)
+val productionSigningValues = productionSigningKeys.associateWith { key ->
+    providers.environmentVariable(key).orNull
+        ?.takeIf(String::isNotBlank)
+        ?: productionSigningProperties.getProperty(key)?.takeIf(String::isNotBlank)
+}
+val configuredProductionSigningKeys = productionSigningValues.filterValues { it != null }.keys
+if (configuredProductionSigningKeys.isNotEmpty() && configuredProductionSigningKeys.size != productionSigningKeys.size) {
+    val missing = productionSigningKeys.filterNot(configuredProductionSigningKeys::contains)
+    throw GradleException(
+        "Incomplete production signing configuration. Missing: ${missing.joinToString()}",
+    )
+}
+val hasProductionSigning = configuredProductionSigningKeys.size == productionSigningKeys.size
+val productionStoreFile = productionSigningValues["LYRICS_CARD_STORE_FILE"]?.let(rootProject::file)
+if (hasProductionSigning && productionStoreFile?.isFile != true) {
+    throw GradleException("The configured production signing store file does not exist or is not a file.")
+}
 
 android {
     namespace = "com.qrzzzz.lyricscard"
@@ -36,6 +68,16 @@ android {
     }
 
     flavorDimensions += "channel"
+    val productionReleaseSigning = if (hasProductionSigning) {
+        signingConfigs.create("productionRelease") {
+            storeFile = productionStoreFile
+            storePassword = productionSigningValues.getValue("LYRICS_CARD_STORE_PASSWORD")
+            keyAlias = productionSigningValues.getValue("LYRICS_CARD_KEY_ALIAS")
+            keyPassword = productionSigningValues.getValue("LYRICS_CARD_KEY_PASSWORD")
+        }
+    } else {
+        null
+    }
     productFlavors {
         create("alpha") {
             dimension = "channel"
@@ -46,6 +88,7 @@ android {
         create("production") {
             dimension = "channel"
             resValue("string", "app_name", "歌词卡片")
+            productionReleaseSigning?.let { signingConfig = it }
         }
     }
 
@@ -103,7 +146,15 @@ room {
     schemaDirectory("$projectDir/schemas")
 }
 
+val bundletoolCli by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isVisible = false
+}
+
 dependencies {
+    add(bundletoolCli.name, libs.android.bundletool)
+
     implementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(platform(libs.androidx.compose.bom))
 
@@ -169,4 +220,45 @@ val buildRenderer by tasks.registering(Exec::class) {
 
 tasks.named("preBuild").configure {
     dependsOn(buildRenderer)
+}
+
+val productionReleaseBundle =
+    layout.buildDirectory.file("outputs/bundle/productionRelease/app-production-release.aab")
+val productionReleaseBundleManifest =
+    layout.buildDirectory.file("reports/production-release-bundle-manifest.xml")
+
+tasks.register<JavaExec>("dumpProductionReleaseBundleManifest") {
+    group = "verification"
+    description = "Extracts the production release manifest from the built AAB with pinned bundletool."
+    dependsOn("bundleProductionRelease")
+
+    classpath = bundletoolCli
+    mainClass.set("com.android.tools.build.bundletool.BundleToolMain")
+    inputs.file(productionReleaseBundle)
+    outputs.file(productionReleaseBundleManifest)
+
+    argumentProviders.add(
+        CommandLineArgumentProvider {
+            listOf(
+                "dump",
+                "manifest",
+                "--bundle=${productionReleaseBundle.get().asFile.absolutePath}",
+                "--module=base",
+            )
+        },
+    )
+
+    val manifestOutput = ByteArrayOutputStream()
+    standardOutput = manifestOutput
+    doFirst {
+        manifestOutput.reset()
+    }
+    doLast {
+        val outputFile = productionReleaseBundleManifest.get().asFile
+        outputFile.parentFile.mkdirs()
+        outputFile.writeBytes(manifestOutput.toByteArray())
+        check(outputFile.length() > 0L) {
+            "bundletool did not emit a production release manifest."
+        }
+    }
 }
