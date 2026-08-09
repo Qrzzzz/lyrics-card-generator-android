@@ -13,7 +13,6 @@ import android.net.Uri
 import android.os.Debug
 import android.os.Handler
 import android.os.Looper
-import android.os.StrictMode
 import android.os.SystemClock
 import android.util.Log
 import android.view.ViewGroup
@@ -46,9 +45,7 @@ import com.qrzzzz.lyricscard.renderer.RendererStatus
 import com.qrzzzz.lyricscard.ui.EditorViewModel
 import java.io.File
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.ceil
 import kotlinx.coroutines.CoroutineStart
@@ -131,9 +128,7 @@ class QualityStressTest {
         val exportDirectory = File(appContext.cacheDir, "exports")
         val filesBefore = exportDirectory.listFiles().orEmpty().map(File::getCanonicalPath).toSet()
         val created = mutableListOf<File>()
-        val strictModeViolations = AtomicInteger(0)
-        val violationExecutor = Executors.newSingleThreadExecutor()
-        var previousPolicy: StrictMode.ThreadPolicy? = null
+        val strictModeMonitor = StrictModeDiskIoMonitor(APP_PACKAGE_PREFIX)
 
         try {
             binding.attach()
@@ -149,18 +144,7 @@ class QualityStressTest {
             forceIdleGc()
 
             runOnResumedActivity { activity ->
-                previousPolicy = StrictMode.getThreadPolicy()
-                StrictMode.setThreadPolicy(
-                    StrictMode.ThreadPolicy.Builder(previousPolicy)
-                        .detectDiskReads()
-                        .detectDiskWrites()
-                        .penaltyListener(violationExecutor) { violation ->
-                            if (violation.stackTrace.any { frame -> frame.className.startsWith(APP_PACKAGE_PREFIX) }) {
-                                strictModeViolations.incrementAndGet()
-                            }
-                        }
-                        .build(),
-                )
+                strictModeMonitor.install()
             }
 
             val before = memorySample("export-before", exportDirectory, filesBefore)
@@ -190,11 +174,10 @@ class QualityStressTest {
                     "idleGcPssKb=${idle.totalPssKb} within20Percent=${idle.totalPssKb <= pssLimit} " +
                     "verdictSource=host-app-plus-renderer-aggregate",
             )
-            assertEquals("app main-thread disk I/O violations", 0, strictModeViolations.get())
+            strictModeMonitor.assertNoAppViolations()
             Log.i(QUALITY_TAG, "export-summary success=$successful rendererErrors=0 partialFiles=0")
         } finally {
-            previousPolicy?.let { policy -> runOnMainThread { StrictMode.setThreadPolicy(policy) } }
-            violationExecutor.shutdownNow()
+            runOnMainThread { strictModeMonitor.close() }
             created.forEach { file ->
                 if (file.exists()) assertTrue("stress export cleanup failed", file.delete())
             }
@@ -230,27 +213,14 @@ class QualityStressTest {
         val editor = ViewModelProvider(store, factory)[EditorViewModel::class.java]
         val scenario = ActivityScenario.launch(ComponentActivity::class.java)
         val binding = RendererBinding(controller)
-        val strictModeViolations = AtomicInteger(0)
-        val violationExecutor = Executors.newSingleThreadExecutor()
-        var previousPolicy: StrictMode.ThreadPolicy? = null
+        val strictModeMonitor = StrictModeDiskIoMonitor(APP_PACKAGE_PREFIX)
 
         try {
             binding.attach()
             waitForRenderer(controller)
             waitUntil(20_000) { !editor.uiState.value.isLoading && editor.uiState.value.currentProject != null }
             runOnResumedActivity { activity ->
-                previousPolicy = StrictMode.getThreadPolicy()
-                StrictMode.setThreadPolicy(
-                    StrictMode.ThreadPolicy.Builder(previousPolicy)
-                        .detectDiskReads()
-                        .detectDiskWrites()
-                        .penaltyListener(violationExecutor) { violation ->
-                            if (violation.stackTrace.any { frame -> frame.className.startsWith(APP_PACKAGE_PREFIX) }) {
-                                strictModeViolations.incrementAndGet()
-                            }
-                        }
-                        .build(),
-                )
+                strictModeMonitor.install()
             }
 
             val backgroundProbeCycles = InstrumentationRegistry.getArguments()
@@ -343,7 +313,7 @@ class QualityStressTest {
                 endMemory.totalPssKb <= pssLimit,
             )
             assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
-            assertEquals("app main-thread disk I/O violations", 0, strictModeViolations.get())
+            strictModeMonitor.assertNoAppViolations()
             Log.i(
                 QUALITY_TAG,
                 "edit-summary durationMs=$duration operations=$operations recreations=$recreations " +
@@ -351,8 +321,7 @@ class QualityStressTest {
                     "peakPssKb=$peakPssKb endPssKb=${endMemory.totalPssKb} rendererErrors=0 autosave=consistent",
             )
         } finally {
-            previousPolicy?.let { policy -> runOnMainThread { StrictMode.setThreadPolicy(policy) } }
-            violationExecutor.shutdownNow()
+            runOnMainThread { strictModeMonitor.close() }
             closeRendererOnMain(binding, scenario, controller)
             store.clear()
             runBlocking { container.projects.delete(project.id) }

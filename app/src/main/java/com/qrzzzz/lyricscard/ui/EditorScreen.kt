@@ -13,11 +13,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Redo
@@ -322,7 +321,11 @@ private fun CompactEditorBottomSheet(
         )
         val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
         val density = LocalDensity.current
-        val imeVisible = WindowInsets.ime.getBottom(density) > 0
+        val imeInsets = rememberLyricsImeInsets()
+        val effectiveImeWindowInsets = WindowInsets(
+            bottom = with(density) { imeInsets.effectiveBottomPx.toDp() },
+        )
+        val imeVisible = imeInsets.isVisible
 
         LaunchedEffect(imeVisible, sheetState.currentValue) {
             if (imeVisible && sheetState.currentValue != SheetValue.Expanded) {
@@ -342,7 +345,7 @@ private fun CompactEditorBottomSheet(
                     actions = actions,
                     modifier = Modifier
                         .height(sheetHeight)
-                        .imePadding(),
+                        .windowInsetsPadding(effectiveImeWindowInsets),
                 )
             },
         ) {

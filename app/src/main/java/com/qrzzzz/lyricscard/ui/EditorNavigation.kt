@@ -75,25 +75,27 @@ internal fun EditorPanelContent(
 ) {
     val selectedStep = state.selectedStep
     Column(modifier = modifier) {
-        EditorStepNavigation(
-            selectedStep = selectedStep,
-            onSelectedStep = actions.onSelectedStep,
-        )
-        Text(
-            stringResource(EditorStep.entries[selectedStep].description),
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 10.dp)
-                .semantics { heading() },
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        EditorStepContent(
-            state = state,
-            actions = actions,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        )
+        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            EditorStepNavigation(
+                selectedStep = selectedStep,
+                onSelectedStep = actions.onSelectedStep,
+            )
+            Text(
+                stringResource(EditorStep.entries[selectedStep].description),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .semantics { heading() },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            EditorStepContent(
+                state = state,
+                actions = actions,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+        }
         EditorNavigationBar(
             selectedStep = selectedStep,
             enabled = !state.isLeaving,

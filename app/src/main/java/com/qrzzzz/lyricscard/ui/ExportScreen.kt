@@ -16,11 +16,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -97,7 +96,12 @@ fun ExportScreen(
     val windowWidth = currentLyricsWindowWidth(windowWidthSizeClass)
     val defaultFileName = stringResource(R.string.export_default_file_name)
     val screenTitle = stringResource(R.string.export_title)
-    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val density = LocalDensity.current
+    val imeInsets = rememberLyricsImeInsets()
+    val effectiveImeWindowInsets = WindowInsets(
+        bottom = with(density) { imeInsets.effectiveBottomPx.toDp() },
+    )
+    val imeVisible = imeInsets.isVisible
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/png"),
     ) { uri ->
@@ -172,7 +176,7 @@ fun ExportScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(horizontal = 12.dp)
-                    .imePadding()
+                    .windowInsetsPadding(effectiveImeWindowInsets)
                     .testTag(EXPORT_COMPACT_LAYOUT_TAG),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -206,7 +210,7 @@ fun ExportScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(16.dp)
-                    .imePadding()
+                    .windowInsetsPadding(effectiveImeWindowInsets)
                     .testTag(
                         if (windowWidth == LyricsWindowWidth.MEDIUM) {
                             EXPORT_MEDIUM_LAYOUT_TAG

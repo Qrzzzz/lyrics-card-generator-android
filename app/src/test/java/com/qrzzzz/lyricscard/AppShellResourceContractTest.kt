@@ -74,6 +74,7 @@ class AppShellResourceContractTest {
     fun `compact landscape and IME shell paths remain explicit`() {
         val editor = appFile("src/main/java/com/qrzzzz/lyricscard/ui/EditorScreen.kt").readText()
         val export = appFile("src/main/java/com/qrzzzz/lyricscard/ui/ExportScreen.kt").readText()
+        val imeInsets = appFile("src/main/java/com/qrzzzz/lyricscard/ui/LyricsImeInsets.kt").readText()
         val adaptive = appFile("src/main/java/com/qrzzzz/lyricscard/ui/WindowAdaptive.kt").readText()
 
         assertTrue(adaptive.contains("calculateWindowSizeClass"))
@@ -82,8 +83,12 @@ class AppShellResourceContractTest {
         assertTrue(editor.contains("CompactEditorBottomSheet"))
         assertTrue(editor.contains("LyricsWindowWidth.MEDIUM"))
         assertTrue(editor.contains("LyricsWindowWidth.EXPANDED"))
-        assertTrue(editor.contains("WindowInsets.ime"))
-        assertTrue(editor.contains("imePadding()"))
+        assertTrue(editor.contains("rememberLyricsImeInsets()"))
+        assertTrue(editor.contains("windowInsetsPadding(effectiveImeWindowInsets)"))
+        assertTrue(imeInsets.contains("WindowInsets.ime"))
+        assertTrue(imeInsets.contains("WindowInsetsCompat.Type.ime()"))
+        assertTrue(imeInsets.contains("Build.VERSION.SDK_INT == Build.VERSION_CODES.O"))
+        assertTrue(imeInsets.contains("composeBottomPx == 0"))
         assertTrue(export.contains("LyricsWindowWidth.MEDIUM"))
         assertTrue(export.contains("LyricsWindowWidth.EXPANDED"))
         assertFalse(editor.contains("LyricsCardLayout.wideBreakpoint"))

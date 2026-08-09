@@ -4,6 +4,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -582,19 +583,27 @@ class EditorExportProductionTest {
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
         waitForOrientation(Configuration.ORIENTATION_PORTRAIT)
-        compose.activityRule.scenario.onActivity { activity -> activity.enableEdgeToEdge() }
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.configureImeTestWindow()
+            activity.enableEdgeToEdge()
+        }
         val deviceDensity = compose.activity.resources.displayMetrics.density
         val context = compose.activity.applicationContext
         val controller = RendererController(context, ProjectAssetStore(context))
         val project = project("compact-font-ime")
-        val imeBottomPx = mutableIntStateOf(0)
+        val composeImeBottomPx = mutableIntStateOf(0)
+        val effectiveImeBottomPx = mutableIntStateOf(0)
         try {
             compose.setContent {
                 CompositionLocalProvider(
                     LocalDensity provides Density(density = deviceDensity, fontScale = 2f),
                 ) {
-                    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
-                    SideEffect { imeBottomPx.intValue = imeBottom }
+                    val rawComposeImeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+                    val imeInsets = rememberLyricsImeInsets()
+                    SideEffect {
+                        composeImeBottomPx.intValue = rawComposeImeBottom
+                        effectiveImeBottomPx.intValue = imeInsets.effectiveBottomPx
+                    }
                     LyricsCardTheme {
                         Box(
                             Modifier
@@ -641,12 +650,22 @@ class EditorExportProductionTest {
             val widthField = compose.onNodeWithTag(EDITOR_WIDTH_FIELD_TAG)
                 .performScrollTo()
                 .performClick()
+            compose.waitForIdle()
+            compose.activityRule.scenario.onActivity { activity ->
+                val result = activity.requestImeForCurrentFocus()
+                Log.i(
+                    IME_TAG,
+                    "stage=ime-request screen=compact requested=${result.requested} " +
+                        "target=${result.targetClass} attached=${result.attached} " +
+                        "windowFocused=${result.windowFocused}",
+                )
+            }
             var platformImeBottomPx = 0
             waitForCondition(IME_TIMEOUT_MS) {
                 platformImeBottomPx = currentPlatformImeBottom()
                 platformImeBottomPx > 0
             }
-            waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
+            waitForCondition(IME_TIMEOUT_MS) { effectiveImeBottomPx.intValue > 0 }
             widthField.performTextReplacement("900")
 
             val screen = compose.onNodeWithTag(EDITOR_SCREEN_TAG).fetchSemanticsNode().boundsInRoot
@@ -662,7 +681,8 @@ class EditorExportProductionTest {
                 throw AssertionError(
                     "compact handle was not displayed; screen=$screen handle=$handle " +
                         "viewport=$viewport platformImeBottomPx=$platformImeBottomPx " +
-                        "composeImeBottomPx=${imeBottomPx.intValue}",
+                        "composeImeBottomPx=${composeImeBottomPx.intValue} " +
+                        "effectiveImeBottomPx=${effectiveImeBottomPx.intValue}",
                     cause,
                 )
             }
@@ -676,10 +696,17 @@ class EditorExportProductionTest {
                 .assertIsDisplayed()
                 .fetchSemanticsNode()
                 .boundsInRoot
+            Log.i(
+                IME_TAG,
+                "stage=ime-bounds screen=$screen handle=$handle viewport=$viewport next=$next " +
+                    "platformBottomPx=$platformImeBottomPx " +
+                    "composeBottomPx=${composeImeBottomPx.intValue} " +
+                    "effectiveBottomPx=${effectiveImeBottomPx.intValue}",
+            )
             assertTrue("Next starts outside the compact viewport", next.top >= viewport.top)
             assertTrue(
                 "Next is obscured by the IME",
-                next.bottom <= viewport.bottom - imeBottomPx.intValue,
+                next.bottom <= viewport.bottom - effectiveImeBottomPx.intValue,
             )
             assertTrue("Next height was ${next.height}px", next.height >= 48f * deviceDensity)
         } finally {
@@ -773,5 +800,6 @@ class EditorExportProductionTest {
         const val IME_TIMEOUT_MS = 5_000L
         const val ORIENTATION_TIMEOUT_MS = 5_000L
         const val POLL_FRAME_MILLIS = 100L
+        const val IME_TAG = "LCG_IME"
     }
 }

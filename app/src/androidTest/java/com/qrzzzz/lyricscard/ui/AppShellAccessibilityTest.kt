@@ -198,14 +198,18 @@ class AppShellAccessibilityTest {
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
         waitForOrientation(Configuration.ORIENTATION_LANDSCAPE)
-        compose.activityRule.scenario.onActivity { activity -> activity.enableEdgeToEdge() }
+        compose.activityRule.scenario.onActivity { activity ->
+            activity.configureImeTestWindow()
+            activity.enableEdgeToEdge()
+        }
         logImeStage(startedAt, "orientation-ready")
         val deviceDensity = compose.activity.resources.displayMetrics.density
         val context = compose.activity.applicationContext
         val controller = RendererController(context, ProjectAssetStore(context))
         val project = ProjectTemplates.blank(id = "landscape-shell", now = 1L)
         val showExport = mutableStateOf(false)
-        val imeBottomPx = mutableIntStateOf(0)
+        val composeImeBottomPx = mutableIntStateOf(0)
+        val effectiveImeBottomPx = mutableIntStateOf(0)
 
         try {
             logImeStage(startedAt, "set-content-begin")
@@ -214,8 +218,12 @@ class AppShellAccessibilityTest {
                     LocalDensity provides Density(density = deviceDensity, fontScale = 2f),
                     LocalLayoutDirection provides LayoutDirection.Ltr,
                 ) {
-                    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
-                    SideEffect { imeBottomPx.intValue = imeBottom }
+                    val rawComposeImeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+                    val imeInsets = rememberLyricsImeInsets()
+                    SideEffect {
+                        composeImeBottomPx.intValue = rawComposeImeBottom
+                        effectiveImeBottomPx.intValue = imeInsets.effectiveBottomPx
+                    }
                     LyricsCardTheme {
                         Box(
                             Modifier
@@ -282,13 +290,36 @@ class AppShellAccessibilityTest {
             compose.onNodeWithTag(EDITOR_NETEASE_QUERY_FIELD_TAG)
                 .performScrollTo()
                 .performClick()
+            requestPlatformIme(startedAt, "editor")
+            compose.onNodeWithTag(EDITOR_NETEASE_QUERY_FIELD_TAG)
                 .performTextInput("landscape query")
             logImeStage(startedAt, "editor-input-complete")
-            waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
+            var platformImeBottomPx = 0
+            waitForCondition(IME_TIMEOUT_MS) {
+                platformImeBottomPx = currentPlatformImeBottom()
+                platformImeBottomPx > 0
+            }
+            waitForCondition(IME_TIMEOUT_MS) { effectiveImeBottomPx.intValue > 0 }
+            logImeSnapshot(
+                startedAt = startedAt,
+                screen = "editor",
+                platformBottomPx = platformImeBottomPx,
+                composeBottomPx = composeImeBottomPx.intValue,
+                effectiveBottomPx = effectiveImeBottomPx.intValue,
+            )
             logImeStage(startedAt, "editor-ime-ready")
-            assertTrue("IME inset did not become visible", imeBottomPx.intValue > 0)
+            assertTrue("effective IME inset did not become visible", effectiveImeBottomPx.intValue > 0)
             assertDisplayedInsideViewport(text(R.string.editor_next_step))
 
+            compose.activityRule.scenario.onActivity { activity ->
+                Log.i(
+                    IME_TAG,
+                    "stage=ime-dismiss screen=editor requested=${activity.dismissImeFromCurrentFocus()}",
+                )
+            }
+            waitForCondition(IME_TIMEOUT_MS) {
+                currentPlatformImeBottom() == 0 && effectiveImeBottomPx.intValue == 0
+            }
             logImeStage(startedAt, "export-switch-begin")
             compose.runOnIdle { showExport.value = true }
             assertDisplayedInsideViewport(text(R.string.export_title))
@@ -298,11 +329,24 @@ class AppShellAccessibilityTest {
             logImeStage(startedAt, "export-input-begin")
             compose.onNodeWithTag(EXPORT_FILE_NAME_TAG)
                 .performClick()
+            requestPlatformIme(startedAt, "export")
+            compose.onNodeWithTag(EXPORT_FILE_NAME_TAG)
                 .performTextInput("x")
             logImeStage(startedAt, "export-input-complete")
-            waitForCondition(IME_TIMEOUT_MS) { imeBottomPx.intValue > 0 }
+            waitForCondition(IME_TIMEOUT_MS) {
+                platformImeBottomPx = currentPlatformImeBottom()
+                platformImeBottomPx > 0
+            }
+            waitForCondition(IME_TIMEOUT_MS) { effectiveImeBottomPx.intValue > 0 }
+            logImeSnapshot(
+                startedAt = startedAt,
+                screen = "export",
+                platformBottomPx = platformImeBottomPx,
+                composeBottomPx = composeImeBottomPx.intValue,
+                effectiveBottomPx = effectiveImeBottomPx.intValue,
+            )
             logImeStage(startedAt, "export-ime-ready")
-            assertTrue("IME inset was not visible over Export", imeBottomPx.intValue > 0)
+            assertTrue("effective IME inset was not visible over Export", effectiveImeBottomPx.intValue > 0)
             assertMinimumHeight(EXPORT_OPTIONS_LIST_TAG, MIN_TOUCH_TARGET_DP)
             compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
                 .performScrollToNode(hasTestTag(EXPORT_SAVE_ACTION_TAG))
@@ -340,10 +384,47 @@ class AppShellAccessibilityTest {
         Log.i(IME_TAG, "stage=$stage elapsedMs=${SystemClock.elapsedRealtime() - startedAt}")
     }
 
+    private fun requestPlatformIme(startedAt: Long, screen: String) {
+        compose.waitForIdle()
+        compose.activityRule.scenario.onActivity { activity ->
+            val result = activity.requestImeForCurrentFocus()
+            Log.i(
+                IME_TAG,
+                "stage=ime-request screen=$screen elapsedMs=${SystemClock.elapsedRealtime() - startedAt} " +
+                    "requested=${result.requested} target=${result.targetClass} " +
+                    "attached=${result.attached} windowFocused=${result.windowFocused}",
+            )
+        }
+    }
+
+    private fun currentPlatformImeBottom(): Int {
+        var bottom = 0
+        compose.activityRule.scenario.onActivity { activity ->
+            bottom = currentPlatformImeBottom(activity.window.decorView)
+        }
+        return bottom
+    }
+
+    private fun logImeSnapshot(
+        startedAt: Long,
+        screen: String,
+        platformBottomPx: Int,
+        composeBottomPx: Int,
+        effectiveBottomPx: Int,
+    ) {
+        Log.i(
+            IME_TAG,
+            "stage=ime-snapshot screen=$screen elapsedMs=${SystemClock.elapsedRealtime() - startedAt} " +
+                "platformBottomPx=$platformBottomPx composeBottomPx=$composeBottomPx " +
+                "effectiveBottomPx=$effectiveBottomPx",
+        )
+    }
+
     private fun assertDisplayedInsideViewport(value: String) {
         val node = compose.onNodeWithText(value).assertIsDisplayed().fetchSemanticsNode()
         val viewport = compose.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
         val bounds = node.boundsInRoot
+        Log.i(IME_TAG, "stage=action-bounds label=$value viewport=$viewport action=$bounds")
         assertTrue("$value starts outside viewport", bounds.left >= viewport.left && bounds.top >= viewport.top)
         assertTrue("$value ends outside viewport", bounds.right <= viewport.right && bounds.bottom <= viewport.bottom)
     }
