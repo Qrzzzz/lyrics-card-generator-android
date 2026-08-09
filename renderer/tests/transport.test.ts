@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   blobToBase64Chunks,
@@ -98,8 +99,15 @@ describe("renderer protocol", () => {
     await expect(blobToBase64Chunks(new Blob([source]), (chunk) => {
       if (cancelled) throw new Error("cancelled before next chunk");
       delivered.push(chunk.index);
-      if (chunk.index === 0) globalThis.setTimeout(() => { cancelled = true; }, 0);
+      if (chunk.index === 0) setTimeout(() => { cancelled = true; }, 0);
     })).rejects.toThrow("cancelled before next chunk");
     expect(delivered).toEqual([0]);
+  });
+
+  it("keeps the chunk-yield scheduler compatible with WebView 69", () => {
+    const source = readFileSync(new URL("../src/transport.ts", import.meta.url), "utf8");
+
+    expect(source).not.toContain("globalThis");
+    expect(source).toContain("setTimeout(resolve, 0)");
   });
 });

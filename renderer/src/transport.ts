@@ -116,7 +116,7 @@ async function readBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
 }
 
 function yieldToHostMessages() {
-  return new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+  return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 export const EXPORT_CHUNK_BYTES = 384 * 1024;
