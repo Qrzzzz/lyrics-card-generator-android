@@ -2,7 +2,14 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { LyricsCard } from "./Card";
 import { DEFAULT_RENDER_SPEC } from "./defaultSpec";
-import { renderNodeAsPng, waitForStableRender } from "./export";
+import {
+  createExportCanvasSurface,
+  createFontEmbedCssCache,
+  createRendererDomKey,
+  createSvgSourceCache,
+  renderNodeAsPng,
+  waitForStableRender
+} from "./export";
 import { installRendererController } from "./runtime";
 import type { RenderSpec } from "./types";
 
@@ -16,12 +23,24 @@ export function App() {
   );
 
   useEffect(() => {
+    const svgSourceCache = createSvgSourceCache();
+    const fontEmbedCssCache = createFontEmbedCssCache();
+    const canvasSurface = createExportCanvasSurface();
+    let activeDomKey: string | undefined;
+    let domRevision = 0;
+
     async function applySpec(nextSpec: RenderSpec) {
+      const nextDomKey = createRendererDomKey(nextSpec);
+      if (nextDomKey !== activeDomKey) {
+        svgSourceCache.clear();
+        activeDomKey = nextDomKey;
+        domRevision += 1;
+      }
       flushSync(() => setSpec(nextSpec));
       await waitForStableRender();
     }
 
-    return installRendererController({
+    const uninstall = installRendererController({
       applySpec,
       async measure(nextSpec) {
         await applySpec(nextSpec);
@@ -48,9 +67,24 @@ export function App() {
       async exportPng(nextSpec, pixelRatio) {
         await applySpec(nextSpec);
         const node = requireCardNode(cardRef.current);
-        return renderNodeAsPng(node, nextSpec.canvas.width, nextSpec.canvas.height, pixelRatio);
+        return renderNodeAsPng(
+          node,
+          nextSpec.canvas.width,
+          nextSpec.canvas.height,
+          pixelRatio,
+          svgSourceCache,
+          fontEmbedCssCache,
+          canvasSurface,
+          domRevision
+        );
       }
     });
+    return () => {
+      svgSourceCache.clear();
+      fontEmbedCssCache.clear();
+      canvasSurface.release();
+      uninstall();
+    };
   }, []);
 
   return (

@@ -49,23 +49,27 @@ describe("renderer protocol", () => {
   it("streams export bytes as bounded independently decodable chunks", async () => {
     const source = new Uint8Array(EXPORT_CHUNK_BYTES * 2 + 17).map((_, index) => index % 251);
     const chunks: Array<{ index: number; total: number; byteLength: number; base64: string }> = [];
-    const count = await blobToBase64Chunks(new Blob([source]), (chunk) => chunks.push(chunk));
+    const blob = new Blob([source]);
+    const slice = vi.spyOn(blob, "slice");
+    const count = await blobToBase64Chunks(blob, (chunk) => chunks.push(chunk));
 
     expect(count).toBe(3);
+    expect(slice).not.toHaveBeenCalled();
     expect(chunks.map((chunk) => chunk.index)).toEqual([0, 1, 2]);
     expect(chunks.every((chunk) => chunk.total === 3 && chunk.byteLength <= EXPORT_CHUNK_BYTES)).toBe(true);
     const restored = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk.base64, "base64")));
     expect(restored.equals(Buffer.from(source))).toBe(true);
   });
 
-  it("streams chunks through FileReader when legacy WebView lacks Blob.arrayBuffer", async () => {
+  it("streams chunks through one FileReader read when legacy WebView lacks Blob.arrayBuffer", async () => {
     const source = new Uint8Array([0, 1, 2, 127, 128, 254, 255]);
     const legacyBlob = {
       size: source.byteLength,
-      slice(start: number, end: number) {
-        return { legacyBytes: source.slice(start, end) } as unknown as Blob;
-      }
-    } as Blob;
+      legacyBytes: source,
+      slice: vi.fn(() => {
+        throw new Error("legacy chunking must not create Blob children");
+      })
+    } as unknown as Blob;
     class LegacyFileReader {
       error: Error | null = null;
       result: ArrayBuffer | null = null;
@@ -82,6 +86,20 @@ describe("renderer protocol", () => {
     const chunks: Array<{ index: number; total: number; byteLength: number; base64: string }> = [];
 
     expect(await blobToBase64Chunks(legacyBlob, (chunk) => chunks.push(chunk))).toBe(1);
+    expect(legacyBlob.slice).not.toHaveBeenCalled();
     expect(Buffer.from(chunks[0].base64, "base64").equals(Buffer.from(source))).toBe(true);
+  });
+
+  it("yields between chunks so cancellation can stop later delivery", async () => {
+    const source = new Uint8Array(EXPORT_CHUNK_BYTES + 1).fill(0x2a);
+    let cancelled = false;
+    const delivered: number[] = [];
+
+    await expect(blobToBase64Chunks(new Blob([source]), (chunk) => {
+      if (cancelled) throw new Error("cancelled before next chunk");
+      delivered.push(chunk.index);
+      if (chunk.index === 0) globalThis.setTimeout(() => { cancelled = true; }, 0);
+    })).rejects.toThrow("cancelled before next chunk");
+    expect(delivered).toEqual([0]);
   });
 });

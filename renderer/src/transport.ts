@@ -75,20 +75,26 @@ export async function blobToBase64Chunks(
   blob: Blob,
   onChunk: (chunk: { index: number; total: number; byteLength: number; base64: string }) => void
 ) {
-  const total = Math.max(1, Math.ceil(blob.size / EXPORT_CHUNK_BYTES));
+  // Read the root encoder Blob exactly once. Uint8Array views avoid retaining
+  // Blob.slice() children in old WebView BlobRegistry/shared-memory paths.
+  const bytes = new Uint8Array(await readBlobArrayBuffer(blob));
+  const total = Math.max(1, Math.ceil(bytes.byteLength / EXPORT_CHUNK_BYTES));
   for (let index = 0; index < total; index += 1) {
     const start = index * EXPORT_CHUNK_BYTES;
-    const slice = blob.slice(start, Math.min(blob.size, start + EXPORT_CHUNK_BYTES));
-    const bytes = new Uint8Array(await readBlobArrayBuffer(slice));
+    const chunkBytes = bytes.subarray(
+      start,
+      Math.min(bytes.byteLength, start + EXPORT_CHUNK_BYTES)
+    );
     const segmentSize = 32_768;
     const segments: string[] = [];
-    for (let offset = 0; offset < bytes.length; offset += segmentSize) {
-      const segment = bytes.subarray(offset, Math.min(offset + segmentSize, bytes.length));
+    for (let offset = 0; offset < chunkBytes.length; offset += segmentSize) {
+      const segment = chunkBytes.subarray(offset, Math.min(offset + segmentSize, chunkBytes.length));
       let binary = "";
       for (const value of segment) binary += String.fromCharCode(value);
       segments.push(binary);
     }
-    onChunk({ index, total, byteLength: bytes.length, base64: btoa(segments.join("")) });
+    onChunk({ index, total, byteLength: chunkBytes.length, base64: btoa(segments.join("")) });
+    if (index + 1 < total) await yieldToHostMessages();
   }
   return total;
 }
@@ -107,6 +113,10 @@ async function readBlobArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
     };
     reader.readAsArrayBuffer(blob);
   });
+}
+
+function yieldToHostMessages() {
+  return new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
 }
 
 export const EXPORT_CHUNK_BYTES = 384 * 1024;

@@ -1,7 +1,7 @@
 {
   "datasetVersion": "release-pixel-golden-v1",
   "browserVersion": "151.0.7922.34",
-  "sourceFingerprint": "4f76f1c39f6018b035e267ad6b583c28e9c5120f3e264dd10075c7bdd36c66ca",
+  "sourceFingerprint": "8f3a248eaa16ae788cb509471e2b683fad4b0c582472ef3e2093c6d4ee6ff234",
   "fixtureFingerprint": "0476356f485da8a91773a37888b35c3ff7d50c63d1169b2e612bae9e0c8a2a8c",
   "environment": {
     "platform": "win32",
@@ -55,8 +55,8 @@
       "width": 1920,
       "height": 1080,
       "pixelRatio": 1,
-      "bytes": 2079082,
-      "sha256": "d816ac616aa825f0bb3ed623dcbeccb3f13c2b50d91cfee59f2e068b34dbd9d7"
+      "bytes": 2079549,
+      "sha256": "542a07f8e9b2b7dd5208120b8a4390fad8dd5c2a087ab2eef7dcb3d2822d2fbc"
     },
     {
       "id": "landscape-twenty-one-nine-punctuation-emoji",
@@ -207,8 +207,8 @@
       "width": 1080,
       "height": 1350,
       "pixelRatio": 1,
-      "bytes": 1941795,
-      "sha256": "ac0e38f3b18f5a2c946d8f3f7391aae910c38c11b0159d3ce1fce31ec0e480b8"
+      "bytes": 1941529,
+      "sha256": "65c174a2b94d52c40216459ab8c0c17cf073489ce58a69ab08ac83c39af0e53a"
     },
     {
       "id": "sans-right-soft-blue",

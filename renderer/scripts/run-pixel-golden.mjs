@@ -120,6 +120,7 @@ try {
 
   const outputs = [];
   const failures = [];
+  const actualById = new Map();
   for (const entry of cases) {
     let spec = structuredClone(entry.spec);
     if (spec.canvas.autoHeight) {
@@ -173,6 +174,7 @@ try {
       }
     }
     const actual = Buffer.concat(result.chunks.map((chunk) => Buffer.from(chunk, "base64")));
+    actualById.set(entry.id, actual);
     const actualPng = PNG.sync.read(actual);
     const expectedWidth = spec.canvas.width * spec.canvas.pixelRatio;
     const expectedHeight = spec.canvas.height * spec.canvas.pixelRatio;
@@ -226,6 +228,43 @@ try {
     } else {
       process.stdout.write(`PASS ${entry.id} exact=${exact} mismatchRatio=${mismatchRatio.toFixed(8)} ssim=${similarity.toFixed(8)}\n`);
     }
+  }
+
+  const freshSerifEntry = cases.find((entry) => entry.id === "landscape-sixteen-nine-long-serif");
+  if (!freshSerifEntry) throw new Error("Fresh-page serif determinism fixture is unavailable");
+  const freshPage = await context.newPage();
+  try {
+    await freshPage.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith("/media/golden-cover.png")) {
+        await route.fulfill({ status: 200, contentType: "image/png", body: cover });
+        return;
+      }
+      if (url.origin === allowedOrigin) {
+        await route.continue();
+        return;
+      }
+      await route.abort("blockedbyclient");
+    });
+    await freshPage.goto(baseUrl, { waitUntil: "networkidle" });
+    await freshPage.waitForSelector("[data-export-card='true']");
+    await dispatchRenderer(freshPage, "initialize", {}, "ready", "golden-fresh-serif-init");
+    const freshResult = await dispatchRenderer(
+      freshPage,
+      "exportPng",
+      { spec: freshSerifEntry.spec, pixelRatio: freshSerifEntry.spec.canvas.pixelRatio },
+      "exportCompleted",
+      "golden-fresh-serif-export"
+    );
+    const freshSerif = Buffer.concat(freshResult.chunks.map((chunk) => Buffer.from(chunk, "base64")));
+    const sequentialSerif = actualById.get(freshSerifEntry.id);
+    if (!sequentialSerif || sha256(sequentialSerif) !== sha256(freshSerif)) {
+      failures.push("serif output depends on prior same-page font-family order");
+    } else {
+      process.stdout.write(`PASS serif-fresh-page-order exact=true sha256=${sha256(freshSerif)}\n`);
+    }
+  } finally {
+    await freshPage.close();
   }
 
   if (update) {

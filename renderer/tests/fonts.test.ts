@@ -6,8 +6,9 @@ const source = readFileSync(resolve(import.meta.dirname, "../src/fonts.ts"), "ut
 
 describe("local font loading", () => {
   it("shows fallback text immediately and versions cached font URLs", () => {
-    expect(source.match(/font-display: swap/g)).toHaveLength(4);
+    expect(source.match(/font-display: swap/g)).toHaveLength(2);
     expect(source).toContain("manifest.fontManifestHash");
-    expect(source.match(/\?v=\$\{fontVersion\}/g)).toHaveLength(4);
+    expect(source.match(/\?v=\$\{fontVersion\}/g)).toHaveLength(2);
+    expect(source).not.toContain("Heavy Local");
   });
 });
