@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import android.os.SystemClock
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -197,6 +198,7 @@ class AppShellAccessibilityTest {
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
         waitForOrientation(Configuration.ORIENTATION_LANDSCAPE)
+        compose.activityRule.scenario.onActivity { activity -> activity.enableEdgeToEdge() }
         logImeStage(startedAt, "orientation-ready")
         val deviceDensity = compose.activity.resources.displayMetrics.density
         val context = compose.activity.applicationContext

@@ -279,6 +279,7 @@
     <string name="settings_error_save">无法保存设置</string>
     <string name="settings_error_clear_cache">无法清理导出缓存</string>
 
+    <string name="renderer_preview_accessibility">卡片预览</string>
     <string name="renderer_starting">正在启动本地渲染器…</string>
     <string name="renderer_recovering">System WebView 已中断，正在恢复预览…</string>
     <string name="renderer_ready">预览已就绪</string>

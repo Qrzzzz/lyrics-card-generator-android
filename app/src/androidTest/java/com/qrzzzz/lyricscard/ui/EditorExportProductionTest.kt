@@ -4,7 +4,11 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,6 +62,8 @@ import com.qrzzzz.lyricscard.renderer.PreviewStatus
 import com.qrzzzz.lyricscard.renderer.ProjectAssetStore
 import com.qrzzzz.lyricscard.renderer.RENDERER_ERROR_TAG
 import com.qrzzzz.lyricscard.renderer.RendererController
+import com.qrzzzz.lyricscard.renderer.RendererPreview
+import com.qrzzzz.lyricscard.renderer.RendererStatus
 import com.qrzzzz.lyricscard.ui.theme.LyricsCardTheme
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -70,6 +76,120 @@ import org.junit.runner.RunWith
 class EditorExportProductionTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun exportReadinessRowsCollapseLabelStateAndDetailIntoSingleTalkBackStop() {
+        val project = ProjectTemplates.sample(id = "readiness-semantics", now = 1L)
+        compose.setContent {
+            LyricsCardTheme {
+                Box(
+                    Modifier
+                        .requiredSize(width = 360.dp, height = 640.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    ExportStepPanel(project)
+                }
+            }
+        }
+
+        val readyState = text(R.string.editor_ready)
+        val expectedRows = listOf(
+            text(R.string.editor_song_info) to text(R.string.editor_filled),
+            text(R.string.editor_card_content) to text(R.string.editor_ready),
+            text(R.string.editor_canvas) to compose.activity.getString(
+                R.string.editor_canvas_summary,
+                project.spec.canvas.width,
+                project.spec.canvas.height,
+                text(R.string.common_portrait),
+            ),
+        )
+
+        expectedRows.forEach { (label, detail) ->
+            val accessibilityDescription = listOf(label, detail)
+                .filterNot { it == readyState }
+                .joinToString(separator = ", ")
+            val completeRow = hasContentDescription(accessibilityDescription) and
+                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, readyState)
+            val mergedNodes = compose.onAllNodes(completeRow).fetchSemanticsNodes()
+            assertEquals(
+                "$label must be one TalkBack stop containing label, state, and non-duplicate detail",
+                1,
+                mergedNodes.size,
+            )
+            val unmergedNodes = compose.onAllNodes(
+                completeRow,
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes()
+            assertEquals(
+                "$label must have one explicit row node in the unmerged tree",
+                1,
+                unmergedNodes.size,
+            )
+            assertTrue(
+                "$label row must clear descendant semantics before the Android accessibility tree",
+                unmergedNodes.single().config.isClearingSemantics,
+            )
+            assertEquals(
+                "$label visual text must remain in the raw Compose tree behind the clearing row",
+                1,
+                compose.onAllNodes(hasText(label), useUnmergedTree = true).fetchSemanticsNodes().size,
+            )
+            assertEquals(
+                "$detail visual text must remain in the raw Compose tree behind the clearing row",
+                1,
+                compose.onAllNodes(hasText(detail), useUnmergedTree = true).fetchSemanticsNodes().size,
+            )
+        }
+        assertEquals(
+            3,
+            compose.onAllNodes(
+                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, readyState),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().size,
+        )
+    }
+
+    @Test
+    fun rendererPreviewHidesWebDomAndExposesOneNonSensitiveSummary() {
+        val context = compose.activity.applicationContext
+        val controller = RendererController(context, ProjectAssetStore(context))
+        try {
+            compose.setContent {
+                LyricsCardTheme {
+                    RendererPreview(
+                        spec = ProjectTemplates.sample(id = "preview-accessibility", now = 1L).spec,
+                        controller = controller,
+                        modifier = Modifier.requiredSize(width = 360.dp, height = 240.dp),
+                    )
+                }
+            }
+            waitForCondition(UI_TIMEOUT_MS) {
+                controller.status.value.phase == RendererStatus.Phase.READY
+            }
+
+            val previewDescription = text(R.string.renderer_preview_accessibility)
+            val readyState = text(R.string.renderer_ready)
+            val summary = hasContentDescription(previewDescription) and
+                SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, readyState)
+            assertEquals(
+                "preview must expose one generic summary without rendered lyrics",
+                1,
+                compose.onAllNodes(summary).fetchSemanticsNodes().size,
+            )
+
+            var webViews = emptyList<WebView>()
+            compose.activityRule.scenario.onActivity { activity ->
+                webViews = findWebViews(activity.window.decorView)
+            }
+            assertEquals("renderer must own one WebView", 1, webViews.size)
+            assertEquals(
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS,
+                webViews.single().importantForAccessibility,
+            )
+        } finally {
+            compose.runOnIdle { controller.close() }
+        }
+    }
 
     @Test
     fun sixStepsSupportDirectSelectionBackNextAndExactTalkBackProgress() {
@@ -462,6 +582,7 @@ class EditorExportProductionTest {
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
         waitForOrientation(Configuration.ORIENTATION_PORTRAIT)
+        compose.activityRule.scenario.onActivity { activity -> activity.enableEdgeToEdge() }
         val deviceDensity = compose.activity.resources.displayMetrics.density
         val context = compose.activity.applicationContext
         val controller = RendererController(context, ProjectAssetStore(context))
@@ -590,6 +711,18 @@ class EditorExportProductionTest {
     private fun project(id: String): Project = ProjectTemplates.blank(id = id, now = 1L)
 
     private fun text(resource: Int): String = compose.activity.getString(resource)
+
+    private fun findWebViews(root: View): List<WebView> {
+        val result = mutableListOf<WebView>()
+        fun visit(view: View) {
+            if (view is WebView) result += view
+            if (view is ViewGroup) {
+                repeat(view.childCount) { index -> visit(view.getChildAt(index)) }
+            }
+        }
+        visit(root)
+        return result
+    }
 
     private fun assertMinTouchHeight(
         node: androidx.compose.ui.test.SemanticsNodeInteraction,

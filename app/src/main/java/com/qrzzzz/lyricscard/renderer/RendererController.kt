@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.SystemClock
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebMessage
@@ -301,6 +302,7 @@ class RendererController private constructor(
         webView?.let { existing ->
             (existing.parent as? ViewGroup)?.removeView(existing)
             checkNotNull(webViewContext).bind(owner, context)
+            existing.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             existing.onResume()
             existing.post {
                 existing.requestLayout()
@@ -329,6 +331,7 @@ class RendererController private constructor(
             contextBinding.bind(owner, context)
             WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
             view.setBackgroundColor(Color.TRANSPARENT)
+            view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             view.isLongClickable = false
             view.setOnLongClickListener { true }
             view.setDownloadListener { _, _, _, _, _ -> Unit }

@@ -16,7 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -73,8 +74,10 @@ internal fun ExportStepPanel(project: Project) {
 @Composable
 private fun ReadinessRow(label: String, ready: Boolean, detail: String) {
     val state = stringResource(if (ready) R.string.editor_ready else R.string.editor_not_ready)
+    val accessibilityDescription = listOf(label, detail)
+        .filterNot { it == state }
+        .joinToString(separator = ", ")
     Surface(
-        modifier = Modifier.semantics { stateDescription = state },
         color = if (ready) {
             MaterialTheme.colorScheme.surfaceVariant
         } else {
@@ -83,7 +86,13 @@ private fun ReadinessRow(label: String, ready: Boolean, detail: String) {
         shape = MaterialTheme.shapes.medium,
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clearAndSetSemantics {
+                    contentDescription = accessibilityDescription
+                    stateDescription = state
+                }
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {

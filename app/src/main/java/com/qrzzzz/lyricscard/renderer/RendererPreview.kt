@@ -22,12 +22,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.annotation.StringRes
@@ -50,6 +53,7 @@ fun RendererPreview(
     val status by controller.status.collectAsStateWithLifecycle()
     val generation by controller.generation.collectAsStateWithLifecycle()
     val localizedStatus = stringResource(rendererStatusResource(status.uiMessageKey()))
+    val previewDescription = stringResource(R.string.renderer_preview_accessibility)
     val previewKey = if (spec.canvas.autoHeight) {
         spec.copy(canvas = spec.canvas.copy(height = 0, pixelRatio = 1))
     } else {
@@ -85,6 +89,20 @@ fun RendererPreview(
                 factory = { context -> controller.acquireWebView(context, owner) },
                 modifier = Modifier.fillMaxSize(),
                 onRelease = { view -> controller.releaseWebView(owner, view) },
+            )
+        }
+
+        if (
+            status.phase != RendererStatus.Phase.STARTING &&
+            status.phase != RendererStatus.Phase.ERROR
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clearAndSetSemantics {
+                        contentDescription = previewDescription
+                        stateDescription = localizedStatus
+                    },
             )
         }
 
