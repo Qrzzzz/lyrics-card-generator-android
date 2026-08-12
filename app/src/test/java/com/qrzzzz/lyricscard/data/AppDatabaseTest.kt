@@ -7,7 +7,6 @@ import androidx.test.core.app.ApplicationProvider
 import com.qrzzzz.lyricscard.model.RenderSpec
 import com.qrzzzz.lyricscard.model.RenderSpecJson
 import com.qrzzzz.lyricscard.model.SongSpec
-import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -82,7 +81,7 @@ class AppDatabaseTest {
     @Test
     fun `migration 1 to 2 preserves projects and rebuilds shared cover references`() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val databaseName = "migration-${UUID.randomUUID()}.db"
+        val databaseName = "migration-v1.db"
         context.deleteDatabase(databaseName)
         val assetId = "legacy-shared-cover"
         val legacySpec = RenderSpec(song = SongSpec(title = "Legacy", coverAssetId = assetId))
@@ -155,7 +154,7 @@ class AppDatabaseTest {
     fun `version 2 database opens as current without losing legacy alpha project data`() = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         assertEquals(2, AppDatabase.VERSION)
-        val databaseName = "current-${UUID.randomUUID()}.db"
+        val databaseName = "current-v2.db"
         context.deleteDatabase(databaseName)
         val assetId = "legacy-v2-cover"
         val thumbnailPath = "/private/thumbnails/legacy-v2.png"
