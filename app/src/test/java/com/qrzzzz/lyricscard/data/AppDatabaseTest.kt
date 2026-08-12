@@ -161,6 +161,7 @@ class AppDatabaseTest {
         val thumbnailPath = "/private/thumbnails/legacy-v2.png"
         val legacySpec = RenderSpec(song = SongSpec(title = "Alpha project", coverAssetId = assetId))
         assertEquals("android-alpha-renderer-1", legacySpec.rendererVersion)
+        context.getDatabasePath(databaseName).parentFile?.mkdirs()
         val rawDatabase = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
         try {
             rawDatabase.execSQL(
