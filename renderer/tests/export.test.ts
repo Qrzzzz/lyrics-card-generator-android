@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createExportCanvasSurface,
   createFontEmbedCssCache,
+  createRendererDomLifecycle,
   createRendererDomKey,
   createSvgSourceCache,
   createUsedFontFamilyKey,
@@ -149,6 +150,88 @@ describe("export sizing", () => {
     expect(creates).toBe(2);
   });
 
+  it("releases canvas backing after a successful committed DOM change", async () => {
+    const cache = createSvgSourceCache();
+    const canvases = [fakeReusableCanvas(), fakeReusableCanvas()];
+    let creates = 0;
+    const surface = createExportCanvasSurface(() => canvases[creates++]);
+    const lifecycle = createRendererDomLifecycle(cache, surface);
+
+    await lifecycle.apply("cover-dom", "committed", async () => undefined);
+    const coverCanvas = surface.acquire(1080, 1350, 2);
+    await lifecycle.apply("no-cover-dom", "committed", async () => undefined);
+
+    expect(coverCanvas.width).toBe(0);
+    expect(coverCanvas.height).toBe(0);
+    expect(surface.acquire(1080, 1350, 2)).toBe(canvases[1]);
+    expect(creates).toBe(2);
+  });
+
+  it("keeps canvas backing across transient and same-DOM committed applications", async () => {
+    const cache = createSvgSourceCache();
+    const canvas = fakeReusableCanvas();
+    let creates = 0;
+    const surface = createExportCanvasSurface(() => {
+      creates += 1;
+      return canvas;
+    });
+    const lifecycle = createRendererDomLifecycle(cache, surface);
+
+    await lifecycle.apply("cover-dom", "committed", async () => undefined);
+    surface.acquire(1080, 1350, 2);
+    await lifecycle.apply("measured-dom", "transient", async () => undefined);
+    expect(surface.acquire(1080, 1350, 2)).toBe(canvas);
+    await lifecycle.apply("measured-dom", "committed", async () => undefined);
+
+    expect(canvas.width).toBe(2160);
+    expect(canvas.height).toBe(2700);
+    expect(surface.acquire(1080, 1350, 2)).toBe(canvas);
+    expect(creates).toBe(1);
+  });
+
+  it("keeps canvas backing when a committed DOM application fails", async () => {
+    const cache = createSvgSourceCache();
+    const canvas = fakeReusableCanvas();
+    let creates = 0;
+    const surface = createExportCanvasSurface(() => {
+      creates += 1;
+      return canvas;
+    });
+    const lifecycle = createRendererDomLifecycle(cache, surface);
+
+    await lifecycle.apply("cover-dom", "committed", async () => undefined);
+    surface.acquire(1080, 1350, 2);
+    await expect(lifecycle.apply("no-cover-dom", "committed", async () => {
+      throw new Error("render failed");
+    })).rejects.toThrow("render failed");
+
+    expect(canvas.width).toBe(2160);
+    expect(canvas.height).toBe(2700);
+    expect(surface.acquire(1080, 1350, 2)).toBe(canvas);
+    expect(creates).toBe(1);
+  });
+
+  it("releases once when a failed committed DOM change later succeeds", async () => {
+    const cache = createSvgSourceCache();
+    const canvases = [fakeReusableCanvas(), fakeReusableCanvas()];
+    let creates = 0;
+    const surface = createExportCanvasSurface(() => canvases[creates++]);
+    const lifecycle = createRendererDomLifecycle(cache, surface);
+
+    await lifecycle.apply("cover-dom", "committed", async () => undefined);
+    const coverCanvas = surface.acquire(1080, 1350, 2);
+    await expect(lifecycle.apply("no-cover-dom", "committed", async () => {
+      throw new Error("render failed");
+    })).rejects.toThrow("render failed");
+    expect(coverCanvas.width).toBe(2160);
+
+    await lifecycle.apply("no-cover-dom", "committed", async () => undefined);
+    expect(coverCanvas.width).toBe(0);
+    expect(coverCanvas.height).toBe(0);
+    expect(surface.acquire(1080, 1350, 2)).toBe(canvases[1]);
+    expect(creates).toBe(2);
+  });
+
   it("normalizes only pixel ratio and property order in the renderer DOM key", () => {
     const oneX = withSpec({ canvas: { ...DEFAULT_RENDER_SPEC.canvas, pixelRatio: 1 } });
     const twoX = withSpec({ canvas: { ...DEFAULT_RENDER_SPEC.canvas, pixelRatio: 2 } });
@@ -184,17 +267,38 @@ describe("export sizing", () => {
     expect(attempts).toBe(2);
   });
 
-  it("keeps only the current SVG revision and clears it at renderer lifecycle end", async () => {
+  it("does not let an obsolete rejected SVG promise clear the current slot", async () => {
+    const cache = createSvgSourceCache();
+    let rejectObsolete!: (error: Error) => void;
+    const obsolete = cache.get(1, () => new Promise<string>((_resolve, reject) => {
+      rejectObsolete = reject;
+    }));
+
+    await expect(cache.get(2, async () => "svg-current")).resolves.toBe("svg-current");
+    rejectObsolete(new Error("obsolete source failed"));
+    await expect(obsolete).rejects.toThrow("obsolete source failed");
+    await expect(cache.get(2, async () => "unexpected replacement")).resolves.toBe("svg-current");
+  });
+
+  it("advances the SVG revision only after successful DOM application", async () => {
     const cache = createSvgSourceCache();
     let creates = 0;
     const create = async () => `svg-${++creates}`;
+    const surface = createExportCanvasSurface(() => fakeReusableCanvas());
+    const lifecycle = createRendererDomLifecycle(cache, surface);
 
-    await expect(cache.get(1, create)).resolves.toBe("svg-1");
-    await expect(cache.get(2, create)).resolves.toBe("svg-2");
-    await expect(cache.get(1, create)).resolves.toBe("svg-3");
+    const coverRevision = await lifecycle.apply("cover-dom", "committed", async () => undefined);
+    await expect(cache.get(coverRevision, create)).resolves.toBe("svg-1");
+    await expect(lifecycle.apply("no-cover-dom", "committed", async () => {
+      throw new Error("render failed");
+    })).rejects.toThrow("render failed");
+    await expect(cache.get(coverRevision, create)).resolves.toBe("svg-1");
+    const noCoverRevision = await lifecycle.apply("no-cover-dom", "committed", async () => undefined);
+    expect(noCoverRevision).toBe(coverRevision + 1);
+    await expect(cache.get(noCoverRevision, create)).resolves.toBe("svg-2");
     cache.clear();
-    await expect(cache.get(1, create)).resolves.toBe("svg-4");
-    expect(creates).toBe(4);
+    await expect(cache.get(noCoverRevision, create)).resolves.toBe("svg-3");
+    expect(creates).toBe(3);
   });
 
   it("reuses font CSS for one family, replaces it on switch, and clears it on lifecycle end", async () => {

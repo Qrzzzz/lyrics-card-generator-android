@@ -2,7 +2,7 @@
 
 Lyrics Card Generator 是一款 Android 原生歌词卡片制作应用。项目管理、编辑、设置、保存与分享由 Jetpack Compose 实现；卡片预览和 PNG 导出由 APK 内置的 React/CSS 渲染器完成，以保持既有卡片设计和跨端输出合同。
 
-当前源码版本为 `1.0.0`（`versionCode 10000`）。这是一份面向正式产品的代码库说明，不代表当前候选已经通过最终发布验收；设备矩阵与独立 Reviewer 的真实状态见 [Release Readiness](docs/RELEASE_READINESS.md)。
+当前源码版本为 `1.0.0-beta.1`（`versionCode 10001`）。它是使用测试签名、面向真机核验的公开 Beta，不是 `1.0.0` 正式版；设备矩阵与独立 Reviewer 的真实状态见 [Release Readiness](docs/RELEASE_READINESS.md)。
 
 ## 功能概览
 
@@ -68,6 +68,8 @@ LYRICS_CARD_KEY_PASSWORD
 本地配置格式见 `release-signing.properties.example`。不得提交 keystore、密码、alias secret 或 base64 keystore。
 
 `Production Release Candidate` workflow 只能手动运行，要求完整 40 位 commit SHA、匹配的 production `versionName` 以及受保护的 `production-signing` environment。它只构建并上传已验证签名的 Production Release APK/AAB、`SHA256SUMS`、metadata 和可选 R8 mapping；它没有写仓库权限，也不会创建 tag、GitHub Release 或商店发布。
+
+公开 Beta 使用 `v1.0.0-beta.N` prerelease，并以测试 keystore 签署正式包名 APK。Beta 与未来生产签名不兼容；安装正式版前必须卸载 Beta。Beta 不使用上述 production release workflow，也不得被描述为正式发布候选。
 
 发布前必须完成 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)，并由独立 Final Integration & Release Readiness Reviewer 对同一 commit 和同一组 artifact hash 复核。
 

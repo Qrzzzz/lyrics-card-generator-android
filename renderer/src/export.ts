@@ -9,6 +9,7 @@ export interface SingleSlotStringCache<TKey> {
   clear(): void;
 }
 
+export type RendererDomActivation = "committed" | "transient";
 export type SvgSourceCache = SingleSlotStringCache<number>;
 export type FontEmbedCssCache = SingleSlotStringCache<string>;
 
@@ -19,6 +20,32 @@ export interface ExportCanvasSurface {
 
 export function createSvgSourceCache(): SvgSourceCache {
   return createSingleSlotStringCache<number>();
+}
+
+export function createRendererDomLifecycle(
+  sourceCache: SvgSourceCache,
+  canvasSurface: ExportCanvasSurface
+) {
+  let activeDomKey: string | undefined;
+  let domRevision = 0;
+
+  return {
+    async apply(
+      domKey: string,
+      activation: RendererDomActivation,
+      applyDom: () => Promise<void>
+    ) {
+      const domChanged = activeDomKey !== domKey;
+      await applyDom();
+      if (domChanged) {
+        sourceCache.clear();
+        activeDomKey = domKey;
+        domRevision += 1;
+        if (activation === "committed") canvasSurface.release();
+      }
+      return domRevision;
+    }
+  };
 }
 
 export function createFontEmbedCssCache(): FontEmbedCssCache {

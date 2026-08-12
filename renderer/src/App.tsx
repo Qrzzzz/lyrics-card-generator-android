@@ -5,6 +5,7 @@ import { DEFAULT_RENDER_SPEC } from "./defaultSpec";
 import {
   createExportCanvasSurface,
   createFontEmbedCssCache,
+  createRendererDomLifecycle,
   createRendererDomKey,
   createSvgSourceCache,
   renderNodeAsPng,
@@ -26,24 +27,25 @@ export function App() {
     const svgSourceCache = createSvgSourceCache();
     const fontEmbedCssCache = createFontEmbedCssCache();
     const canvasSurface = createExportCanvasSurface();
-    let activeDomKey: string | undefined;
-    let domRevision = 0;
+    const domLifecycle = createRendererDomLifecycle(svgSourceCache, canvasSurface);
 
-    async function applySpec(nextSpec: RenderSpec) {
-      const nextDomKey = createRendererDomKey(nextSpec);
-      if (nextDomKey !== activeDomKey) {
-        svgSourceCache.clear();
-        activeDomKey = nextDomKey;
-        domRevision += 1;
-      }
-      flushSync(() => setSpec(nextSpec));
-      await waitForStableRender();
+    async function applySpec(nextSpec: RenderSpec, activation: "committed" | "transient") {
+      return domLifecycle.apply(
+        createRendererDomKey(nextSpec),
+        activation,
+        async () => {
+          flushSync(() => setSpec(nextSpec));
+          await waitForStableRender();
+        }
+      );
     }
 
     const uninstall = installRendererController({
-      applySpec,
+      async applySpec(nextSpec) {
+        await applySpec(nextSpec, "committed");
+      },
       async measure(nextSpec) {
-        await applySpec(nextSpec);
+        await applySpec(nextSpec, "transient");
         const node = requireCardNode(cardRef.current);
         let measuredHeight = measureCardHeight(node, nextSpec);
         if (nextSpec.canvas.autoHeight) {
@@ -53,7 +55,7 @@ export function App() {
               ...measuredSpec,
               canvas: { ...measuredSpec.canvas, height: measuredHeight }
             };
-            await applySpec(measuredSpec);
+            await applySpec(measuredSpec, "transient");
             const refinedHeight = measureCardHeight(node, measuredSpec);
             if (Math.abs(refinedHeight - measuredHeight) <= 1) break;
             measuredHeight = refinedHeight;
@@ -65,7 +67,7 @@ export function App() {
         };
       },
       async exportPng(nextSpec, pixelRatio) {
-        await applySpec(nextSpec);
+        const domRevision = await applySpec(nextSpec, "transient");
         const node = requireCardNode(cardRef.current);
         return renderNodeAsPng(
           node,

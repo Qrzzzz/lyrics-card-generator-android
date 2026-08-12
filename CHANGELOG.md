@@ -2,7 +2,7 @@
 
 本文件记录用户可见的版本变化。内部逐提交重构与实验过程不在此展开。
 
-## 1.0.0 — Pending public release
+## 1.0.0-beta.1 — Public beta
 
 ### 新增
 
@@ -28,4 +28,4 @@
 - 增加只手动执行、只面向 signed `productionRelease` candidate 的 release workflow；
 - 增加 SHA-256、隐私、第三方 notices 与发布检查清单。
 
-> `1.0.0` 尚未公开发布。最终设备矩阵、获授权真机、production signing secret 与独立 Reviewer 状态以 `docs/RELEASE_READINESS.md` 为准。
+> 本版本使用测试签名，仅用于公开 Beta 与真机核验。`1.0.0` 尚未公开发布；完整设备矩阵、production signing secret 与独立 Reviewer 状态以 `docs/RELEASE_READINESS.md` 为准。

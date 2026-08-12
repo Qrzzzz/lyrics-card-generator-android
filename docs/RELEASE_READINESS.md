@@ -4,7 +4,7 @@
 
 **PROVISIONAL / NOT FINAL READY**
 
-源码版本已经收敛到 `1.0.0` 的 production 配置，但完整发布门尚未通过。本文不把本地 build、JVM tests 或 CI infrastructure 等同于设备矩阵、真机或最终 Reviewer PASS。
+源码版本当前为 `1.0.0-beta.1`（`versionCode 10001`），使用测试签名进行公开 Beta 与获授权真机核验。它不是 `1.0.0` 正式版；本文不把本地 build、JVM tests、Beta 冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
 
 ## 已实现的产品与工程能力
 
@@ -36,11 +36,11 @@
 - 200% font scale；
 - 一台获明确授权的实体设备。
 
-当前小米设备不属于本工作流 H 的授权范围，不得安装、重试或调整设备安全策略。
+历史工作流 H 不包含物理设备授权。本 Beta 工作流已单独授权固定真机 `b2601eb1` 执行最小冒烟并安装最终 Beta；该授权不包含修改 MIUI/USB 安全策略，也不等同于四 API 矩阵、20 次导出或 30 分钟耐久 PASS。
 
 ## External release gate
 
-仓库只包含 signing infrastructure，不包含生产 keystore 或密码。没有 production signing secrets 不阻止 unsigned/minified local/CI verification，但会阻止生成可公开分发的 signed APK/AAB，并因此阻止 public release。
+仓库只包含 signing infrastructure，不包含生产 keystore 或密码。公开 Beta 可以使用明确披露的测试证书签署，但该 APK 不是生产签名产物，不能升级为正式版；没有 production signing secrets 仍会阻止正式 signed APK/AAB 和 `1.0.0` public release。
 
 即使生产 signing secrets 后续可用，仍必须先完成上述 G/真机/Reviewer Gate；手动 workflow 的 signed artifact upload 也不是 GitHub Release 或商店发布授权。
 
