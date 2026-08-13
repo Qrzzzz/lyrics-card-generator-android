@@ -13,8 +13,10 @@ captures/
 # Renderer
 renderer/node_modules/
 renderer/dist/
+renderer/golden/diffs/
 
 # Signing and local artifacts
+release-signing.properties
 *.jks
 *.keystore
 *.apk

@@ -5,8 +5,14 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
+import android.os.SystemClock
+import android.view.View
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebMessage
+import android.webkit.WebMessagePort
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -37,6 +43,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,6 +76,28 @@ private const val RENDERER_URL = "$TRUSTED_ORIGIN/renderer/index.html"
 private const val BRIDGE_OBJECT = "LyricsCardNative"
 private val MAX_EXPORT_CHUNKS = ((MAX_PNG_BYTES + EXPORT_CHUNK_BYTES - 1) / EXPORT_CHUNK_BYTES).toInt()
 
+internal object RendererRequestPolicy {
+    fun mayNavigate(uri: Uri): Boolean = isRendererResource(uri)
+
+    fun mayServe(method: String, uri: Uri): Boolean =
+        method.equals("GET", ignoreCase = true) && (isRendererResource(uri) || isMediaResource(uri))
+
+    fun isRendererResource(uri: Uri): Boolean = hasTrustedOrigin(uri) && hasSafePath(uri, "/renderer/")
+
+    fun isMediaResource(uri: Uri): Boolean = hasTrustedOrigin(uri) && hasSafePath(uri, "/media/")
+
+    private fun hasTrustedOrigin(uri: Uri): Boolean =
+        uri.scheme.equals("https", ignoreCase = true) &&
+            uri.encodedAuthority.equals(APP_ASSET_HOST, ignoreCase = true)
+
+    private fun hasSafePath(uri: Uri, prefix: String): Boolean {
+        val path = uri.path ?: return false
+        return path.startsWith(prefix) &&
+            '\\' !in path &&
+            path.split('/').none { segment -> segment == "." || segment == ".." }
+    }
+}
+
 @Serializable
 data class RendererEnvelope(
     val protocolVersion: Int = 1,
@@ -91,6 +121,12 @@ data class ExportedImage(
     val mimeType: String = "image/png",
 )
 
+internal suspend fun deleteStaleExport(file: File) {
+    withContext(NonCancellable + Dispatchers.IO) {
+        file.delete()
+    }
+}
+
 data class CanvasMeasurement(val width: Int, val height: Int)
 
 class RendererException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -98,37 +134,154 @@ class RendererException(message: String, cause: Throwable? = null) : Exception(m
 internal interface RendererBridge {
     fun attach(view: WebView, onMessage: (String) -> Unit): Boolean
 
+    fun onMainFrameLoaded(view: WebView, onFailure: (Throwable) -> Unit) = Unit
+
     fun send(view: WebView, envelope: RendererEnvelope)
 
     fun detach(view: WebView)
 }
 
 private class WebViewRendererBridge : RendererBridge {
-    override fun attach(view: WebView, onMessage: (String) -> Unit): Boolean {
-        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return false
-        WebViewCompat.addWebMessageListener(
-            view,
-            BRIDGE_OBJECT,
-            setOf(TRUSTED_ORIGIN),
-        ) { _, message, sourceOrigin, isMainFrame, _ ->
-            if (isMainFrame && sourceOrigin.toString() == TRUSTED_ORIGIN) {
-                message.data?.let(onMessage)
+    private var listenerAttached = false
+    private var javascriptInterfaceAttached = false
+    private var javascriptInterfaceView: WebView? = null
+    private var fallbackPort: WebMessagePort? = null
+    private var fallbackOnMessage: ((String) -> Unit)? = null
+    private val api26JavascriptBridge = object {
+        @JavascriptInterface
+        fun postMessage(message: String) {
+            val view = javascriptInterfaceView ?: return
+            view.post {
+                if (javascriptInterfaceView === view && view.url == RENDERER_URL) {
+                    fallbackOnMessage?.invoke(message)
+                }
             }
+        }
+    }
+
+    override fun attach(view: WebView, onMessage: (String) -> Unit): Boolean {
+        listenerAttached = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
+        if (listenerAttached) {
+            WebViewCompat.addWebMessageListener(
+                view,
+                BRIDGE_OBJECT,
+                setOf(TRUSTED_ORIGIN),
+            ) { _, message, sourceOrigin, isMainFrame, _ ->
+                if (isMainFrame && sourceOrigin.toString() == TRUSTED_ORIGIN) {
+                    message.data?.let(onMessage)
+                }
+            }
+        } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
+            // Chrome 69 on API 26 retains the native side of large WebMessagePort transfers.
+            // The interface is accepted only on the exact navigation-locked local document;
+            // its packaged CSP forbids child frames, network content, workers, and objects.
+            fallbackOnMessage = onMessage
+            javascriptInterfaceView = view
+            view.addJavascriptInterface(api26JavascriptBridge, BRIDGE_OBJECT)
+            javascriptInterfaceAttached = true
+        } else {
+            fallbackOnMessage = onMessage
         }
         return true
     }
 
+    override fun onMainFrameLoaded(view: WebView, onFailure: (Throwable) -> Unit) {
+        if (listenerAttached || javascriptInterfaceAttached || fallbackPort != null) return
+
+        val nonce = UUID.randomUUID().toString()
+        val ports = runCatching { view.createWebMessageChannel() }
+            .getOrElse { cause ->
+                onFailure(cause)
+                return
+            }
+        val nativePort = ports[0]
+        val pagePort = ports[1]
+        fallbackPort = nativePort
+        nativePort.setWebMessageCallback(
+            object : WebMessagePort.WebMessageCallback() {
+                override fun onMessage(port: WebMessagePort, message: WebMessage) {
+                    message.data?.let { data -> fallbackOnMessage?.invoke(data) }
+                }
+            },
+        )
+
+        view.evaluateJavascript(legacyBridgeBootstrap(nonce)) {
+            if (fallbackPort !== nativePort) {
+                runCatching { pagePort.close() }
+                return@evaluateJavascript
+            }
+            runCatching {
+                view.postWebMessage(
+                    WebMessage(nonce, arrayOf(pagePort)),
+                    Uri.parse(TRUSTED_ORIGIN),
+                )
+            }.onFailure { cause ->
+                fallbackPort = null
+                runCatching { nativePort.close() }
+                runCatching { pagePort.close() }
+                onFailure(cause)
+            }
+        }
+    }
+
     override fun send(view: WebView, envelope: RendererEnvelope) {
         val json = RenderSpecJson.format.encodeToString(envelope)
-        val quoted = JsonPrimitive(json).toString()
-        val script = "window.LyricsCardRenderer && window.LyricsCardRenderer.receive(JSON.parse($quoted));"
-        view.evaluateJavascript(script, null)
+        if (listenerAttached || javascriptInterfaceAttached) {
+            val quoted = JsonPrimitive(json).toString()
+            val script = "window.LyricsCardRenderer && window.LyricsCardRenderer.receive(JSON.parse($quoted));"
+            view.evaluateJavascript(script, null)
+        } else {
+            val port = fallbackPort ?: throw RendererException("安全消息通道尚未就绪")
+            port.postMessage(WebMessage(json))
+        }
     }
 
     override fun detach(view: WebView) {
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+        if (listenerAttached) {
             runCatching { WebViewCompat.removeWebMessageListener(view, BRIDGE_OBJECT) }
         }
+        if (javascriptInterfaceAttached) {
+            runCatching { view.removeJavascriptInterface(BRIDGE_OBJECT) }
+        }
+        listenerAttached = false
+        javascriptInterfaceAttached = false
+        javascriptInterfaceView = null
+        fallbackOnMessage = null
+        fallbackPort?.let { port -> runCatching { port.close() } }
+        fallbackPort = null
+    }
+
+    private fun legacyBridgeBootstrap(nonce: String): String {
+        val quotedNonce = JsonPrimitive(nonce).toString()
+        val quotedOrigin = JsonPrimitive(TRUSTED_ORIGIN).toString()
+        return """
+            (() => {
+              const expectedNonce = $quotedNonce;
+              if (window.location.origin !== $quotedOrigin || window.__lyricsCardPortPending) return;
+              window.__lyricsCardPortPending = true;
+              const receivePort = (event) => {
+                if (event.data !== expectedNonce || !event.ports || event.ports.length !== 1) return;
+                window.removeEventListener("message", receivePort);
+                const port = event.ports[0];
+                window.LyricsCardNative = { postMessage: (message) => port.postMessage(message) };
+                port.onmessage = (messageEvent) => {
+                  if (typeof messageEvent.data !== "string") return;
+                  try {
+                    window.LyricsCardRenderer &&
+                      window.LyricsCardRenderer.receive(JSON.parse(messageEvent.data));
+                  } catch (_) {}
+                };
+                if (port.start) port.start();
+                window.LyricsCardRenderer && window.LyricsCardRenderer.receive({
+                  protocolVersion: 1,
+                  requestId: `legacy-${'$'}{expectedNonce}`,
+                  type: "initialize",
+                  payload: {}
+                });
+              };
+              window.addEventListener("message", receivePort);
+            })();
+        """.trimIndent()
     }
 }
 
@@ -150,8 +303,9 @@ class RendererController private constructor(
 
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val exportIoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<RendererEnvelope>>()
-    private val exportAssemblies = ConcurrentHashMap<String, ExportAssembly>()
+    private val exportAssemblies = ConcurrentHashMap<String, QueuedExportAssembly>()
     private val operationMutex = Mutex()
     private val _status = MutableStateFlow(RendererStatus())
     val status: StateFlow<RendererStatus> = _status.asStateFlow()
@@ -176,10 +330,17 @@ class RendererController private constructor(
         webView?.let { existing ->
             (existing.parent as? ViewGroup)?.removeView(existing)
             checkNotNull(webViewContext).bind(owner, context)
+            existing.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             existing.onResume()
             existing.post {
                 existing.requestLayout()
                 existing.invalidate()
+            }
+            if (
+                pendingSpec != null &&
+                _status.value.phase == RendererStatus.Phase.READY
+            ) {
+                schedulePreviewUpdate(delayMillis = 0)
             }
             return existing
         }
@@ -198,6 +359,7 @@ class RendererController private constructor(
             contextBinding.bind(owner, context)
             WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
             view.setBackgroundColor(Color.TRANSPARENT)
+            view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             view.isLongClickable = false
             view.setOnLongClickListener { true }
             view.setDownloadListener { _, _, _, _, _ -> Unit }
@@ -242,6 +404,13 @@ class RendererController private constructor(
         if (!contextBinding.isOwnedBy(owner)) return
         runCatching { (view.parent as? ViewGroup)?.removeView(view) }
         runCatching { view.onPause() }
+        if (_status.value.phase in setOf(RendererStatus.Phase.READY, RendererStatus.Phase.RENDERING)) {
+            val wasRendering = _status.value.phase == RendererStatus.Phase.RENDERING
+            stopPreviewJobs(restoreInFlight = true)
+            if (wasRendering) {
+                _status.value = RendererStatus(RendererStatus.Phase.READY, "Preview paused for host recreation")
+            }
+        }
         contextBinding.release(owner)
     }
 
@@ -268,6 +437,7 @@ class RendererController private constructor(
                 val value = pendingSpec ?: break
                 pendingSpec = null
                 previewInFlightSpec = value
+                val renderStartedAt = SystemClock.elapsedRealtime()
                 _status.value = RendererStatus(RendererStatus.Phase.RENDERING, "正在更新预览…")
                 try {
                     val applied = operationMutex.withLock {
@@ -279,7 +449,11 @@ class RendererController private constructor(
                     }
                     if (applied.type != "specApplied") throw RendererException("渲染器未确认预览设置")
                     previewInFlightSpec = null
-                    _status.value = RendererStatus(RendererStatus.Phase.READY, "预览已更新")
+                    _status.value = RendererStatus(
+                        RendererStatus.Phase.READY,
+                        "预览已更新",
+                        lastRenderMillis = (SystemClock.elapsedRealtime() - renderStartedAt).coerceAtLeast(0L),
+                    )
                 } catch (cause: Throwable) {
                     pendingSpec = pendingSpec ?: value
                     previewInFlightSpec = null
@@ -343,7 +517,7 @@ class RendererController private constructor(
                 sessionId = sessionId,
             )
             if (!isCurrentSession(sessionId)) {
-                image.file.delete()
+                deleteStaleExport(image.file)
                 throw RendererException("导出期间渲染器会话已重建，请重试")
             }
             _status.value = RendererStatus(RendererStatus.Phase.READY, "导出完成")
@@ -360,6 +534,12 @@ class RendererController private constructor(
                 RendererException("导出已取消", cause),
             )
             throw cause
+        } catch (cause: Throwable) {
+            val failure = if (cause is RendererException) cause else {
+                RendererException(cause.message ?: "导出失败", cause)
+            }
+            recoverRendererSession(sessionId, "导出失败，正在恢复渲染器…", failure)
+            throw failure
         }
     }
 
@@ -418,8 +598,7 @@ class RendererController private constructor(
         activeSessionId = null
         pending.values.forEach { it.cancel() }
         pending.clear()
-        exportAssemblies.values.forEach(ExportAssembly::abort)
-        exportAssemblies.clear()
+        closeExportAssemblies()
         destroyWebView()
         scope.cancel()
     }
@@ -457,8 +636,18 @@ class RendererController private constructor(
         val requestId = UUID.randomUUID().toString()
         val result = CompletableDeferred<RendererEnvelope>()
         val assembly = withContext(Dispatchers.IO) { createExportAssembly(spec) }
+        lateinit var queuedAssembly: QueuedExportAssembly
+        queuedAssembly = QueuedExportAssembly(
+            assembly = assembly,
+            ioScope = exportIoScope,
+            onFailure = { cause ->
+                scope.launch {
+                    failExportAssembly(requestId, sessionId, queuedAssembly, cause)
+                }
+            },
+        )
         pending[requestId] = result
-        exportAssemblies[requestId] = assembly
+        exportAssemblies[requestId] = queuedAssembly
         var completedNormally = false
         try {
             withContext(Dispatchers.Main.immediate) {
@@ -468,15 +657,16 @@ class RendererController private constructor(
             if (completed.type != "exportCompleted") {
                 throw RendererException("渲染器返回了意外结果：${completed.type}")
             }
+            queuedAssembly.awaitDrained()
             val image = finalizeExport(completed.payload.jsonObject, spec, assembly)
             completedNormally = true
             return image
         } finally {
             pending.remove(requestId)
-            exportAssemblies.remove(requestId)
+            exportAssemblies.remove(requestId, queuedAssembly)
             if (!result.isCompleted) sendCancel(requestId, sessionId)
             if (!completedNormally) {
-                withContext(NonCancellable + Dispatchers.IO) { assembly.abort() }
+                withContext(NonCancellable + Dispatchers.IO) { queuedAssembly.abortAndJoin() }
             }
         }
     }
@@ -535,7 +725,7 @@ class RendererController private constructor(
                 if (pendingSpec != null) schedulePreviewUpdate(delayMillis = 0)
             }
             "specApplied" -> {
-                pending.remove(envelope.requestId)?.complete(envelope)
+                completePending(envelope)
             }
             "exportStarted" -> {
                 if (exportAssemblies.containsKey(envelope.requestId)) {
@@ -546,7 +736,7 @@ class RendererController private constructor(
                 val assembly = exportAssemblies[envelope.requestId] ?: return
                 runCatching {
                     val payload = envelope.payload.jsonObject
-                    assembly.accept(
+                    val accepted = assembly.offer(
                         index = payload["index"]?.jsonPrimitive?.intOrNull
                             ?: throw RendererException("导出分块缺少序号"),
                         total = payload["total"]?.jsonPrimitive?.intOrNull
@@ -556,15 +746,9 @@ class RendererController private constructor(
                         encoded = payload["base64"]?.jsonPrimitive?.contentOrNull
                             ?: throw RendererException("导出分块缺少数据"),
                     )
+                    if (!accepted) throw RendererException("导出分块队列已关闭或达到上限")
                 }.onFailure { cause ->
-                    exportAssemblies.remove(envelope.requestId)
-                    assembly.abort()
-                    val failure = if (cause is RendererException) cause else {
-                        RendererException(cause.message ?: "导出分块无效", cause)
-                    }
-                    _status.value = RendererStatus(RendererStatus.Phase.ERROR, failure.message ?: "导出分块无效")
-                    pending.remove(envelope.requestId)?.completeExceptionally(failure)
-                    scope.launch { sendCancel(envelope.requestId, sessionId) }
+                    failExportAssembly(envelope.requestId, sessionId, assembly, cause)
                 }
             }
             "renderError" -> {
@@ -572,15 +756,42 @@ class RendererController private constructor(
                 if (result != null) {
                     val payload = envelope.payload.jsonObject
                     val message = payload["message"]?.jsonPrimitive?.contentOrNull ?: "渲染失败"
-                    exportAssemblies.remove(envelope.requestId)?.abort()
+                    exportAssemblies.remove(envelope.requestId)?.abortAsync()
                     _status.value = RendererStatus(RendererStatus.Phase.ERROR, message)
                     result?.completeExceptionally(RendererException(message))
                 }
             }
-            "exportCompleted", "measured", "paletteExtracted", "pong" -> {
-                pending.remove(envelope.requestId)?.complete(envelope)
+            "exportCompleted" -> {
+                val assembly = exportAssemblies[envelope.requestId] ?: return
+                assembly.seal()
+                completePending(envelope)
+            }
+            "measured", "paletteExtracted", "pong" -> {
+                completePending(envelope)
             }
         }
+    }
+
+    private fun failExportAssembly(
+        requestId: String,
+        sessionId: Long,
+        assembly: QueuedExportAssembly,
+        cause: Throwable,
+    ) {
+        if (!exportAssemblies.remove(requestId, assembly)) return
+        assembly.abortAsync()
+        val failure = if (cause is RendererException) cause else {
+            RendererException(cause.message ?: "导出分块无效", cause)
+        }
+        _status.value = RendererStatus(RendererStatus.Phase.ERROR, failure.message ?: "导出分块无效")
+        pending.remove(requestId)?.completeExceptionally(failure)
+        scope.launch { sendCancel(requestId, sessionId) }
+    }
+
+    private fun completePending(envelope: RendererEnvelope) {
+        val result = pending.remove(envelope.requestId) ?: return
+        recoveryAttempts = 0
+        result.complete(envelope)
     }
 
     private fun createExportAssembly(spec: RenderSpec): ExportAssembly {
@@ -658,14 +869,14 @@ class RendererController private constructor(
         sessionId: Long,
     ) = object : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-            !isAllowedRendererUrl(request.url)
+            !RendererRequestPolicy.mayNavigate(request.url)
 
         override fun shouldInterceptRequest(
             view: WebView,
             request: WebResourceRequest,
         ): WebResourceResponse {
             val url = request.url
-            if (isAllowedRendererUrl(url) || isAllowedMediaUrl(url)) {
+            if (RendererRequestPolicy.mayServe(request.method, url)) {
                 assetLoader.shouldInterceptRequest(url)?.let { return it }
             }
             return blockedResponse()
@@ -681,6 +892,18 @@ class RendererController private constructor(
                     RendererStatus.Phase.ERROR,
                     "本地渲染器加载失败（${error.errorCode}）",
                 )
+            }
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            if (url != RENDERER_URL || !isCurrentSession(sessionId, view)) return
+            bridge.onMainFrameLoaded(view) {
+                if (isCurrentSession(sessionId, view)) {
+                    _status.value = RendererStatus(
+                        RendererStatus.Phase.ERROR,
+                        "安全消息通道初始化失败，请重试",
+                    )
+                }
             }
         }
 
@@ -745,8 +968,7 @@ class RendererController private constructor(
         activeSessionId = null
         pending.values.forEach { it.completeExceptionally(failure) }
         pending.clear()
-        exportAssemblies.values.forEach(ExportAssembly::abort)
-        exportAssemblies.clear()
+        abortExportAssemblies()
         stopPreviewJobs(restoreInFlight = restorePreview)
         destroyWebView(loadBlank)
         return true
@@ -814,11 +1036,24 @@ class RendererController private constructor(
         ByteArrayInputStream("Blocked by Lyrics Card renderer policy".toByteArray()),
     )
 
-    private fun isAllowedRendererUrl(uri: Uri): Boolean =
-        uri.scheme == "https" && uri.host == APP_ASSET_HOST && uri.path?.startsWith("/renderer/") == true
+    private fun abortExportAssemblies() {
+        val assemblies = exportAssemblies.values.toSet()
+        exportAssemblies.clear()
+        assemblies.forEach(QueuedExportAssembly::abortAsync)
+    }
 
-    private fun isAllowedMediaUrl(uri: Uri): Boolean =
-        uri.scheme == "https" && uri.host == APP_ASSET_HOST && uri.path?.startsWith("/media/") == true
+    private fun closeExportAssemblies() {
+        val assemblies = exportAssemblies.values.toSet()
+        exportAssemblies.clear()
+        if (assemblies.isEmpty()) {
+            exportIoScope.cancel()
+            return
+        }
+        exportIoScope.launch {
+            assemblies.forEach { assembly -> assembly.abortAndJoin() }
+            exportIoScope.cancel()
+        }
+    }
 
     private fun CoroutineScope.launchSafely(block: suspend CoroutineScope.() -> Unit): Job =
         launch {
@@ -850,6 +1085,64 @@ class RendererController private constructor(
         )
         val MIN_PNG_BYTES = (PNG_SIGNATURE.size + PNG_IEND_TRAILER.size).toLong()
     }
+}
+
+internal class QueuedExportAssembly(
+    val assembly: ExportAssembly,
+    private val ioScope: CoroutineScope,
+    private val onFailure: (Throwable) -> Unit,
+) {
+    private val chunks = Channel<ExportChunk>(capacity = MAX_EXPORT_CHUNKS)
+    @Volatile
+    private var failure: Throwable? = null
+    private val worker = ioScope.launch {
+        try {
+            for (chunk in chunks) {
+                assembly.accept(
+                    index = chunk.index,
+                    total = chunk.total,
+                    byteLength = chunk.byteLength,
+                    encoded = chunk.encoded,
+                )
+            }
+        } catch (cause: CancellationException) {
+            throw cause
+        } catch (cause: Throwable) {
+            failure = cause
+            chunks.cancel()
+            onFailure(cause)
+        }
+    }
+
+    fun offer(index: Int, total: Int, byteLength: Int, encoded: String): Boolean =
+        chunks.trySend(ExportChunk(index, total, byteLength, encoded)).isSuccess
+
+    fun seal() {
+        chunks.close()
+    }
+
+    suspend fun awaitDrained() {
+        worker.join()
+        failure?.let { throw it }
+    }
+
+    suspend fun abortAndJoin() {
+        chunks.cancel()
+        worker.cancelAndJoin()
+        assembly.abort()
+    }
+
+    fun abortAsync() {
+        chunks.cancel()
+        ioScope.launch { abortAndJoin() }
+    }
+
+    private data class ExportChunk(
+        val index: Int,
+        val total: Int,
+        val byteLength: Int,
+        val encoded: String,
+    )
 }
 
 internal class ExportAssembly(

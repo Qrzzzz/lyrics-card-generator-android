@@ -1,11 +1,48 @@
 import org.gradle.api.tasks.Exec
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.ByteArrayOutputStream
+import java.util.Properties
 
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
-    id("org.jetbrains.kotlin.plugin.serialization")
-    id("org.jetbrains.kotlin.kapt")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.androidx.room)
+}
+
+val rendererAssetsRoot = layout.buildDirectory.dir("generated/renderer/assets")
+val rendererOutputDirectory = rendererAssetsRoot.map { it.dir("renderer") }
+
+val productionSigningPropertyFile = rootProject.file("release-signing.properties")
+val productionSigningProperties = Properties().apply {
+    if (productionSigningPropertyFile.isFile) {
+        productionSigningPropertyFile.inputStream().use(::load)
+    }
+}
+val productionSigningKeys = listOf(
+    "LYRICS_CARD_STORE_FILE",
+    "LYRICS_CARD_STORE_PASSWORD",
+    "LYRICS_CARD_KEY_ALIAS",
+    "LYRICS_CARD_KEY_PASSWORD",
+)
+val productionSigningValues = productionSigningKeys.associateWith { key ->
+    providers.environmentVariable(key).orNull
+        ?.takeIf(String::isNotBlank)
+        ?: productionSigningProperties.getProperty(key)?.takeIf(String::isNotBlank)
+}
+val configuredProductionSigningKeys = productionSigningValues.filterValues { it != null }.keys
+if (configuredProductionSigningKeys.isNotEmpty() && configuredProductionSigningKeys.size != productionSigningKeys.size) {
+    val missing = productionSigningKeys.filterNot(configuredProductionSigningKeys::contains)
+    throw GradleException(
+        "Incomplete production signing configuration. Missing: ${missing.joinToString()}",
+    )
+}
+val hasProductionSigning = configuredProductionSigningKeys.size == productionSigningKeys.size
+val productionStoreFile = productionSigningValues["LYRICS_CARD_STORE_FILE"]?.let(rootProject::file)
+if (hasProductionSigning && productionStoreFile?.isFile != true) {
+    throw GradleException("The configured production signing store file does not exist or is not a file.")
 }
 
 android {
@@ -20,8 +57,8 @@ android {
         applicationId = "com.qrzzzz.lyricscard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 10002
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -31,16 +68,27 @@ android {
     }
 
     flavorDimensions += "channel"
+    val productionReleaseSigning = if (hasProductionSigning) {
+        signingConfigs.create("productionRelease") {
+            storeFile = productionStoreFile
+            storePassword = productionSigningValues.getValue("LYRICS_CARD_STORE_PASSWORD")
+            keyAlias = productionSigningValues.getValue("LYRICS_CARD_KEY_ALIAS")
+            keyPassword = productionSigningValues.getValue("LYRICS_CARD_KEY_PASSWORD")
+        }
+    } else {
+        null
+    }
     productFlavors {
         create("alpha") {
             dimension = "channel"
             applicationIdSuffix = ".alpha"
-            versionNameSuffix = "-alpha02"
+            versionNameSuffix = "-alpha03"
             resValue("string", "app_name", "歌词卡片 Alpha")
         }
         create("production") {
             dimension = "channel"
             resValue("string", "app_name", "歌词卡片")
+            productionReleaseSigning?.let { signingConfig = it }
         }
     }
 
@@ -63,10 +111,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
@@ -86,57 +130,79 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
-}
 
-kapt {
-    correctErrorTypes = true
-    arguments {
-        arg("room.schemaLocation", "$projectDir/schemas")
-        arg("room.incremental", "true")
+    sourceSets.named("main") {
+        assets.srcDir(rendererAssetsRoot)
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
+}
+
+room {
+    schemaDirectory("$projectDir/schemas")
+}
+
+val bundletoolCli by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isVisible = false
+}
+
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    add(bundletoolCli.name, libs.android.bundletool)
 
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(platform(libs.androidx.compose.bom))
 
-    implementation("androidx.webkit:webkit:1.16.0")
-    implementation("androidx.room:room-runtime:2.8.4")
-    implementation("androidx.room:room-ktx:2.8.4")
-    kapt("androidx.room:room-compiler:2.8.4")
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material3.window.size)
+    implementation(libs.androidx.compose.material.icons.extended)
 
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    implementation(libs.androidx.webkit)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
 
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
-    testImplementation("androidx.room:room-testing:2.8.4")
-    testImplementation("androidx.test:core:1.6.1")
-    testImplementation("org.robolectric:robolectric:4.16.1")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.androidx.room.testing)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(libs.androidx.test.espresso.accessibility)
+    androidTestCompileOnly(libs.guava.atf)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
 val buildRenderer by tasks.registering(Exec::class) {
     group = "renderer"
-    description = "Builds the trusted local web renderer into Android assets."
+    description = "Builds the trusted local web renderer into generated Android assets."
     workingDir(rootProject.file("renderer"))
-    commandLine(if (System.getProperty("os.name").startsWith("Windows")) "npm.cmd" else "npm", "run", "build")
+    commandLine(
+        if (System.getProperty("os.name").startsWith("Windows")) "npm.cmd" else "npm",
+        "run",
+        "build",
+    )
+    environment("RENDERER_OUT_DIR", rendererOutputDirectory.get().asFile.absolutePath)
     inputs.files(
         rootProject.file("renderer/package.json"),
         rootProject.file("renderer/package-lock.json"),
@@ -149,9 +215,50 @@ val buildRenderer by tasks.registering(Exec::class) {
     inputs.dir(rootProject.file("renderer/scripts"))
     inputs.dir(rootProject.file("renderer/public"))
     inputs.dir(rootProject.file("renderer/schema"))
-    outputs.dir(project.file("src/main/assets/renderer"))
+    outputs.dir(rendererOutputDirectory)
 }
 
 tasks.named("preBuild").configure {
     dependsOn(buildRenderer)
+}
+
+val productionReleaseBundle =
+    layout.buildDirectory.file("outputs/bundle/productionRelease/app-production-release.aab")
+val productionReleaseBundleManifest =
+    layout.buildDirectory.file("reports/production-release-bundle-manifest.xml")
+
+tasks.register<JavaExec>("dumpProductionReleaseBundleManifest") {
+    group = "verification"
+    description = "Extracts the production release manifest from the built AAB with pinned bundletool."
+    dependsOn("bundleProductionRelease")
+
+    classpath = bundletoolCli
+    mainClass.set("com.android.tools.build.bundletool.BundleToolMain")
+    inputs.file(productionReleaseBundle)
+    outputs.file(productionReleaseBundleManifest)
+
+    argumentProviders.add(
+        CommandLineArgumentProvider {
+            listOf(
+                "dump",
+                "manifest",
+                "--bundle=${productionReleaseBundle.get().asFile.absolutePath}",
+                "--module=base",
+            )
+        },
+    )
+
+    val manifestOutput = ByteArrayOutputStream()
+    standardOutput = manifestOutput
+    doFirst {
+        manifestOutput.reset()
+    }
+    doLast {
+        val outputFile = productionReleaseBundleManifest.get().asFile
+        outputFile.parentFile.mkdirs()
+        outputFile.writeBytes(manifestOutput.toByteArray())
+        check(outputFile.length() > 0L) {
+            "bundletool did not emit a production release manifest."
+        }
+    }
 }

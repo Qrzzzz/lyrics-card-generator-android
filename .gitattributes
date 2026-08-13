@@ -1,0 +1,5 @@
+renderer/index.html text eol=lf
+renderer/public/fonts/LICENSE.txt text eol=lf
+renderer/renderer-manifest.json text eol=lf
+renderer/schema/*.json text eol=lf
+renderer/src/generated/*.ts text eol=lf

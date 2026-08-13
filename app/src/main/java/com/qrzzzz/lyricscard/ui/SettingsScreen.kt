@@ -1,211 +1,537 @@
 package com.qrzzzz.lyricscard.ui
 
-import android.webkit.WebView
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DeleteSweep
-import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.qrzzzz.lyricscard.BuildConfig
-import com.qrzzzz.lyricscard.data.UserPreferences
-import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.qrzzzz.lyricscard.DiagnosticsSnapshot
+import com.qrzzzz.lyricscard.R
+import com.qrzzzz.lyricscard.data.AppThemeMode
+import com.qrzzzz.lyricscard.ui.theme.LyricsCardSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    preferences: UserPreferences,
+    state: SettingsUiState,
     onBack: () -> Unit,
-    onDarkMode: (Boolean) -> Unit,
+    onThemeMode: (AppThemeMode) -> Unit,
     onDefaultExportScale: (Int) -> Unit,
     onShowSafeArea: (Boolean) -> Unit,
+    onClearExportCache: () -> Unit,
+    onMessageShown: () -> Unit = {},
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var cacheStatus by remember { mutableStateOf<String?>(null) }
-    val webViewPackage = remember {
-        WebView.getCurrentWebViewPackage()?.let { "${it.packageName} ${it.versionName}" } ?: "不可用"
-    }
-    val rendererManifest = remember {
-        runCatching {
-            context.assets.open("renderer/renderer-manifest.json")
-                .bufferedReader(Charsets.UTF_8)
-                .use { it.readText() }
-        }.getOrElse { "renderer manifest 尚未生成" }
+    val snackbar = remember { SnackbarHostState() }
+    val screenTitle = stringResource(R.string.settings_title)
+    val message = state.errorMessage ?: state.cacheStatus
+    val messageText = message?.asString()
+    LaunchedEffect(messageText) {
+        if (messageText != null) {
+            snackbar.showSnackbar(messageText)
+            onMessageShown()
+        }
     }
 
     Scaffold(
+        modifier = Modifier.semantics { paneTitle = screenTitle },
         topBar = {
             TopAppBar(
-                title = { Text("设置与诊断", fontWeight = FontWeight.Bold) },
+                title = { Text(screenTitle) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+                        Icon(
+                            Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = stringResource(R.string.common_back),
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        LazyColumn(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { SectionHeader("常规") }
-            item {
-                SettingRow("深色模式", "只影响原生编辑界面", preferences.darkMode, onDarkMode)
+            val horizontalPadding = if (maxWidth < 600.dp) {
+                LyricsCardSpacing.large
+            } else {
+                LyricsCardSpacing.section
             }
-            item {
-                Card(shape = RoundedCornerShape(18.dp)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("默认导出质量", fontWeight = FontWeight.Bold)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(1, 2).forEach { value ->
-                                FilterChip(
-                                    selected = preferences.defaultExportScale == value,
-                                    onClick = { onDefaultExportScale(value) },
-                                    label = { Text(if (value == 1) "1× 标准" else "2× 高清") },
-                                )
-                            }
+            LazyColumn(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .widthIn(max = SETTINGS_CONTENT_MAX_WIDTH)
+                    .testTag(SETTINGS_LIST_TAG),
+                contentPadding = PaddingValues(
+                    start = horizontalPadding,
+                    top = LyricsCardSpacing.large,
+                    end = horizontalPadding,
+                    bottom = LyricsCardSpacing.section,
+                ),
+                verticalArrangement = Arrangement.spacedBy(LyricsCardSpacing.extraLarge),
+            ) {
+                item {
+                    SettingsSection(stringResource(R.string.settings_section_appearance)) {
+                        ThemeModeRows(
+                            selected = state.preferences.themeMode,
+                            enabled = !state.isLoading && !state.isSavingPreference,
+                            onSelected = onThemeMode,
+                        )
+                    }
+                }
+                item {
+                    SettingsSection(stringResource(R.string.settings_section_export)) {
+                        QualitySettingRow(
+                            value = state.preferences.defaultExportScale,
+                            enabled = !state.isLoading && !state.isSavingPreference,
+                            onValue = onDefaultExportScale,
+                        )
+                    }
+                }
+                item {
+                    SettingsSection(stringResource(R.string.settings_section_editing)) {
+                        SwitchSettingRow(
+                            title = stringResource(R.string.settings_safe_area),
+                            subtitle = stringResource(R.string.settings_safe_area_description),
+                            checked = state.preferences.showSafeArea,
+                            enabled = !state.isLoading && !state.isSavingPreference,
+                            tag = SETTINGS_SAFE_AREA_TAG,
+                            onChecked = onShowSafeArea,
+                        )
+                    }
+                }
+                item {
+                    SettingsSection(stringResource(R.string.settings_section_storage)) {
+                        CacheActionRow(
+                            isClearing = state.isClearingCache,
+                            onClick = onClearExportCache,
+                        )
+                    }
+                }
+                item {
+                    SettingsSection(
+                        title = stringResource(R.string.settings_section_about_diagnostics),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    ) {
+                        if (state.isLoadingDiagnostics) {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .semantics {
+                                        liveRegion = LiveRegionMode.Polite
+                                    }
+                                    .testTag(SETTINGS_DIAGNOSTICS_LOADING_TAG),
+                            )
                         }
+                        DiagnosticsRows(state.diagnostics)
+                        state.diagnosticsError?.let { error ->
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Text(
+                                error.asString(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(LyricsCardSpacing.large)
+                                    .semantics { liveRegion = LiveRegionMode.Polite },
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Text(
+                            stringResource(R.string.settings_privacy_note),
+                            modifier = Modifier.padding(LyricsCardSpacing.large),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
-            item {
-                SettingRow("预览安全区域", "为后续裁切提示保留", preferences.showSafeArea, onShowSafeArea)
-            }
-
-            item { SectionHeader("本地存储") }
-            item {
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            val bytes = withContext(Dispatchers.IO) {
-                                val dir = File(context.cacheDir, "exports")
-                                val size = dir.walkTopDown().filter(File::isFile).sumOf(File::length)
-                                dir.deleteRecursively()
-                                size
-                            }
-                            cacheStatus = "已清理 ${"%.1f".format(bytes / 1024.0 / 1024.0)} MB 导出缓存"
-                        }
-                    },
-                ) {
-                    Icon(Icons.Rounded.DeleteSweep, contentDescription = null)
-                    Text("清理导出缓存", modifier = Modifier.padding(start = 8.dp))
-                }
-            }
-            cacheStatus?.let { value -> item { Text(value, color = MaterialTheme.colorScheme.primary) } }
-
-            item { SectionHeader("诊断信息") }
-            item {
-                DiagnosticCard(
-                    rows = listOf(
-                        "应用版本" to BuildConfig.VERSION_NAME,
-                        "Renderer" to BuildConfig.RENDERER_VERSION,
-                        "RenderSpec Schema" to BuildConfig.RENDERER_SCHEMA_VERSION.toString(),
-                        "Windows 基准" to BuildConfig.BASELINE_COMMIT.take(12),
-                        "System WebView" to webViewPackage,
-                    ),
-                )
-            }
-            item {
-                Text("Renderer manifest", style = MaterialTheme.typography.labelLarge)
-                Card(shape = RoundedCornerShape(16.dp)) {
-                    Text(
-                        rendererManifest,
-                        modifier = Modifier.padding(14.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                    )
-                }
-            }
-            item {
-                Text(
-                    "诊断信息不包含歌词正文、封面数据或导出图片。Alpha 默认不声明 INTERNET 权限。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun SectionHeader(value: String) {
-    Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+private fun ThemeModeRows(
+    selected: AppThemeMode,
+    enabled: Boolean,
+    onSelected: (AppThemeMode) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.settings_theme_description),
+        modifier = Modifier.padding(
+            start = LyricsCardSpacing.large,
+            top = LyricsCardSpacing.medium,
+            end = LyricsCardSpacing.large,
+        ),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    AppThemeMode.entries.forEach { mode ->
+        val label = stringResource(
+            when (mode) {
+                AppThemeMode.SYSTEM -> R.string.settings_theme_system
+                AppThemeMode.LIGHT -> R.string.settings_theme_light
+                AppThemeMode.DARK -> R.string.settings_theme_dark
+            },
+        )
+        ListItem(
+            headlineContent = { Text(label) },
+            trailingContent = {
+                RadioButton(
+                    selected = selected == mode,
+                    onClick = null,
+                    enabled = enabled,
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectable(
+                    selected = selected == mode,
+                    enabled = enabled,
+                    role = Role.RadioButton,
+                    onClick = { onSelected(mode) },
+                )
+                .testTag(
+                    "$SETTINGS_THEME_MODE_TAG${
+                        when (mode) {
+                            AppThemeMode.SYSTEM -> "system"
+                            AppThemeMode.LIGHT -> "light"
+                            AppThemeMode.DARK -> "dark"
+                        }
+                    }",
+                ),
+            colors = settingsListItemColors(),
+        )
+    }
 }
 
 @Composable
-private fun SettingRow(
+private fun SettingsSection(
+    title: String,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(LyricsCardSpacing.small)) {
+        Text(
+            title,
+            modifier = Modifier
+                .padding(horizontal = LyricsCardSpacing.small)
+                .semantics { heading() },
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = containerColor,
+        ) {
+            Column(content = content)
+        }
+    }
+}
+
+@Composable
+private fun SwitchSettingRow(
     title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean,
+    tag: String,
     onChecked: (Boolean) -> Unit,
 ) {
-    Card(shape = RoundedCornerShape(18.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Bold)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val stateLabel = stringResource(
+        if (checked) R.string.settings_state_on else R.string.settings_state_off,
+    )
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = {
+            Text(
+                subtitle,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        trailingContent = {
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                enabled = enabled,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onChecked,
+            )
+            .semantics(mergeDescendants = true) {
+                stateDescription = stateLabel
             }
-            Switch(checked = checked, onCheckedChange = onChecked)
-        }
-    }
+            .testTag(tag),
+        colors = settingsListItemColors(),
+    )
 }
 
 @Composable
-private fun DiagnosticCard(rows: List<Pair<String, String>>) {
-    Card(shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            rows.forEach { (label, value) ->
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(value, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                }
+private fun QualitySettingRow(
+    value: Int,
+    enabled: Boolean,
+    onValue: (Int) -> Unit,
+) {
+    val normalized = value.coerceIn(1, 2)
+    val valueLabel = stringResource(
+        if (normalized == 1) R.string.settings_scale_standard else R.string.settings_scale_high,
+    )
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_default_export_quality)) },
+        supportingContent = { Text(stringResource(R.string.settings_default_export_quality_description)) },
+        trailingContent = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(LyricsCardSpacing.extraSmall),
+            ) {
+                Text(valueLabel, style = MaterialTheme.typography.labelLarge)
+                Icon(Icons.Rounded.ChevronRight, contentDescription = null)
             }
-        }
-    }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .clickable(enabled = enabled, role = Role.Button) {
+                onValue(if (normalized == 1) 2 else 1)
+            }
+            .semantics(mergeDescendants = true) {
+                stateDescription = valueLabel
+            }
+            .testTag(SETTINGS_EXPORT_QUALITY_TAG),
+        colors = settingsListItemColors(),
+    )
 }
 
+@Composable
+private fun CacheActionRow(isClearing: Boolean, onClick: () -> Unit) {
+    val stateLabel = stringResource(
+        if (isClearing) R.string.settings_cache_clearing else R.string.settings_cache_ready,
+    )
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_clear_export_cache)) },
+        supportingContent = {
+            Text(
+                stringResource(
+                    if (isClearing) {
+                        R.string.settings_cache_clearing
+                    } else {
+                        R.string.settings_clear_export_cache_description
+                    },
+                ),
+            )
+        },
+        trailingContent = {
+            if (isClearing) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clearAndSetSemantics { },
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(Icons.Rounded.DeleteSweep, contentDescription = null)
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .clickable(enabled = !isClearing, role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                stateDescription = stateLabel
+            }
+            .testTag(SETTINGS_CLEAR_CACHE_TAG),
+        colors = settingsListItemColors(),
+    )
+}
+
+@Composable
+private fun DiagnosticsRows(snapshot: DiagnosticsSnapshot?) {
+    val unavailable = stringResource(R.string.common_unavailable)
+    val appVersion = snapshot?.let {
+        stringResource(R.string.settings_app_version_value, it.appVersionName, it.appVersionCode)
+    } ?: unavailable
+    val rendererVersion = snapshot?.rendererVersion ?: unavailable
+    val schema = snapshot?.let {
+        stringResource(R.string.settings_schema_value, it.rendererSchemaVersion)
+    } ?: unavailable
+    val protocol = snapshot?.rendererProtocolVersion?.let {
+        stringResource(R.string.settings_protocol_value, it)
+    } ?: unavailable
+    val source = snapshot?.let { value ->
+        val packageVersion = value.rendererSourcePackageVersion
+        val commit = value.rendererSourceCommit?.take(DIAGNOSTIC_HASH_LENGTH)
+        when {
+            packageVersion != null && commit != null -> stringResource(
+                R.string.settings_renderer_source_value,
+                packageVersion,
+                commit,
+            )
+            packageVersion != null -> packageVersion
+            commit != null -> commit
+            else -> unavailable
+        }
+    } ?: unavailable
+    val webView = snapshot?.let { value ->
+        val packageName = value.systemWebViewPackage
+        val version = value.systemWebViewVersion
+        if (packageName != null && version != null) {
+            stringResource(R.string.settings_package_version_value, packageName, version)
+        } else {
+            unavailable
+        }
+    } ?: unavailable
+
+    DiagnosticRow(
+        stringResource(R.string.settings_app_version),
+        appVersion,
+        SETTINGS_APP_VERSION_TAG,
+    )
+    DiagnosticDivider()
+    DiagnosticRow(
+        stringResource(R.string.settings_renderer),
+        rendererVersion,
+        SETTINGS_RENDERER_VERSION_TAG,
+    )
+    DiagnosticDivider()
+    DiagnosticRow(
+        stringResource(R.string.settings_render_spec_schema),
+        schema,
+        SETTINGS_SCHEMA_TAG,
+    )
+    DiagnosticDivider()
+    DiagnosticRow(
+        stringResource(R.string.settings_renderer_protocol),
+        protocol,
+        SETTINGS_PROTOCOL_TAG,
+    )
+    DiagnosticDivider()
+    DiagnosticRow(
+        stringResource(R.string.settings_renderer_source),
+        source,
+        SETTINGS_RENDERER_SOURCE_TAG,
+    )
+    DiagnosticDivider()
+    DiagnosticRow(
+        stringResource(R.string.settings_system_webview),
+        webView,
+        SETTINGS_WEBVIEW_TAG,
+    )
+}
+
+@Composable
+private fun DiagnosticRow(label: String, value: String, tag: String) {
+    ListItem(
+        headlineContent = { Text(label) },
+        supportingContent = {
+            Text(
+                value,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(tag),
+        colors = settingsListItemColors(),
+    )
+}
+
+@Composable
+private fun DiagnosticDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = LyricsCardSpacing.large),
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+@Composable
+private fun settingsListItemColors() = ListItemDefaults.colors(
+    containerColor = Color.Transparent,
+)
+
+internal const val SETTINGS_THEME_MODE_TAG = "settings-theme-mode-"
+internal const val SETTINGS_EXPORT_QUALITY_TAG = "settings-export-quality"
+internal const val SETTINGS_SAFE_AREA_TAG = "settings-safe-area"
+internal const val SETTINGS_CLEAR_CACHE_TAG = "settings-clear-cache"
+internal const val SETTINGS_DIAGNOSTICS_LOADING_TAG = "settings-diagnostics-loading"
+internal const val SETTINGS_APP_VERSION_TAG = "settings-app-version"
+internal const val SETTINGS_RENDERER_VERSION_TAG = "settings-renderer-version"
+internal const val SETTINGS_SCHEMA_TAG = "settings-schema"
+internal const val SETTINGS_PROTOCOL_TAG = "settings-protocol"
+internal const val SETTINGS_RENDERER_SOURCE_TAG = "settings-renderer-source"
+internal const val SETTINGS_WEBVIEW_TAG = "settings-webview"
+internal const val SETTINGS_LIST_TAG = "settings-list"
+
+private val SETTINGS_CONTENT_MAX_WIDTH = 760.dp
+private const val DIAGNOSTIC_HASH_LENGTH = 12

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -17,15 +16,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.annotation.StringRes
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.model.RenderSpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -40,8 +50,10 @@ fun RendererPreview(
     onMeasuredHeight: (Int) -> Unit = {},
     showSafeArea: Boolean = false,
 ) {
-    val status by controller.status.collectAsState()
-    val generation by controller.generation.collectAsState()
+    val status by controller.status.collectAsStateWithLifecycle()
+    val generation by controller.generation.collectAsStateWithLifecycle()
+    val localizedStatus = stringResource(rendererStatusResource(status.uiMessageKey()))
+    val previewDescription = stringResource(R.string.renderer_preview_accessibility)
     val previewKey = if (spec.canvas.autoHeight) {
         spec.copy(canvas = spec.canvas.copy(height = 0, pixelRatio = 1))
     } else {
@@ -67,8 +79,9 @@ fun RendererPreview(
     }
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .testTag(RENDERER_PREVIEW_TAG),
     ) {
         key(generation) {
             val owner = remember { Any() }
@@ -76,6 +89,20 @@ fun RendererPreview(
                 factory = { context -> controller.acquireWebView(context, owner) },
                 modifier = Modifier.fillMaxSize(),
                 onRelease = { view -> controller.releaseWebView(owner, view) },
+            )
+        }
+
+        if (
+            status.phase != RendererStatus.Phase.STARTING &&
+            status.phase != RendererStatus.Phase.ERROR
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clearAndSetSemantics {
+                        contentDescription = previewDescription
+                        stateDescription = localizedStatus
+                    },
             )
         }
 
@@ -87,19 +114,21 @@ fun RendererPreview(
                     .border(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.58f),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = MaterialTheme.shapes.medium,
                     ),
             )
         }
 
         when (status.phase) {
             RendererStatus.Phase.STARTING -> PreviewStatus(
-                message = status.message,
+                message = localizedStatus,
                 showProgress = true,
+                isError = false,
             )
             RendererStatus.Phase.ERROR -> PreviewStatus(
-                message = status.message,
+                message = localizedStatus,
                 retry = controller::retry,
+                isError = true,
             )
             else -> Unit
         }
@@ -108,17 +137,41 @@ fun RendererPreview(
 
 private const val AUTO_HEIGHT_MEASURE_DEBOUNCE_MS = 220L
 
+@StringRes
+private fun rendererStatusResource(key: RendererUiMessageKey): Int = when (key) {
+    RendererUiMessageKey.STARTING -> R.string.renderer_starting
+    RendererUiMessageKey.RECOVERING -> R.string.renderer_recovering
+    RendererUiMessageKey.READY -> R.string.renderer_ready
+    RendererUiMessageKey.RENDERING -> R.string.renderer_rendering
+    RendererUiMessageKey.EXPORTING -> R.string.renderer_exporting
+    RendererUiMessageKey.WEBVIEW_UNSUPPORTED -> R.string.renderer_error_webview_unsupported
+    RendererUiMessageKey.PROTOCOL_INCOMPATIBLE -> R.string.renderer_error_protocol_incompatible
+    RendererUiMessageKey.PROCESS_UNSTABLE -> R.string.renderer_error_process_unstable
+    RendererUiMessageKey.INVALID_RESPONSE -> R.string.renderer_error_invalid_response
+    RendererUiMessageKey.LOAD_FAILED -> R.string.renderer_error_load_failed
+    RendererUiMessageKey.GENERIC_ERROR -> R.string.renderer_error
+}
+
 @Composable
-private fun PreviewStatus(
+internal fun PreviewStatus(
     message: String,
     showProgress: Boolean = false,
     retry: (() -> Unit)? = null,
+    isError: Boolean = false,
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
-            .padding(24.dp),
+            .padding(24.dp)
+            .testTag(if (isError) RENDERER_ERROR_TAG else RENDERER_LOADING_TAG)
+            .then(
+                if (isError) {
+                    Modifier.semantics { liveRegion = LiveRegionMode.Assertive }
+                } else {
+                    Modifier
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -126,13 +179,21 @@ private fun PreviewStatus(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (showProgress) CircularProgressIndicator()
-            Text(message, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                message,
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.bodyMedium,
+            )
             retry?.let {
                 FilledTonalButton(onClick = it) {
                     Icon(Icons.Rounded.Refresh, contentDescription = null)
-                    Text("重试", modifier = Modifier.padding(start = 8.dp))
+                    Text(stringResource(R.string.common_retry), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
     }
 }
+
+const val RENDERER_PREVIEW_TAG = "renderer-preview"
+const val RENDERER_LOADING_TAG = "renderer-loading"
+const val RENDERER_ERROR_TAG = "renderer-error"

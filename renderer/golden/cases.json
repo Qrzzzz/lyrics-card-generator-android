@@ -1,0 +1,260 @@
+{
+  "datasetVersion": "release-pixel-golden-v1",
+  "baseFixture": "fixtures/portrait-bilingual.json",
+  "requiredCoverage": [
+    "ratio:1:1", "ratio:4:5", "ratio:9:16", "ratio:16:9", "ratio:21:9", "ratio:3:2",
+    "custom", "auto-height", "lyrics", "instrumental", "translation:on", "translation:off",
+    "cover:on", "cover:off", "long:title", "long:artist", "long:album", "script:cjk",
+    "script:latin", "punctuation", "emoji", "align:left", "align:center", "align:right",
+    "font:sans", "font:serif", "text:auto", "text:preset", "text:custom", "background:palette",
+    "background:gradient", "grid", "platform-badge", "shared-by", "watermark", "scale:1", "scale:2"
+  ],
+  "cases": [
+    {
+      "id": "portrait-square-cjk-left-auto",
+      "coverage": ["ratio:1:1", "lyrics", "translation:off", "cover:on", "script:cjk", "align:left", "font:sans", "text:auto", "background:palette", "grid", "platform-badge", "shared-by", "watermark", "scale:1"],
+      "overrides": {
+        "song": { "coverAssetId": "golden-cover.png" },
+        "content": { "translationEnabled": false, "translation": "" },
+        "canvas": { "ratio": "1:1", "width": 1080, "height": 1080, "pixelRatio": 1 }
+      }
+    },
+    {
+      "id": "portrait-four-five-bilingual-center-preset",
+      "coverage": ["ratio:4:5", "lyrics", "translation:on", "cover:on", "script:cjk", "script:latin", "align:center", "font:sans", "text:preset", "background:gradient", "scale:1"],
+      "overrides": {
+        "song": { "coverAssetId": "golden-cover.png" },
+        "canvas": { "pixelRatio": 1 },
+        "typography": { "alignment": "center", "textColorMode": "preset", "textColorPreset": "cream" },
+        "visual": { "backgroundMode": "gradient" }
+      }
+    },
+    {
+      "id": "portrait-nine-sixteen-latin-right-custom-no-cover",
+      "coverage": ["ratio:9:16", "lyrics", "translation:off", "cover:off", "script:latin", "align:right", "text:custom", "scale:1"],
+      "overrides": {
+        "locale": "en",
+        "song": { "title": "Signal After Midnight", "artist": "Northbound", "album": "Open Windows", "coverAssetId": null },
+        "content": { "lyrics": "Leave the porch light burning\nFollow the quiet avenue\nEvery map is folded\nEvery north points back to you", "translationEnabled": false, "translation": "" },
+        "canvas": { "ratio": "9:16", "width": 1080, "height": 1920, "pixelRatio": 1 },
+        "typography": { "alignment": "right", "textColorMode": "custom", "customTextColor": "#F3D9B1" },
+        "visibility": { "showCover": false }
+      }
+    },
+    {
+      "id": "landscape-sixteen-nine-long-serif",
+      "coverage": ["ratio:16:9", "long:title", "long:artist", "long:album", "font:serif", "background:gradient", "scale:1"],
+      "overrides": {
+        "locale": "en",
+        "song": {
+          "title": "Everything We Remember Between the Last Streetlight and the First Train Home",
+          "artist": "The Very Long Name of the Northbound Midnight Radio Orchestra",
+          "album": "Windows Left Open Across a City That Refused to Sleep",
+          "coverAssetId": "golden-cover.png"
+        },
+        "content": { "lyrics": "We counted every station\nUntil the morning crossed the rails\nThe city kept our secrets", "translationEnabled": false, "translation": "" },
+        "canvas": { "layoutMode": "landscape", "ratio": "16:9", "width": 1920, "height": 1080, "pixelRatio": 1 },
+        "typography": { "fontScheme": "serif-heavy", "fontFamily": "Source Han Serif SC", "twoLineTitle": true },
+        "visual": { "backgroundMode": "gradient" }
+      }
+    },
+    {
+      "id": "landscape-twenty-one-nine-punctuation-emoji",
+      "coverage": ["ratio:21:9", "punctuation", "emoji", "script:cjk", "script:latin", "scale:1"],
+      "overrides": {
+        "song": { "title": "「夜航」— hello, world! 🌙", "artist": "A/B · 组合", "album": "Vol. 2: 你好？", "coverAssetId": "golden-cover.png" },
+        "content": { "lyrics": "风说：“再见。”\nWait—did you hear that?\n星光、雨点；and us… ✨", "translationEnabled": false, "translation": "" },
+        "canvas": { "layoutMode": "landscape", "ratio": "21:9", "width": 2520, "height": 1080, "pixelRatio": 1 }
+      }
+    },
+    {
+      "id": "landscape-three-two-minimal-branding",
+      "coverage": ["ratio:3:2", "cover:off", "translation:off", "scale:1"],
+      "overrides": {
+        "song": { "coverAssetId": null },
+        "content": { "translationEnabled": false, "translation": "" },
+        "canvas": { "layoutMode": "landscape", "ratio": "3:2", "width": 1800, "height": 1200, "pixelRatio": 1 },
+        "visibility": { "showCover": false, "showPlatformBadge": false, "showSharedBy": false, "showGeneratedWatermark": false }
+      }
+    },
+    {
+      "id": "portrait-custom-fixed",
+      "coverage": ["custom", "translation:on", "scale:1"],
+      "overrides": {
+        "canvas": { "ratio": "custom", "width": 900, "height": 1500, "autoHeight": false, "pixelRatio": 1 }
+      }
+    },
+    {
+      "id": "portrait-custom-auto-height",
+      "coverage": ["custom", "auto-height", "lyrics", "translation:on", "scale:1"],
+      "overrides": {
+        "content": {
+          "lyrics": "第一行靠近晨光\n第二行穿过街巷\n第三行停在窗边\n第四行写下名字\n第五行等候回声\n第六行仍在歌唱\n第七行拥抱晚风\n第八行抵达远方",
+          "translation": "Line one meets the morning\nLine two crosses the street\nLine three waits by the window\nLine four writes down a name\nLine five listens for echoes\nLine six keeps singing\nLine seven holds the wind\nLine eight reaches home"
+        },
+        "canvas": { "ratio": "custom", "width": 900, "height": 720, "autoHeight": true, "pixelRatio": 1 }
+      }
+    },
+    {
+      "id": "instrumental-with-cover",
+      "coverage": ["instrumental", "cover:on", "ratio:1:1", "scale:1"],
+      "overrides": {
+        "song": { "title": "无词夜曲", "artist": "微光电台", "coverAssetId": "golden-cover.png" },
+        "content": { "mode": "instrumental", "lyrics": "", "translationEnabled": false, "translation": "", "instrumentalText": "纯音乐" },
+        "canvas": { "ratio": "1:1", "width": 1080, "height": 1080, "autoHeight": false, "pixelRatio": 1 }
+      }
+    },
+    {
+      "id": "instrumental-without-cover",
+      "coverage": ["instrumental", "cover:off", "ratio:1:1", "scale:1"],
+      "overrides": {
+        "locale": "en",
+        "song": { "title": "Interlude", "artist": "Nocturne", "coverAssetId": null },
+        "content": { "mode": "instrumental", "lyrics": "", "translationEnabled": false, "translation": "", "instrumentalText": "Instrumental" },
+        "canvas": { "ratio": "1:1", "width": 1080, "height": 1080, "autoHeight": false, "pixelRatio": 1 },
+        "visibility": { "showCover": false }
+      }
+    },
+    {
+      "id": "translation-off-traditional-cjk",
+      "coverage": ["translation:off", "script:cjk", "scale:1"],
+      "overrides": {
+        "locale": "zh-TW",
+        "content": { "lyrics": "雨後的街景\n燈火沿河而行\n我們把歌唱完", "translationEnabled": false, "translation": "" },
+        "canvas": { "pixelRatio": 1 }
+      }
+    },
+    {
+      "id": "translation-on-spanish",
+      "coverage": ["translation:on", "script:latin", "scale:1"],
+      "overrides": {
+        "locale": "es",
+        "song": { "title": "La luz regresa", "artist": "Mar Abierto", "album": "Después del viento" },
+        "content": { "lyrics": "La ciudad despierta\nGuardamos otra canción", "translation": "城市醒来\n我们收藏另一首歌" },
+        "canvas": { "pixelRatio": 1 }
+      }
+    },
+    {
+      "id": "lyrics-without-song-info",
+      "coverage": ["lyrics", "cover:off", "scale:1"],
+      "overrides": {
+        "content": { "translationEnabled": false, "translation": "" },
+        "canvas": { "pixelRatio": 1 },
+        "visibility": { "showCover": false, "showSongInfo": false, "showAlbum": false }
+      }
+    },
+    {
+      "id": "platform-qq-badge",
+      "coverage": ["platform-badge", "scale:1"],
+      "overrides": { "song": { "source": "qq" }, "branding": { "platform": "qq" }, "canvas": { "pixelRatio": 1 } }
+    },
+    {
+      "id": "platform-netease-badge",
+      "coverage": ["platform-badge", "scale:1"],
+      "overrides": { "song": { "source": "netease" }, "branding": { "platform": "netease" }, "canvas": { "pixelRatio": 1 } }
+    },
+    {
+      "id": "platform-apple-badge",
+      "coverage": ["platform-badge", "scale:1"],
+      "overrides": { "song": { "source": "apple" }, "branding": { "platform": "apple" }, "canvas": { "pixelRatio": 1 } }
+    },
+    {
+      "id": "platform-spotify-badge",
+      "coverage": ["platform-badge", "scale:1"],
+      "overrides": { "song": { "source": "spotify" }, "branding": { "platform": "spotify" }, "canvas": { "pixelRatio": 1 } }
+    },
+    {
+      "id": "shared-by-without-platform",
+      "coverage": ["shared-by", "scale:1"],
+      "overrides": {
+        "song": { "source": "unknown" },
+        "canvas": { "pixelRatio": 1 },
+        "visibility": { "showPlatformBadge": false, "showSharedBy": true },
+        "branding": { "sharedByName": "Shared by Release QA", "platform": "unknown" }
+      }
+    },
+    {
+      "id": "watermark-without-footer-badges",
+      "coverage": ["watermark", "scale:1"],
+      "overrides": {
+        "canvas": { "pixelRatio": 1 },
+        "visibility": { "showPlatformBadge": false, "showSharedBy": false, "showGeneratedWatermark": true }
+      }
+    },
+    {
+      "id": "grid-sparse-palette",
+      "coverage": ["grid", "background:palette", "scale:1"],
+      "overrides": { "canvas": { "pixelRatio": 1 }, "visual": { "backgroundMode": "palette", "gridEnabled": true, "gridDensity": "sparse", "gridOpacity": 0.08 } }
+    },
+    {
+      "id": "grid-medium-gradient",
+      "coverage": ["grid", "background:gradient", "scale:1"],
+      "overrides": { "canvas": { "pixelRatio": 1 }, "visual": { "backgroundMode": "gradient", "gridEnabled": true, "gridDensity": "medium", "gridOpacity": 0.14 } }
+    },
+    {
+      "id": "grid-dense-gradient",
+      "coverage": ["grid", "background:gradient", "scale:1"],
+      "overrides": { "canvas": { "pixelRatio": 1 }, "visual": { "backgroundMode": "gradient", "gridEnabled": true, "gridDensity": "dense", "gridOpacity": 0.2 } }
+    },
+    {
+      "id": "serif-center-cream",
+      "coverage": ["font:serif", "align:center", "text:preset", "scale:1"],
+      "overrides": {
+        "canvas": { "pixelRatio": 1 },
+        "typography": { "fontScheme": "serif-heavy", "fontFamily": "Source Han Serif SC", "alignment": "center", "textColorMode": "preset", "textColorPreset": "cream" }
+      }
+    },
+    {
+      "id": "sans-right-soft-blue",
+      "coverage": ["font:sans", "align:right", "text:preset", "scale:1"],
+      "overrides": { "canvas": { "pixelRatio": 1 }, "typography": { "alignment": "right", "textColorMode": "preset", "textColorPreset": "softBlue" } }
+    },
+    {
+      "id": "custom-text-color",
+      "coverage": ["text:custom", "scale:1"],
+      "overrides": { "canvas": { "pixelRatio": 1 }, "typography": { "textColorMode": "custom", "customTextColor": "#FEDCBA" } }
+    },
+    {
+      "id": "long-lyrics-twenty-lines",
+      "coverage": ["lyrics", "script:cjk", "scale:1"],
+      "overrides": {
+        "content": { "lyrics": "第一句写给清晨\n第二句越过屋顶\n第三句落在窗台\n第四句跟随脚步\n第五句听见回声\n第六句拥抱微风\n第七句经过长街\n第八句穿过人群\n第九句点亮灯火\n第十句抵达河岸\n第十一句仍然温柔\n第十二句没有停留\n第十三句记住名字\n第十四句收藏时间\n第十五句等待花开\n第十六句看见远方\n第十七句回到此刻\n第十八句继续歌唱\n第十九句写完故事\n第二十句与你分享", "translationEnabled": false, "translation": "" },
+        "canvas": { "ratio": "9:16", "width": 1080, "height": 1920, "pixelRatio": 1 },
+        "typography": { "lyricSize": 40, "lineHeight": 1.2 }
+      }
+    },
+    {
+      "id": "empty-lyrics-localized-fallback",
+      "coverage": ["lyrics", "scale:1"],
+      "overrides": { "locale": "ja", "content": { "lyrics": "", "translationEnabled": false, "translation": "" }, "canvas": { "pixelRatio": 1 } }
+    },
+    {
+      "id": "explicit-two-line-title",
+      "coverage": ["punctuation", "script:latin", "scale:1"],
+      "overrides": {
+        "song": { "title": "After Hours: A Song in Two Movements", "artist": "Late Signal", "album": "Volume II", "explicit": true },
+        "canvas": { "pixelRatio": 1 },
+        "typography": { "twoLineTitle": true }
+      }
+    },
+    {
+      "id": "square-two-x-export",
+      "coverage": ["ratio:1:1", "scale:2"],
+      "overrides": {
+        "song": { "coverAssetId": "golden-cover.png" },
+        "content": { "translationEnabled": false, "translation": "" },
+        "canvas": { "ratio": "1:1", "width": 1080, "height": 1080, "pixelRatio": 2 }
+      }
+    },
+    {
+      "id": "landscape-sixteen-nine-two-x-export",
+      "coverage": ["ratio:16:9", "scale:2"],
+      "overrides": {
+        "locale": "en",
+        "song": { "title": "Two Times the Horizon", "artist": "Release Matrix", "album": "Golden", "coverAssetId": "golden-cover.png" },
+        "content": { "lyrics": "Pixels across the horizon\nThe same design at twice the scale", "translationEnabled": false, "translation": "" },
+        "canvas": { "layoutMode": "landscape", "ratio": "16:9", "width": 1920, "height": 1080, "pixelRatio": 2 }
+      }
+    }
+  ]
+}

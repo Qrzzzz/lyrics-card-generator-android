@@ -2,7 +2,15 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { LyricsCard } from "./Card";
 import { DEFAULT_RENDER_SPEC } from "./defaultSpec";
-import { renderNodeAsPng, waitForStableRender } from "./export";
+import {
+  createExportCanvasSurface,
+  createFontEmbedCssCache,
+  createRendererDomLifecycle,
+  createRendererDomKey,
+  createSvgSourceCache,
+  renderNodeAsPng,
+  waitForStableRender
+} from "./export";
 import { installRendererController } from "./runtime";
 import type { RenderSpec } from "./types";
 
@@ -16,27 +24,69 @@ export function App() {
   );
 
   useEffect(() => {
-    async function applySpec(nextSpec: RenderSpec) {
-      flushSync(() => setSpec(nextSpec));
-      await waitForStableRender();
+    const svgSourceCache = createSvgSourceCache();
+    const fontEmbedCssCache = createFontEmbedCssCache();
+    const canvasSurface = createExportCanvasSurface();
+    const domLifecycle = createRendererDomLifecycle(svgSourceCache, canvasSurface);
+
+    async function applySpec(nextSpec: RenderSpec, activation: "committed" | "transient") {
+      return domLifecycle.apply(
+        createRendererDomKey(nextSpec),
+        activation,
+        async () => {
+          flushSync(() => setSpec(nextSpec));
+          await waitForStableRender();
+        }
+      );
     }
 
-    return installRendererController({
-      applySpec,
+    const uninstall = installRendererController({
+      async applySpec(nextSpec) {
+        await applySpec(nextSpec, "committed");
+      },
       async measure(nextSpec) {
-        await applySpec(nextSpec);
+        await applySpec(nextSpec, "transient");
         const node = requireCardNode(cardRef.current);
+        let measuredHeight = measureCardHeight(node, nextSpec);
+        if (nextSpec.canvas.autoHeight) {
+          let measuredSpec = nextSpec;
+          for (let pass = 0; pass < 16; pass += 1) {
+            measuredSpec = {
+              ...measuredSpec,
+              canvas: { ...measuredSpec.canvas, height: measuredHeight }
+            };
+            await applySpec(measuredSpec, "transient");
+            const refinedHeight = measureCardHeight(node, measuredSpec);
+            if (Math.abs(refinedHeight - measuredHeight) <= 1) break;
+            measuredHeight = refinedHeight;
+          }
+        }
         return {
           width: nextSpec.canvas.width,
-          height: measureCardHeight(node, nextSpec)
+          height: measuredHeight
         };
       },
       async exportPng(nextSpec, pixelRatio) {
-        await applySpec(nextSpec);
+        const domRevision = await applySpec(nextSpec, "transient");
         const node = requireCardNode(cardRef.current);
-        return renderNodeAsPng(node, nextSpec.canvas.width, nextSpec.canvas.height, pixelRatio);
+        return renderNodeAsPng(
+          node,
+          nextSpec.canvas.width,
+          nextSpec.canvas.height,
+          pixelRatio,
+          svgSourceCache,
+          fontEmbedCssCache,
+          canvasSurface,
+          domRevision
+        );
       }
     });
+    return () => {
+      svgSourceCache.clear();
+      fontEmbedCssCache.clear();
+      canvasSurface.release();
+      uninstall();
+    };
   }, []);
 
   return (

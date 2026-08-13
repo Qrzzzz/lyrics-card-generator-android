@@ -6,10 +6,12 @@ import com.qrzzzz.lyricscard.model.ProjectTemplates
 import com.qrzzzz.lyricscard.model.RenderSpecJson
 import com.qrzzzz.lyricscard.model.requireValid
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class ProjectRepository(
     private val projectDao: ProjectDao,
@@ -18,6 +20,7 @@ class ProjectRepository(
     private val assetFiles: CoverAssetFileStore = CoverAssetFileStore.NoOp,
 ) {
     private val assetMutationMutex = Mutex()
+    private val storageFiles = assetFiles as? ProjectStorageFileStore
 
     fun observeProjects(): Flow<List<ProjectSummary>> = projectDao.observeAll().map { projects ->
         projects.map { it.toSummary() }
@@ -90,10 +93,15 @@ class ProjectRepository(
         result.project.toProject()
     }
 
-    suspend fun updateThumbnail(id: String, thumbnailPath: String?): Boolean {
+    suspend fun updateThumbnail(id: String, thumbnailPath: String?): Boolean = assetMutationMutex.withLock {
         require(thumbnailPath?.contains('\u0000') != true) { "thumbnailPath must not contain NUL" }
-        val updatedAt = monotonicUpdatedAt(id) ?: return false
-        return projectDao.updateThumbnail(id, thumbnailPath, updatedAt) > 0
+        val current = projectDao.getById(id) ?: return false
+        val updatedAt = nextUpdatedAt(current.updatedAt)
+        if (projectDao.updateThumbnail(id, thumbnailPath, updatedAt) == 0) return false
+        current.thumbnailPath
+            ?.takeIf { it != thumbnailPath }
+            ?.let { deleteThumbnailIfStillUnreferenced(it) }
+        true
     }
 
     suspend fun markExported(id: String, exportedAt: Long = clock()): Boolean {
@@ -104,9 +112,28 @@ class ProjectRepository(
         return projectDao.markExported(id, exportedAt, updatedAt) > 0
     }
 
+    /** Commits thumbnail and export metadata together so callers never observe a half export. */
+    suspend fun recordExport(
+        id: String,
+        thumbnailPath: String,
+        exportedAt: Long = clock(),
+    ): Boolean = assetMutationMutex.withLock {
+        require('\u0000' !in thumbnailPath) { "thumbnailPath must not contain NUL" }
+        require(exportedAt >= 0L) { "exportedAt must not be negative" }
+        val current = projectDao.getById(id) ?: return false
+        require(exportedAt >= current.createdAt) { "exportedAt must not be earlier than createdAt" }
+        val updatedAt = maxOf(nextUpdatedAt(current.updatedAt), exportedAt)
+        if (projectDao.recordExport(id, thumbnailPath, exportedAt, updatedAt) == 0) return false
+        current.thumbnailPath
+            ?.takeIf { it != thumbnailPath }
+            ?.let { deleteThumbnailIfStillUnreferenced(it) }
+        true
+    }
+
     suspend fun delete(id: String): Boolean = assetMutationMutex.withLock {
         val result = projectDao.deleteProjectWithAssetReferences(id)
         result.releasedAssetId?.let { deleteIfStillUnreferenced(it) }
+        result.releasedThumbnailPath?.let { deleteThumbnailIfStillUnreferenced(it) }
         result.deleted
     }
 
@@ -115,10 +142,52 @@ class ProjectRepository(
      * interruption. Imported-but-not-yet-committed files are protected by the file-store
      * implementation.
      */
-    suspend fun reconcileCoverAssets() = assetMutationMutex.withLock {
+    suspend fun reconcileStorage(): ProjectStorageReconcileReport = assetMutationMutex.withLock {
         val referencedIds = projectDao.rebuildCoverAssetReferences()
-        assetFiles.deleteUnreferenced(referencedIds)
+        val projects = projectDao.getAll()
+        val fileResult = storageFiles?.reconcileProjectFiles(
+            referencedCoverAssetIds = referencedIds,
+            referencedThumbnailPaths = projects.mapNotNull(ProjectEntity::thumbnailPath).toSet(),
+        ) ?: run {
+            assetFiles.deleteUnreferenced(referencedIds)
+            ProjectFileReconcileResult()
+        }
+
+        val clearedMissingThumbnailProjectIds = sortedSetOf<String>()
+        for (project in projects) {
+            val thumbnailPath = project.thumbnailPath ?: continue
+            if (thumbnailPath !in fileResult.missingThumbnailPaths) continue
+            if (projectDao.clearThumbnailIfMatches(project.id, thumbnailPath) == 1) {
+                clearedMissingThumbnailProjectIds += project.id
+                deleteThumbnailIfStillUnreferenced(thumbnailPath)
+            }
+        }
+        val corruptProjectIds = withContext(Dispatchers.Default) {
+            projects.asSequence()
+                .filter { runCatching { it.toProject() }.isFailure }
+                .map(ProjectEntity::id)
+                .toSortedSet()
+        }
+        val missingCoverProjectIds = projects.asSequence()
+            .filter { it.coverAssetId in fileResult.missingCoverAssetIds }
+            .map(ProjectEntity::id)
+            .toSortedSet()
+
+        ProjectStorageReconcileReport(
+            corruptProjectIds = corruptProjectIds,
+            missingCoverProjectIds = missingCoverProjectIds,
+            clearedMissingThumbnailProjectIds = clearedMissingThumbnailProjectIds,
+            cleanup = ProjectStorageCleanupSummary(
+                deletedOrphanCoverCount = fileResult.deletedOrphanCoverCount,
+                deletedOrphanThumbnailCount = fileResult.deletedOrphanThumbnailCount,
+                deletedPartialExportCount = fileResult.deletedPartialExportCount,
+                prunedExportCount = fileResult.prunedExportCount,
+            ),
+        )
     }
+
+    /** Compatibility entry point used by the existing startup owner. */
+    suspend fun reconcileCoverAssets(): ProjectStorageReconcileReport = reconcileStorage()
 
     private suspend fun monotonicUpdatedAt(id: String): Long? {
         val current = projectDao.getById(id) ?: return null
@@ -144,6 +213,13 @@ class ProjectRepository(
     private suspend fun deleteIfStillUnreferenced(id: String) {
         if (projectDao.countProjectsReferencingAsset(id) == 0) {
             runCatching { assetFiles.delete(id) }
+        }
+    }
+
+    private suspend fun deleteThumbnailIfStillUnreferenced(path: String) {
+        val files = storageFiles ?: return
+        if (projectDao.countProjectsReferencingThumbnail(path) == 0) {
+            runCatching { files.deleteThumbnail(path) }
         }
     }
 
@@ -221,3 +297,17 @@ class CorruptProjectException(
     val projectId: String,
     cause: Throwable,
 ) : IllegalStateException("Stored project '$projectId' is corrupt", cause)
+
+data class ProjectStorageReconcileReport(
+    val corruptProjectIds: Set<String> = emptySet(),
+    val missingCoverProjectIds: Set<String> = emptySet(),
+    val clearedMissingThumbnailProjectIds: Set<String> = emptySet(),
+    val cleanup: ProjectStorageCleanupSummary = ProjectStorageCleanupSummary(),
+)
+
+data class ProjectStorageCleanupSummary(
+    val deletedOrphanCoverCount: Int = 0,
+    val deletedOrphanThumbnailCount: Int = 0,
+    val deletedPartialExportCount: Int = 0,
+    val prunedExportCount: Int = 0,
+)

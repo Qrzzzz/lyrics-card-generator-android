@@ -21,3 +21,27 @@ interface CoverAssetFileStore {
         override suspend fun deleteUnreferenced(referencedIds: Set<String>) = Unit
     }
 }
+
+/**
+ * Private-file lifecycle operations that accompany the persisted cover reference ledger.
+ *
+ * Cover reference counts remain owned by Room. Implementations reconcile only the files derived
+ * from that committed state: cover payloads, project thumbnails, and temporary export artifacts.
+ */
+interface ProjectStorageFileStore : CoverAssetFileStore {
+    suspend fun deleteThumbnail(path: String)
+
+    suspend fun reconcileProjectFiles(
+        referencedCoverAssetIds: Set<String>,
+        referencedThumbnailPaths: Set<String>,
+    ): ProjectFileReconcileResult
+}
+
+data class ProjectFileReconcileResult(
+    val missingCoverAssetIds: Set<String> = emptySet(),
+    val missingThumbnailPaths: Set<String> = emptySet(),
+    val deletedOrphanCoverCount: Int = 0,
+    val deletedOrphanThumbnailCount: Int = 0,
+    val deletedPartialExportCount: Int = 0,
+    val prunedExportCount: Int = 0,
+)

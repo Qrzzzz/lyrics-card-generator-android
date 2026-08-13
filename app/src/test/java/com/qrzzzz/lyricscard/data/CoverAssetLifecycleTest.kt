@@ -149,6 +149,58 @@ class CoverAssetLifecycleTest {
         assertTrue(ASSET_A in assetFiles.stored)
     }
 
+    @Test
+    fun `thumbnail replacement removal and project deletion release only unreferenced files`() = runTest {
+        val repository = repository()
+        val original = repository.createBlank()
+        assetFiles.storedThumbnails += setOf(THUMBNAIL_A, THUMBNAIL_B)
+
+        assertTrue(repository.updateThumbnail(original.id, THUMBNAIL_A))
+        assertNull(repository.duplicate(original.id)?.thumbnailPath)
+
+        assertTrue(repository.updateThumbnail(original.id, THUMBNAIL_B))
+        assertEquals(listOf(THUMBNAIL_A), assetFiles.deletedThumbnails)
+
+        assertTrue(repository.updateThumbnail(original.id, null))
+        assertEquals(listOf(THUMBNAIL_A, THUMBNAIL_B), assetFiles.deletedThumbnails)
+
+        assetFiles.storedThumbnails += THUMBNAIL_A
+        assertTrue(repository.updateThumbnail(original.id, THUMBNAIL_A))
+        assertTrue(repository.delete(original.id))
+        assertEquals(listOf(THUMBNAIL_A, THUMBNAIL_B, THUMBNAIL_A), assetFiles.deletedThumbnails)
+    }
+
+    @Test
+    fun `startup reconciliation reports corrupt and missing cover while repairing thumbnails`() = runTest {
+        val repository = repository()
+        val project = repository.create(coveredProject("missing-files", ASSET_A))
+        assertTrue(repository.updateThumbnail(project.id, THUMBNAIL_MISSING))
+        assetFiles.storedThumbnails += THUMBNAIL_ORPHAN
+        dao.upsert(
+            ProjectEntity(
+                id = "corrupt-project",
+                name = "Corrupt",
+                schemaVersion = 1,
+                rendererVersion = "android-alpha-renderer-1",
+                specJson = "{not-json",
+                coverAssetId = null,
+                thumbnailPath = null,
+                createdAt = 0L,
+                updatedAt = 0L,
+                lastExportedAt = null,
+            ),
+        )
+
+        val report = repository.reconcileStorage()
+
+        assertEquals(setOf("corrupt-project"), report.corruptProjectIds)
+        assertEquals(setOf(project.id), report.missingCoverProjectIds)
+        assertEquals(setOf(project.id), report.clearedMissingThumbnailProjectIds)
+        assertNull(dao.getById(project.id)?.thumbnailPath)
+        assertEquals(listOf(THUMBNAIL_ORPHAN, THUMBNAIL_MISSING), assetFiles.deletedThumbnails)
+        assertEquals(1, report.cleanup.deletedOrphanThumbnailCount)
+    }
+
     private fun repository() = ProjectRepository(
         projectDao = dao,
         clock = { now },
@@ -168,12 +220,18 @@ class CoverAssetLifecycleTest {
         const val ASSET_B = "asset-b"
         const val ASSET_FAIL = "asset-fail"
         const val ASSET_ORPHAN = "asset-orphan"
+        const val THUMBNAIL_A = "/private/thumbnails/a.png"
+        const val THUMBNAIL_B = "/private/thumbnails/b.png"
+        const val THUMBNAIL_MISSING = "/private/thumbnails/missing.png"
+        const val THUMBNAIL_ORPHAN = "/private/thumbnails/orphan.png"
     }
 }
 
-private class RecordingCoverAssetFileStore : CoverAssetFileStore {
+private class RecordingCoverAssetFileStore : ProjectStorageFileStore {
     val stored = mutableSetOf<String>()
     val deleted = mutableListOf<String>()
+    val storedThumbnails = mutableSetOf<String>()
+    val deletedThumbnails = mutableListOf<String>()
 
     override suspend fun markReferenced(id: String) = Unit
 
@@ -187,5 +245,26 @@ private class RecordingCoverAssetFileStore : CoverAssetFileStore {
             .filterNot(referencedIds::contains)
             .sorted()
             .forEach { delete(it) }
+    }
+
+    override suspend fun deleteThumbnail(path: String) {
+        deletedThumbnails += path
+        storedThumbnails -= path
+    }
+
+    override suspend fun reconcileProjectFiles(
+        referencedCoverAssetIds: Set<String>,
+        referencedThumbnailPaths: Set<String>,
+    ): ProjectFileReconcileResult {
+        val coverOrphans = stored.filterNot(referencedCoverAssetIds::contains).sorted()
+        deleteUnreferenced(referencedCoverAssetIds)
+        val thumbnailOrphans = storedThumbnails.filterNot(referencedThumbnailPaths::contains).sorted()
+        thumbnailOrphans.forEach { deleteThumbnail(it) }
+        return ProjectFileReconcileResult(
+            missingCoverAssetIds = referencedCoverAssetIds - stored,
+            missingThumbnailPaths = referencedThumbnailPaths - storedThumbnails,
+            deletedOrphanCoverCount = coverOrphans.size,
+            deletedOrphanThumbnailCount = thumbnailOrphans.size,
+        )
     }
 }
