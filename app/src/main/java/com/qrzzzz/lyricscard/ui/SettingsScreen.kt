@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -27,6 +28,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -58,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.qrzzzz.lyricscard.DiagnosticsSnapshot
 import com.qrzzzz.lyricscard.R
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import com.qrzzzz.lyricscard.ui.theme.LyricsCardSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,7 +68,7 @@ import com.qrzzzz.lyricscard.ui.theme.LyricsCardSpacing
 fun SettingsScreen(
     state: SettingsUiState,
     onBack: () -> Unit,
-    onDarkMode: (Boolean) -> Unit,
+    onThemeMode: (AppThemeMode) -> Unit,
     onDefaultExportScale: (Int) -> Unit,
     onShowSafeArea: (Boolean) -> Unit,
     onClearExportCache: () -> Unit,
@@ -128,13 +131,10 @@ fun SettingsScreen(
             ) {
                 item {
                     SettingsSection(stringResource(R.string.settings_section_appearance)) {
-                        SwitchSettingRow(
-                            title = stringResource(R.string.settings_dark_mode),
-                            subtitle = stringResource(R.string.settings_dark_mode_description),
-                            checked = state.preferences.darkMode,
+                        ThemeModeRows(
+                            selected = state.preferences.themeMode,
                             enabled = !state.isLoading && !state.isSavingPreference,
-                            tag = SETTINGS_DARK_MODE_TAG,
-                            onChecked = onDarkMode,
+                            onSelected = onThemeMode,
                         )
                     }
                 }
@@ -206,6 +206,62 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ThemeModeRows(
+    selected: AppThemeMode,
+    enabled: Boolean,
+    onSelected: (AppThemeMode) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.settings_theme_description),
+        modifier = Modifier.padding(
+            start = LyricsCardSpacing.large,
+            top = LyricsCardSpacing.medium,
+            end = LyricsCardSpacing.large,
+        ),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    AppThemeMode.entries.forEach { mode ->
+        val label = stringResource(
+            when (mode) {
+                AppThemeMode.SYSTEM -> R.string.settings_theme_system
+                AppThemeMode.LIGHT -> R.string.settings_theme_light
+                AppThemeMode.DARK -> R.string.settings_theme_dark
+            },
+        )
+        ListItem(
+            headlineContent = { Text(label) },
+            trailingContent = {
+                RadioButton(
+                    selected = selected == mode,
+                    onClick = null,
+                    enabled = enabled,
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectable(
+                    selected = selected == mode,
+                    enabled = enabled,
+                    role = Role.RadioButton,
+                    onClick = { onSelected(mode) },
+                )
+                .testTag(
+                    "$SETTINGS_THEME_MODE_TAG${
+                        when (mode) {
+                            AppThemeMode.SYSTEM -> "system"
+                            AppThemeMode.LIGHT -> "light"
+                            AppThemeMode.DARK -> "dark"
+                        }
+                    }",
+                ),
+            colors = settingsListItemColors(),
+        )
     }
 }
 
@@ -464,7 +520,7 @@ private fun settingsListItemColors() = ListItemDefaults.colors(
     containerColor = Color.Transparent,
 )
 
-internal const val SETTINGS_DARK_MODE_TAG = "settings-dark-mode"
+internal const val SETTINGS_THEME_MODE_TAG = "settings-theme-mode-"
 internal const val SETTINGS_EXPORT_QUALITY_TAG = "settings-export-quality"
 internal const val SETTINGS_SAFE_AREA_TAG = "settings-safe-area"
 internal const val SETTINGS_CLEAR_CACHE_TAG = "settings-clear-cache"

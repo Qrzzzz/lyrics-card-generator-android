@@ -2,6 +2,7 @@ package com.qrzzzz.lyricscard.ui
 
 import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.data.UserPreferences
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import com.qrzzzz.lyricscard.model.ProjectTemplates
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runCurrent
@@ -43,20 +44,20 @@ class ScreenStateOwnersTest {
 
     @Test
     fun settingsOwnerPublishesPreferencesAndCacheOperationState() = runTest(mainDispatcherRule.dispatcher) {
-        val preferences = FakePreferencesStore(UserPreferences(darkMode = false))
+        val preferences = FakePreferencesStore(UserPreferences(themeMode = AppThemeMode.LIGHT))
         val files = FakeExportFiles().apply { clearBytes = 2L * 1024L * 1024L }
         val diagnostics = FakeDiagnosticsReader()
         val viewModel = SettingsViewModel(preferences, files, diagnostics)
         runCurrent()
 
-        viewModel.setDarkMode(true)
+        viewModel.setThemeMode(AppThemeMode.DARK)
         runCurrent()
         viewModel.setDefaultExportScale(1)
         runCurrent()
         viewModel.clearExportCache()
         runCurrent()
 
-        assertTrue(viewModel.uiState.value.preferences.darkMode)
+        assertEquals(AppThemeMode.DARK, viewModel.uiState.value.preferences.themeMode)
         assertEquals(1, viewModel.uiState.value.preferences.defaultExportScale)
         assertEquals(
             UiText.resource(R.string.settings_cache_cleared, 2.0),

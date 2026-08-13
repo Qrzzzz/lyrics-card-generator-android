@@ -10,6 +10,7 @@ import com.qrzzzz.lyricscard.ProjectStore
 import com.qrzzzz.lyricscard.RendererOperations
 import com.qrzzzz.lyricscard.UserPreferencesStore
 import com.qrzzzz.lyricscard.data.NeteaseSongSearchResult
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import com.qrzzzz.lyricscard.data.ResolvedNeteaseSong
 import com.qrzzzz.lyricscard.data.UserPreferences
 import com.qrzzzz.lyricscard.model.PaletteSpec
@@ -139,9 +140,9 @@ class FakePreferencesStore(
     override val preferences: Flow<UserPreferences> = values
     var failure: Throwable? = null
 
-    override suspend fun setDarkMode(enabled: Boolean) {
+    override suspend fun setThemeMode(mode: AppThemeMode) {
         failure?.let { throw it }
-        values.value = values.value.copy(darkMode = enabled)
+        values.value = values.value.copy(themeMode = mode)
     }
 
     override suspend fun setDefaultExportScale(scale: Int) {

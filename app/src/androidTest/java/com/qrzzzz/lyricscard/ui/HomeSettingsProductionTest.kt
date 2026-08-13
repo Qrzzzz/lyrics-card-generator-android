@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qrzzzz.lyricscard.DiagnosticsSnapshot
 import com.qrzzzz.lyricscard.R
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import com.qrzzzz.lyricscard.data.UserPreferences
 import com.qrzzzz.lyricscard.model.Project
 import com.qrzzzz.lyricscard.model.ProjectSummary
@@ -198,11 +199,11 @@ class HomeSettingsProductionTest {
     }
 
     @Test
-    fun settingsRowsAreSingleAccessibleControlsAndKeepTwoStatePreferences() {
+    fun settingsRowsAreSingleAccessibleControlsAndKeepThemePreferences() {
         val state = mutableStateOf(
             SettingsUiState(
                 preferences = UserPreferences(
-                    darkMode = false,
+                    themeMode = AppThemeMode.LIGHT,
                     defaultExportScale = 1,
                     showSafeArea = false,
                 ),
@@ -214,13 +215,13 @@ class HomeSettingsProductionTest {
         var cacheClears = 0
 
         compose.setContent {
-            LyricsCardTheme(darkTheme = state.value.preferences.darkMode) {
+            LyricsCardTheme(darkTheme = state.value.preferences.themeMode == AppThemeMode.DARK) {
                 SettingsScreen(
                     state = state.value,
                     onBack = {},
-                    onDarkMode = { value ->
+                    onThemeMode = { value ->
                         state.value = state.value.copy(
-                            preferences = state.value.preferences.copy(darkMode = value),
+                            preferences = state.value.preferences.copy(themeMode = value),
                         )
                     },
                     onDefaultExportScale = { value ->
@@ -242,16 +243,15 @@ class HomeSettingsProductionTest {
         }
 
         val switchRole = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)
-        compose.onAllNodes(switchRole).assertCountEquals(2)
-        compose.onNodeWithTag(SETTINGS_DARK_MODE_TAG)
-            .assert(switchRole)
+        compose.onAllNodes(switchRole).assertCountEquals(1)
+        compose.onNodeWithTag("${SETTINGS_THEME_MODE_TAG}dark")
             .performClick()
         compose.onNodeWithTag(SETTINGS_EXPORT_QUALITY_TAG).performClick()
         compose.onNodeWithTag(SETTINGS_SAFE_AREA_TAG)
             .assert(switchRole)
             .performClick()
         compose.runOnIdle {
-            assertTrue(state.value.preferences.darkMode)
+            assertEquals(AppThemeMode.DARK, state.value.preferences.themeMode)
             assertEquals(2, state.value.preferences.defaultExportScale)
             assertTrue(state.value.preferences.showSafeArea)
         }
@@ -262,7 +262,7 @@ class HomeSettingsProductionTest {
         compose.runOnIdle { assertEquals(1, cacheClears) }
         scrollSettingsTo(hasTestTag(SETTINGS_APP_VERSION_TAG))
         compose.onNodeWithTag(SETTINGS_APP_VERSION_TAG).assertIsDisplayed()
-        compose.onNodeWithText("1.0.0-beta.1 (10001)").assertIsDisplayed()
+        compose.onNodeWithText("1.0.0 (10002)").assertIsDisplayed()
         scrollSettingsTo(hasTestTag(SETTINGS_WEBVIEW_TAG))
         compose.onNodeWithTag(SETTINGS_WEBVIEW_TAG).assertIsDisplayed()
         compose.onNodeWithText("com.google.android.webview 150.0.0").assertIsDisplayed()
@@ -312,7 +312,7 @@ class HomeSettingsProductionTest {
                                     isLoadingDiagnostics = false,
                                 ),
                                 onBack = {},
-                                onDarkMode = {},
+                                onThemeMode = {},
                                 onDefaultExportScale = {},
                                 onShowSafeArea = {},
                                 onClearExportCache = {},
@@ -332,8 +332,8 @@ class HomeSettingsProductionTest {
         assertMinTouchTarget("$HOME_PROJECT_MENU_PREFIX${"layout"}")
 
         compose.runOnIdle { screen.value = TestScreen.Settings }
-        compose.onNodeWithTag(SETTINGS_DARK_MODE_TAG).assertIsDisplayed()
-        assertMinTouchTarget(SETTINGS_DARK_MODE_TAG)
+        compose.onNodeWithTag("${SETTINGS_THEME_MODE_TAG}system").assertIsDisplayed()
+        assertMinTouchTarget("${SETTINGS_THEME_MODE_TAG}system")
         scrollSettingsTo(hasTestTag(SETTINGS_CLEAR_CACHE_TAG))
         compose.onNodeWithTag(SETTINGS_CLEAR_CACHE_TAG).assertIsDisplayed()
         assertMinTouchTarget(SETTINGS_CLEAR_CACHE_TAG)
@@ -396,8 +396,8 @@ class HomeSettingsProductionTest {
     )
 
     private fun diagnostics() = DiagnosticsSnapshot(
-        appVersionName = "1.0.0-beta.1",
-        appVersionCode = 10001,
+        appVersionName = "1.0.0",
+        appVersionCode = 10002,
         rendererVersion = "android-alpha-renderer-1",
         rendererSchemaVersion = 1,
         rendererProtocolVersion = 1,

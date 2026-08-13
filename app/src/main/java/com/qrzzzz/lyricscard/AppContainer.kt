@@ -5,6 +5,7 @@ import android.net.Uri
 import android.webkit.WebView
 import androidx.room.Room
 import com.qrzzzz.lyricscard.data.AppDatabase
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import com.qrzzzz.lyricscard.data.NeteaseMusicService
 import com.qrzzzz.lyricscard.data.NeteaseSongSearchResult
 import com.qrzzzz.lyricscard.data.ProjectRepository
@@ -59,7 +60,7 @@ interface ProjectStore {
 
 interface UserPreferencesStore {
     val preferences: Flow<UserPreferences>
-    suspend fun setDarkMode(enabled: Boolean)
+    suspend fun setThemeMode(mode: AppThemeMode)
     suspend fun setDefaultExportScale(scale: Int)
     suspend fun setShowSafeArea(enabled: Boolean)
 }
@@ -206,7 +207,7 @@ private class UserPreferencesRepositoryStore(
     private val repository: UserPreferencesRepository,
 ) : UserPreferencesStore {
     override val preferences: Flow<UserPreferences> = repository.preferences
-    override suspend fun setDarkMode(enabled: Boolean) = repository.setDarkMode(enabled)
+    override suspend fun setThemeMode(mode: AppThemeMode) = repository.setThemeMode(mode)
     override suspend fun setDefaultExportScale(scale: Int) = repository.setDefaultExportScale(scale)
     override suspend fun setShowSafeArea(enabled: Boolean) = repository.setShowSafeArea(enabled)
 }

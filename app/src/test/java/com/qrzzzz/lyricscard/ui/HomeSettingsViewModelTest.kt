@@ -2,6 +2,7 @@ package com.qrzzzz.lyricscard.ui
 
 import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.data.UserPreferences
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import com.qrzzzz.lyricscard.model.ProjectTemplates
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,6 +19,15 @@ import org.junit.Test
 class HomeSettingsViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
+
+    @Test
+    fun `theme modes default to system and decode persisted values safely`() {
+        assertEquals(AppThemeMode.SYSTEM, UserPreferences().themeMode)
+        assertEquals(AppThemeMode.SYSTEM, AppThemeMode.fromPersistedValue(0))
+        assertEquals(AppThemeMode.LIGHT, AppThemeMode.fromPersistedValue(1))
+        assertEquals(AppThemeMode.DARK, AppThemeMode.fromPersistedValue(2))
+        assertEquals(AppThemeMode.SYSTEM, AppThemeMode.fromPersistedValue(Int.MAX_VALUE))
+    }
 
     @Test
     fun `home empty list and all project actions stay behind the state owner`() =
@@ -56,14 +66,14 @@ class HomeSettingsViewModelTest {
         }
 
     @Test
-    fun `settings keep boolean theme one and two scale safe area and real diagnostics`() =
+    fun `settings keep three-state theme one and two scale safe area and real diagnostics`() =
         runTest(mainDispatcherRule.dispatcher) {
             val preferences = FakePreferencesStore(UserPreferences())
             val diagnostics = FakeDiagnosticsReader()
             val viewModel = SettingsViewModel(preferences, FakeExportFiles(), diagnostics)
             runCurrent()
 
-            viewModel.setDarkMode(true)
+            viewModel.setThemeMode(AppThemeMode.DARK)
             assertTrue(viewModel.uiState.value.isSavingPreference)
             runCurrent()
             viewModel.setDefaultExportScale(9)
@@ -72,7 +82,7 @@ class HomeSettingsViewModelTest {
             runCurrent()
 
             val state = viewModel.uiState.value
-            assertTrue(state.preferences.darkMode)
+            assertEquals(AppThemeMode.DARK, state.preferences.themeMode)
             assertEquals(2, state.preferences.defaultExportScale)
             assertTrue(state.preferences.showSafeArea)
             assertEquals(diagnostics.snapshot, state.diagnostics)

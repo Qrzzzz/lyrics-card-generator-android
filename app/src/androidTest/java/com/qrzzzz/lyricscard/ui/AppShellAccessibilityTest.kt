@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.espresso.IdlingPolicies
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qrzzzz.lyricscard.R
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import com.qrzzzz.lyricscard.data.UserPreferences
 import com.qrzzzz.lyricscard.model.ProjectTemplates
 import com.qrzzzz.lyricscard.renderer.ProjectAssetStore
@@ -133,11 +134,11 @@ class AppShellAccessibilityTest {
                                 )
                                 HarnessScreen.SETTINGS -> SettingsScreen(
                                     state = SettingsUiState(
-                                        preferences = UserPreferences(darkMode = true),
+                                        preferences = UserPreferences(themeMode = AppThemeMode.DARK),
                                         isLoading = false,
                                     ),
                                     onBack = {},
-                                    onDarkMode = {},
+                                    onThemeMode = {},
                                     onDefaultExportScale = {},
                                     onShowSafeArea = {},
                                     onClearExportCache = {},

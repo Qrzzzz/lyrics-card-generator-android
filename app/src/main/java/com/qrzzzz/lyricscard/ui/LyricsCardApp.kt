@@ -129,7 +129,7 @@ fun LyricsCardApp(
             SettingsScreen(
                 state = settingsState,
                 onBack = { navController.popBackStack() },
-                onDarkMode = settingsViewModel::setDarkMode,
+                onThemeMode = settingsViewModel::setThemeMode,
                 onDefaultExportScale = settingsViewModel::setDefaultExportScale,
                 onShowSafeArea = settingsViewModel::setShowSafeArea,
                 onClearExportCache = settingsViewModel::clearExportCache,

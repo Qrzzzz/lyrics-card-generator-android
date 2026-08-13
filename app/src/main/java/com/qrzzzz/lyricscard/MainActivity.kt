@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +20,7 @@ import com.qrzzzz.lyricscard.ui.LyricsCardApp
 import com.qrzzzz.lyricscard.ui.LyricsCardViewModelFactory
 import com.qrzzzz.lyricscard.ui.SettingsViewModel
 import com.qrzzzz.lyricscard.ui.theme.LyricsCardTheme
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -34,7 +36,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val settings by settingsViewModel.uiState.collectAsStateWithLifecycle()
-            val darkTheme = settings.preferences.darkMode
+            val systemDarkTheme = isSystemInDarkTheme()
+            val darkTheme = when (settings.preferences.themeMode) {
+                AppThemeMode.SYSTEM -> systemDarkTheme
+                AppThemeMode.LIGHT -> false
+                AppThemeMode.DARK -> true
+            }
             SideEffect { applyEdgeToEdge(darkTheme) }
             LyricsCardTheme(darkTheme = darkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {

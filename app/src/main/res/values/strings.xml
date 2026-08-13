@@ -247,8 +247,10 @@
     <string name="settings_section_editing">编辑</string>
     <string name="settings_section_storage">存储</string>
     <string name="settings_section_about_diagnostics">关于与诊断</string>
-    <string name="settings_dark_mode">深色模式</string>
-    <string name="settings_dark_mode_description">切换应用界面的浅色与深色外观</string>
+    <string name="settings_theme_description">选择应用界面外观；歌词卡片预览和导出不受影响</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
     <string name="settings_state_on">已开启</string>
     <string name="settings_state_off">已关闭</string>
     <string name="settings_default_export_quality">默认导出质量</string>

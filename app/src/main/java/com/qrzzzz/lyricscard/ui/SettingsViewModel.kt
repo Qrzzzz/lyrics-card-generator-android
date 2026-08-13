@@ -8,6 +8,7 @@ import com.qrzzzz.lyricscard.ExportFiles
 import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.UserPreferencesStore
 import com.qrzzzz.lyricscard.data.UserPreferences
+import com.qrzzzz.lyricscard.data.AppThemeMode
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,8 +74,8 @@ class SettingsViewModel(
         }
     }
 
-    fun setDarkMode(enabled: Boolean) {
-        updatePreference { preferences.setDarkMode(enabled) }
+    fun setThemeMode(mode: AppThemeMode) {
+        updatePreference { preferences.setThemeMode(mode) }
     }
 
     fun setDefaultExportScale(scale: Int) {

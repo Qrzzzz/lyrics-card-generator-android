@@ -13,10 +13,22 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
 data class UserPreferences(
-    val darkMode: Boolean = false,
+    val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val defaultExportScale: Int = 2,
     val showSafeArea: Boolean = true,
 )
+
+enum class AppThemeMode(val persistedValue: Int) {
+    SYSTEM(0),
+    LIGHT(1),
+    DARK(2),
+    ;
+
+    companion object {
+        fun fromPersistedValue(value: Int): AppThemeMode =
+            entries.firstOrNull { it.persistedValue == value } ?: SYSTEM
+    }
+}
 
 private val Context.lyricsCardPreferences by preferencesDataStore(
     name = "lyrics-card-settings",
@@ -32,14 +44,21 @@ class UserPreferencesRepository(context: Context) {
         }
         .map { values ->
             UserPreferences(
-                darkMode = values[DARK_MODE] ?: false,
+                themeMode = values[THEME_MODE]?.let(AppThemeMode::fromPersistedValue)
+                    ?: values[DARK_MODE]?.let { enabled ->
+                        if (enabled) AppThemeMode.DARK else AppThemeMode.LIGHT
+                    }
+                    ?: AppThemeMode.SYSTEM,
                 defaultExportScale = (values[DEFAULT_EXPORT_SCALE] ?: 2).coerceIn(1, 2),
                 showSafeArea = values[SHOW_SAFE_AREA] ?: true,
             )
         }
 
-    suspend fun setDarkMode(enabled: Boolean) {
-        dataStore.edit { it[DARK_MODE] = enabled }
+    suspend fun setThemeMode(mode: AppThemeMode) {
+        dataStore.edit {
+            it[THEME_MODE] = mode.persistedValue
+            it.remove(DARK_MODE)
+        }
     }
 
     suspend fun setDefaultExportScale(scale: Int) {
@@ -53,6 +72,7 @@ class UserPreferencesRepository(context: Context) {
 
     private companion object {
         val DARK_MODE = booleanPreferencesKey("dark_mode")
+        val THEME_MODE = intPreferencesKey("theme_mode")
         val DEFAULT_EXPORT_SCALE = intPreferencesKey("default_export_scale")
         val SHOW_SAFE_AREA = booleanPreferencesKey("show_safe_area")
     }

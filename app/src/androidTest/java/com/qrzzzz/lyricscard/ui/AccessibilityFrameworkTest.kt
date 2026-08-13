@@ -64,7 +64,7 @@ class AccessibilityFrameworkTest {
         waitForText("设置")
         assertPaneTitleDefined()
         assertAtf("settings")
-        compose.onNodeWithText(compose.activity.getString(R.string.settings_dark_mode)).performClick()
+        compose.onNodeWithText(compose.activity.getString(R.string.settings_theme_dark)).performClick()
         compose.onNodeWithText(compose.activity.getString(R.string.settings_default_export_quality)).performClick()
         compose.onNodeWithText(compose.activity.getString(R.string.settings_safe_area)).performClick()
     }

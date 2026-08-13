@@ -4,7 +4,7 @@
 
 **PROVISIONAL / NOT FINAL READY**
 
-源码版本当前为 `1.0.0-beta.1`（`versionCode 10001`），使用测试签名进行公开 Beta 与获授权真机核验。它不是 `1.0.0` 正式版；本文不把本地 build、JVM tests、Beta 冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
+源码版本当前为 `1.0.0`（`versionCode 10002`）正式发布候选。相较已完成真机冒烟的公开 Beta，本次唯一产品变化是应用主题新增“跟随系统”选项；本文仍不把本地 build、JVM tests、Beta 冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
 
 ## 已实现的产品与工程能力
 

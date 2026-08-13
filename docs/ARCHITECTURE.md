@@ -85,6 +85,6 @@ Renderer 先应用/测量 spec，再在 mutex 内生成 PNG。PNG Blob 使用单
 
 Gradle `buildRenderer` 的 inputs 包含 Renderer source、scripts、public assets、schema、manifest 与 lockfile，output 固定在 `app/build/generated/renderer/assets/renderer`。`preBuild` 依赖它，因此 APK/AAB 使用同一次受控的本地 Vite build；generated assets 不写入 `app/src`。Renderer 的 `npm run check` 独立执行 validator consistency、TypeScript、Vitest 和 production build。
 
-`alpha` 与 `production` 是 channel flavors。当前公开 Beta 使用 `productionRelease`：`minSdk 26`、`targetSdk 36`、`versionName 1.0.0-beta.1`、`versionCode 10001`、package `com.qrzzzz.lyricscard`，并保持 R8 minification 与 resource shrinking 开启。Beta 使用测试签名；未来正式版必须使用更高的 `versionCode` 和独立生产签名。
+`alpha` 与 `production` 是 channel flavors。正式版使用 `productionRelease`：`minSdk 26`、`targetSdk 36`、`versionName 1.0.0`、`versionCode 10002`、package `com.qrzzzz.lyricscard`，并保持 R8 minification 与 resource shrinking 开启。正式产物使用独立生产签名；此前公开 Beta 使用测试签名，不能直接升级到正式版。
 
 Production signing 统一从四个 `LYRICS_CARD_*` 环境变量或未跟踪 `release-signing.properties` 读取。四项全部缺失时 productionRelease 保持 unsigned/minified 可验证；只配置一部分会在 configuration 阶段失败；全部配置时只有 `productionRelease` 使用该 signing config，`productionDebug` 仍由 Android Gradle Plugin 的 debug signing config 签名。固定版本的 bundletool 从实际 AAB 提取 manifest，用于核对 package、version 与 SDK。CI 不接收 signing secrets。手动 release-candidate workflow 在临时 runner 目录解码 keystore、构建后验证 APK/AAB 签名与元数据、生成 SHA-256，并在 `always()` cleanup 中删除临时 signing directory；workflow 没有公开发布步骤或仓库写权限。

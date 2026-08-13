@@ -2,7 +2,7 @@
 
 Lyrics Card Generator 是一款 Android 原生歌词卡片制作应用。项目管理、编辑、设置、保存与分享由 Jetpack Compose 实现；卡片预览和 PNG 导出由 APK 内置的 React/CSS 渲染器完成，以保持既有卡片设计和跨端输出合同。
 
-当前源码版本为 `1.0.0-beta.1`（`versionCode 10001`）。它是使用测试签名、面向真机核验的公开 Beta，不是 `1.0.0` 正式版；设备矩阵与独立 Reviewer 的真实状态见 [Release Readiness](docs/RELEASE_READINESS.md)。
+当前源码版本为 `1.0.0`（`versionCode 10002`）。应用主题支持跟随系统、浅色与深色；正式产物通过受保护的 production signing workflow 构建。设备矩阵与验证边界见 [Release Readiness](docs/RELEASE_READINESS.md)。
 
 ## 功能概览
 
@@ -10,7 +10,7 @@ Lyrics Card Generator 是一款 Android 原生歌词卡片制作应用。项目�
 - 按六步流程完成选歌、歌词、布局、字体、视觉和导出设置；
 - 支持手动输入，以及用户主动发起的网易云歌曲搜索、链接解析、歌词与封面导入；
 - 使用 Room 在本地保存项目，支持自动保存、撤销/重做、配置变化和进程重建后的项目恢复；
-- 提供紧凑、中等和展开布局、浅色/深色主题及无障碍语义；
+- 提供紧凑、中等和展开布局、跟随系统/浅色/深色主题及无障碍语义；
 - 生成 1× 或 2× PNG，通过系统文件选择器保存，或通过 Android 分享面板分享；
 - 维护封面引用账本、缩略图、导出缓存和中断后的孤儿文件清理。
 
