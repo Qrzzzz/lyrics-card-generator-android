@@ -1,6 +1,8 @@
 package com.qrzzzz.lyricscard
 
 import java.io.File
+import java.security.MessageDigest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,8 +45,9 @@ class AppShellResourceContractTest {
     }
 
     @Test
-    fun `launcher resources provide adaptive round monochrome and safe-zone glyphs`() {
+    fun `launcher resources use the desktop artwork across adaptive and splash paths`() {
         val foreground = appFile("src/main/res/drawable/ic_launcher_foreground.xml").readText()
+        val launcher = appFile("src/main/res/mipmap-nodpi/ic_launcher.png")
         val adaptive = appFile("src/main/res/mipmap-anydpi-v26/ic_launcher.xml").readText()
         val round = appFile("src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml").readText()
         val themed = appFile("src/main/res/mipmap-anydpi-v33/ic_launcher.xml").readText()
@@ -55,9 +58,17 @@ class AppShellResourceContractTest {
         assertTrue(round.contains("<adaptive-icon"))
         assertTrue(themed.contains("<monochrome"))
         assertTrue(themed.contains("@drawable/ic_launcher_monochrome"))
-        assertTrue(foreground.contains("android:viewportWidth=\"108\""))
-        assertTrue(foreground.contains("M32,22h44"))
-        assertFalse(foreground.contains("M16,10h76"))
+        assertTrue(foreground.contains("<bitmap"))
+        assertTrue(foreground.contains("android:gravity=\"fill\""))
+        assertTrue(foreground.contains("android:src=\"@mipmap/ic_launcher\""))
+        assertEquals(
+            "62a6bea0fb3a820b012c9f0fdc2e9ff747c5738c2f45f3cf3dc766405e7de7c7",
+            launcher.inputStream().use { stream ->
+                MessageDigest.getInstance("SHA-256")
+                    .digest(stream.readBytes())
+                    .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+            },
+        )
     }
 
     @Test

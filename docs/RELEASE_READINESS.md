@@ -4,7 +4,7 @@
 
 **PROVISIONAL / NOT FINAL READY**
 
-源码版本当前为 `1.0.0`（`versionCode 10002`）正式发布候选。相较已完成真机冒烟的公开 Beta，本次唯一产品变化是应用主题新增“跟随系统”选项；本文仍不把本地 build、JVM tests、Beta 冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
+源码版本当前为 `1.0.1`（`versionCode 10003`）正式发布候选。相较已完成真机冒烟的公开 Beta，本次产品变化包括应用主题新增“跟随系统”选项，以及启动器图标与 Windows 桌面版图标对齐；本文仍不把本地 build、JVM tests、Beta 冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
 
 ## 已实现的产品与工程能力
 
@@ -40,7 +40,7 @@
 
 ## External release gate
 
-仓库只包含 signing infrastructure，不包含生产 keystore 或密码。公开 Beta 可以使用明确披露的测试证书签署，但该 APK 不是生产签名产物，不能升级为正式版；没有 production signing secrets 仍会阻止正式 signed APK/AAB 和 `1.0.0` public release。
+仓库只包含 signing infrastructure，不包含生产 keystore 或密码。公开 Beta 可以使用明确披露的测试证书签署，但该 APK 不是生产签名产物，不能升级为正式版；没有 production signing secrets 时，仍会阻止为当前候选生成新的正式 signed APK/AAB。
 
 即使生产 signing secrets 后续可用，仍必须先完成上述 G/真机/Reviewer Gate；手动 workflow 的 signed artifact upload 也不是 GitHub Release 或商店发布授权。
 

@@ -1,14 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Reuses the repository's original lyric-card glyph, constrained to the adaptive safe zone. -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M32,22h44a6,6 0,0 1,6 6v52a6,6 0,0 1,-6 6h-44a6,6 0,0 1,-6 -6v-52a6,6 0,0 1,6 -6z" />
-    <path
-        android:fillColor="#FF6656C8"
-        android:pathData="M35,35h38v6h-38zM35,50h30v6h-30zM35,65h34v6h-34z" />
-</vector>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:gravity="fill"
+    android:src="@mipmap/ic_launcher" />
