@@ -7,7 +7,7 @@
 - [ ] 从干净 worktree 开始，记录完整 40 位 candidate commit SHA；
 - [ ] 确认 candidate 包含所有计划工作流，包括最新 H release-engineering commit；
 - [ ] 确认 `applicationId = com.qrzzzz.lyricscard`；
-- [ ] 确认正式版为 `versionName = 1.0.0`、`versionCode = 10002`，高于所有已发布 Beta；
+- [ ] 确认正式版为 `versionName = 1.0.1`、`versionCode = 10003`，高于所有已发布版本；
 - [ ] 确认 `minSdk = 26`、`targetSdk = 36`、`compileSdk = 36.1`；
 - [ ] `git diff --check` 通过，且没有 keystore、password、base64 secret、APK/AAB 或 build output 被追踪。
 

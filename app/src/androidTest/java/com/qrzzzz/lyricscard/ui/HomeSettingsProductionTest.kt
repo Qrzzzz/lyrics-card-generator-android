@@ -262,7 +262,7 @@ class HomeSettingsProductionTest {
         compose.runOnIdle { assertEquals(1, cacheClears) }
         scrollSettingsTo(hasTestTag(SETTINGS_APP_VERSION_TAG))
         compose.onNodeWithTag(SETTINGS_APP_VERSION_TAG).assertIsDisplayed()
-        compose.onNodeWithText("1.0.0 (10002)").assertIsDisplayed()
+        compose.onNodeWithText("1.0.1 (10003)").assertIsDisplayed()
         scrollSettingsTo(hasTestTag(SETTINGS_WEBVIEW_TAG))
         compose.onNodeWithTag(SETTINGS_WEBVIEW_TAG).assertIsDisplayed()
         compose.onNodeWithText("com.google.android.webview 150.0.0").assertIsDisplayed()
@@ -396,8 +396,8 @@ class HomeSettingsProductionTest {
     )
 
     private fun diagnostics() = DiagnosticsSnapshot(
-        appVersionName = "1.0.0",
-        appVersionCode = 10002,
+        appVersionName = "1.0.1",
+        appVersionCode = 10003,
         rendererVersion = "android-alpha-renderer-1",
         rendererSchemaVersion = 1,
         rendererProtocolVersion = 1,
