@@ -1,39 +1,128 @@
-# Lyrics Card Generator Android
+<div align="center">
 
-Lyrics Card Generator 是一款 Android 原生歌词卡片制作应用。项目管理、编辑、设置、保存与分享由 Jetpack Compose 实现；卡片预览和 PNG 导出由 APK 内置的 React/CSS 渲染器完成，以保持既有卡片设计和跨端输出合同。
+# 🎧 Lyrics Card Generator Android
 
-当前源码版本为 `1.0.1`（`versionCode 10003`）。应用主题支持跟随系统、浅色与深色；正式产物通过受保护的 production signing workflow 构建。设备矩阵与验证边界见 [Release Readiness](docs/RELEASE_READINESS.md)。
+### 在 Android 上制作高质感歌词分享卡片
 
-## 功能概览
+**网易云音乐导入 · 六步卡片编辑 · 离线实时预览 · 高清 PNG 导出**
 
-- 创建空白或示例项目，并在首页管理、复制、重命名和删除最近项目；
-- 按六步流程完成选歌、歌词、布局、字体、视觉和导出设置；
-- 支持手动输入，以及用户主动发起的网易云歌曲搜索、链接解析、歌词与封面导入；
-- 使用 Room 在本地保存项目，支持自动保存、撤销/重做、配置变化和进程重建后的项目恢复；
-- 提供紧凑、中等和展开布局、跟随系统/浅色/深色主题及无障碍语义；
-- 生成 1× 或 2× PNG，通过系统文件选择器保存，或通过 Android 分享面板分享；
-- 维护封面引用账本、缩略图、导出缓存和中断后的孤儿文件清理。
+<p>
+  <strong>语言</strong><br/>
+  <strong>简体中文</strong> ·
+  <a href="./README.en.md">English</a>
+</p>
 
-## Offline Renderer
+<p>
+  <strong>导航</strong><br/>
+  <a href="https://github.com/Qrzzzz/lyrics-card-generator-android/releases/latest">下载最新版</a> ·
+  <a href="#主要功能">主要功能</a> ·
+  <a href="#使用方式">使用方式</a> ·
+  <a href="#本地开发">本地开发</a> ·
+  <a href="https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md">隐私说明</a> ·
+  <a href="./LICENSE">许可证</a>
+</p>
 
-编辑和导出不依赖远程网页。Gradle 将 `renderer/` 构建到 `app/build/generated/renderer/assets/renderer`，应用只从固定的本地 Origin 加载这些资源。Renderer WebView 禁止网络、外部导航、文件访问和内容访问；`INTERNET` 权限仅供 Native 网易云客户端在用户执行搜索、解析或封面导入时发起受限的 HTTPS 请求。
+![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84?logo=android&logoColor=white)
+![Stack](https://img.shields.io/badge/Stack-Kotlin%20%2B%20Compose-7F52FF?logo=kotlin&logoColor=white)
+![Renderer](https://img.shields.io/badge/Renderer-React%20%2B%20CSS-149ECA?logo=react&logoColor=white)
+![Output](https://img.shields.io/badge/Output-PNG%201%C3%97%20%2F%202%C3%97-FF5722)
+[![Release](https://img.shields.io/github/v/release/Qrzzzz/lyrics-card-generator-android)](https://github.com/Qrzzzz/lyrics-card-generator-android/releases/latest)
 
-应用不包含 analytics、tracking、广告或遥测 SDK。项目和导出缓存保存在本机；详细数据与网络行为见 [PRIVACY.md](PRIVACY.md)。
+</div>
 
-## 系统与构建要求
+---
 
-运行要求：
+<details open>
+<summary><strong>✨ 成品参照</strong></summary>
 
-- Android 8.0（API 26）或更高版本；
-- 可用且支持安全消息通道的 Android System WebView。
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top"><sub><b>无翻译 · 中文</b></sub><br/><img src="./docs/readme-assets/cards/zh-CN.single.webp" alt="中文单语歌词卡片成品参照" width="100%" /></td>
+    <td width="50%" align="center" valign="top"><sub><b>有翻译 · 英文原文 + 中文译文</b></sub><br/><img src="./docs/readme-assets/cards/zh-CN.bilingual.webp" alt="英文原文与中文翻译歌词卡片成品参照" width="100%" /></td>
+  </tr>
+</table>
 
-构建要求：
+以上图片由 [Lyrics Card Generator 桌面版](https://github.com/Qrzzzz/lyrics-card-generator) 导出，作为卡片设计与排版效果参照。Android 版内置兼容的 React/CSS Renderer，以保持一致的视觉语言与输出合同。
+
+</details>
+
+## 📦 下载与安装
+
+请前往 [GitHub Releases](https://github.com/Qrzzzz/lyrics-card-generator-android/releases/latest) 下载最新版：
+
+- 普通用户请下载 `.apk` 文件并按系统提示安装；
+- `.aab` 面向应用分发与发布验证，不能直接在手机上安装；
+- 运行需要 Android 8.0（API 26）或更高版本，以及可用的 Android System WebView。
+
+从浏览器侧载 APK 时，Android 可能要求你为当前下载来源临时开启“安装未知应用”权限。安装完成后可以关闭该权限。
+
+<a id="主要功能"></a>
+
+## ✨ 主要功能
+
+### 🎨 卡片编辑与排版
+
+- 按“选歌、歌词、布局、字体、视觉、导出”六步完成卡片制作；
+- 支持歌词原文、翻译、纯音乐文案，以及横版、竖版和自动尺寸布局；
+- 支持思源黑体 / 思源宋体、字号、字距、行高、对齐、文字颜色与边框调整；
+- 支持封面取色、渐变背景、网格密度、平台标识、分享人和生成水印。
+
+### 🎵 歌曲信息与封面
+
+- 支持手动填写歌名、艺人、专辑、歌词与翻译；
+- 支持通过网易云音乐搜索歌曲，导入歌曲信息、歌词和封面；
+- 支持粘贴网易云音乐歌曲链接或分享文本进行解析；
+- 支持通过 Android 系统文件选择器导入本地封面。
+
+### 🗂️ 本地项目管理
+
+- 创建空白或示例项目，并在首页复制、重命名和删除项目；
+- 使用 Room 在本机保存项目，支持自动保存与 50 步撤销 / 重做；
+- 在配置变化或进程重建后按项目恢复编辑状态；
+- 维护封面引用、缩略图与导出缓存，并清理中断后遗留的临时文件。
+
+### 🖼️ 预览、导出与分享
+
+- 从第三步开始按需启动实时预览，后续步骤与导出过程复用同一 Renderer 会话；
+- 使用 APK 内置的本地 React/CSS Renderer，不依赖远程网页；
+- 支持 1× / 2× 高清 PNG 导出；
+- 支持通过系统文件选择器保存，或通过 Android 分享面板发送到其他应用。
+
+### 🌓 Android 体验
+
+- 原生 Jetpack Compose 界面，支持紧凑、中等与展开布局；
+- 支持跟随系统、浅色和深色主题；
+- 仅申请联网权限，不申请广泛存储权限；文件导入与导出均交由 Android 系统选择器处理。
+
+## 🔒 离线使用与隐私
+
+手动编辑、项目管理、卡片预览和 PNG 导出均可离线完成。只有在你主动搜索或解析网易云音乐内容、获取歌词或下载所选封面时，Native 客户端才会发起受限的 HTTPS 请求。
+
+Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容。应用不包含分析、追踪、广告、遥测或崩溃上报 SDK；项目、封面和导出缓存保存在设备本地。完整说明见 [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md)。
+
+<a id="使用方式"></a>
+
+## 🚀 使用方式
+
+1. 新建空白项目，或从示例项目开始。
+2. 搜索网易云音乐、粘贴歌曲链接，或手动填写歌曲信息并选择封面。
+3. 编辑歌词与翻译，选择合适的内容模式。
+4. 调整画布布局、字体方案和视觉样式，并查看实时预览。
+5. 选择 1× 或 2×，导出 PNG。
+6. 将图片保存到指定位置，或直接分享到其他应用。
+
+<a id="本地开发"></a>
+
+## 🛠️ 本地开发
+
+### 环境要求
 
 - JDK 17；
-- Node.js 20 或更高版本（CI 使用 Node.js 24）；
-- Android SDK Platform 36.1 与 Build Tools 36.1.0。
+- Node.js 20 或更高版本；
+- Android SDK Platform 36.1；
+- Android SDK Build Tools 36.1.0。
 
-Windows：
+### Windows
 
 ```powershell
 cd renderer
@@ -41,49 +130,41 @@ npm.cmd ci
 npm.cmd run check
 
 cd ..
-.\gradlew.bat :app:test `
-  :app:lintProductionRelease `
-  :app:assembleAlphaDebug `
-  :app:assembleProductionDebug `
-  :app:assembleProductionRelease `
-  :app:bundleProductionRelease `
-  --no-parallel
+.\gradlew.bat :app:test :app:lintProductionRelease :app:assembleAlphaDebug --no-parallel
 ```
 
-macOS / Linux 使用 `npm` 与 `./gradlew` 执行等价任务。`preBuild` 会自动执行 Renderer 生产构建；正常构建只写入 Gradle build directory，不应修改受版本控制的 Renderer source 或 generated validator。
+### macOS / Linux
 
-GitHub Actions 的 `Android Quality Gate` 覆盖 Renderer 检查、全部 JVM tests、`lintProductionRelease`、Alpha Debug 保留门、Production Debug、R8/minified Production Release APK 与 Production Release AAB。Instrumentation 不在 hosted CI 中伪造为通过，仍属于获授权设备上的 Final Gate。
+```bash
+cd renderer
+npm ci
+npm run check
 
-## Production release candidate
-
-没有生产签名配置时，`assembleProductionRelease` 与 `bundleProductionRelease` 仍可完成 unsigned/minified 本地验证。签名值统一从以下环境变量读取，也可从未跟踪的根目录 `release-signing.properties` 读取：
-
-```text
-LYRICS_CARD_STORE_FILE
-LYRICS_CARD_STORE_PASSWORD
-LYRICS_CARD_KEY_ALIAS
-LYRICS_CARD_KEY_PASSWORD
+cd ..
+./gradlew :app:test :app:lintProductionRelease :app:assembleAlphaDebug --no-parallel
 ```
 
-本地配置格式见 `release-signing.properties.example`。不得提交 keystore、密码、alias secret 或 base64 keystore。
+Gradle 的 `preBuild` 会自动构建 Renderer，并把生成资源写入 Gradle build directory；无需手工复制到 `app/src/main/assets`。
 
-`Production Release Candidate` workflow 只能手动运行，要求完整 40 位 commit SHA、匹配的 production `versionName` 以及受保护的 `production-signing` environment。它只构建并上传已验证签名的 Production Release APK/AAB、`SHA256SUMS`、metadata 和可选 R8 mapping；它没有写仓库权限，也不会创建 tag、GitHub Release 或商店发布。
-
-公开 Beta 使用 `v1.0.0-beta.N` prerelease，并以测试 keystore 签署正式包名 APK。Beta 与未来生产签名不兼容；安装正式版前必须卸载 Beta。Beta 不使用上述 production release workflow，也不得被描述为正式发布候选。
-
-发布前必须完成 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)，并由独立 Final Integration & Release Readiness Reviewer 对同一 commit 和同一组 artifact hash 复核。
-
-## 项目结构
+## 🧩 项目结构
 
 ```text
 app/                         Android Compose 应用与 Android tests
-renderer/                    本地 React/CSS Renderer、合同、tests 与 Golden
-docs/ARCHITECTURE.md         运行时与构建架构
-docs/RELEASE_READINESS.md    当前候选的真实门状态
-docs/internal/               集成与质量门证据
-.github/workflows/           CI 与手动 release-candidate workflow
+renderer/                    本地 React/CSS Renderer、Schema、tests 与 Golden
+docs/                        架构、发布就绪状态与内部验证证据
+.github/workflows/           CI 与 release-candidate workflows
 ```
 
-## License 与 notices
+## 🖥️ 桌面版
 
-项目原创代码、设计、文档与项目资产受根目录 [Source Available License](LICENSE) 约束，版权归属保持为 `Copyright (c) 2026 Qrzzzz. All rights reserved.`。第三方组件继续适用各自许可证；详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。版本变更见 [CHANGELOG.md](CHANGELOG.md)。
+本项目的卡片设计与跨端 Renderer 合同源自 [Lyrics Card Generator](https://github.com/Qrzzzz/lyrics-card-generator)。桌面版面向 Windows，并提供更多音乐平台解析、AI 翻译、PNG / WebP / JPG 导出与 Web Lite；Android 版则围绕原生移动编辑、本地项目管理和系统级保存 / 分享体验构建。
+
+## 🙏 致谢
+
+感谢 [思源黑体](https://github.com/adobe-fonts/source-han-sans) 与 [思源宋体](https://github.com/adobe-fonts/source-han-serif) 提供稳定的中文排版基础，也感谢 AndroidX、Jetpack Compose、React、`html-to-image` 及其维护者。完整第三方组件与许可证见 [THIRD_PARTY_NOTICES.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/THIRD_PARTY_NOTICES.md)。
+
+## 📄 许可证
+
+本项目采用自定义 [Source Available License](./LICENSE)，而不是传统开源许可证。
+
+你可以为个人、非商业、学习和评估目的查看、下载与运行源码，并进行仅限个人使用的私下修改。未经作者书面许可，不得商用、再分发、重新打包、公开发布修改版，或基于本项目制作竞争性产品。第三方组件继续适用各自许可证。
