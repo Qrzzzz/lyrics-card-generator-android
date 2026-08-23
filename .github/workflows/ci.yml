@@ -72,6 +72,12 @@ jobs:
           .\scripts\test-production-release-contract.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Verify final device-gate evidence contract
+        shell: pwsh
+        run: |
+          .\scripts\test-device-gate-evidence.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run Android JVM, lint, debug, R8, APK, and AAB gates
         shell: pwsh
         run: |

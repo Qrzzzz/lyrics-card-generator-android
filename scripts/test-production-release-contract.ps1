@@ -131,8 +131,23 @@ if ($policy.certificateSha256 -notmatch '^[0-9a-f]{64}$' -or
     throw 'The production certificate continuity policy must contain an auditable release trust anchor.'
 }
 foreach ($metadataField in @('schemaVersion = 2', 'qualityGateRunId', 'workflowRef', 'workflowSha', 'artifactDigests', 'certificateSha256', 'previousReleaseApkSha256')) {
-    if (-not $workflow.Contains($metadataField, [StringComparison]::Ordinal)) {
+    if ($workflow.IndexOf($metadataField, [StringComparison]::Ordinal) -lt 0) {
         throw "Release metadata contract is missing field: $metadataField"
+    }
+}
+foreach ($readinessLiteral in @("status = 'PROVISIONAL'", "deviceGate = 'NOT RUN'", 'finalReady = $false', "finalGateWorkflow = '.github/workflows/final-device-gate.yml'")) {
+    if ($workflow.IndexOf($readinessLiteral, [StringComparison]::Ordinal) -lt 0) {
+        throw "Signed candidate metadata must remain non-final: $readinessLiteral"
+    }
+}
+$finalGateWorkflow = Read-RepositoryText '.github/workflows/final-device-gate.yml'
+if ($finalGateWorkflow -match 'production-signing|\$\{\{\s*secrets\.' -or
+    $finalGateWorkflow -match '(?m)^\s+(id-token|attestations):\s*write\s*$') {
+    throw 'The post-signing final device gate must not access signing authority or write attestations.'
+}
+foreach ($requiredFinalGateBinding in @('candidate_run_id', 'evidence_run_id', 'gh attestation verify', 'validate-device-gate-evidence.ps1')) {
+    if ($finalGateWorkflow.IndexOf($requiredFinalGateBinding, [StringComparison]::Ordinal) -lt 0) {
+        throw "The post-signing final gate is missing binding: $requiredFinalGateBinding"
     }
 }
 

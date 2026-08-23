@@ -3,3 +3,6 @@ renderer/public/fonts/LICENSE.txt text eol=lf
 renderer/renderer-manifest.json text eol=lf
 renderer/schema/*.json text eol=lf
 renderer/src/generated/*.ts text eol=lf
+tests/fixtures/device-gate/pass/*.json text eol=lf
+tests/fixtures/device-gate/pass/logs/* text eol=lf
+tests/fixtures/device-gate/pass/payloads/*.fixture -text

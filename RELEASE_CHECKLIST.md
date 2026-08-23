@@ -78,6 +78,26 @@ GitHub Actions 的 `Android Quality Gate` 必须在同一 candidate 上通过。
 
 当前小米设备不得在没有新授权时被触碰。API 30 blocker 未通过前，不得将 API 33/36 的旧 binary 结果套用到最终 candidate。
 
+### 4.1 Machine-enforced final device evidence
+
+`Production Release Candidate` 是两阶段流程的第一阶段：它可以构建、签名并 attestation 同一候选 APK/AAB，但 `release-metadata.json` 必须固定写入 `PROVISIONAL`、`deviceGate = NOT RUN`、`finalReady = false`。该 artifact 不是 `FINAL READY`，不得仅因签名、host gate 或 provenance 通过而发布。
+
+设备运行完成后，将 `device-gate-evidence.json`、精确 test APK 和每个 gate 的 instrumentation/manual 与 logcat 日志作为受控 Actions artifact 上传；不要把测试 fixture 或 evidence 模板当作真实证据。随后手动运行独立 `Final Device Gate` workflow，并精确提供 signed candidate run/artifact 与 evidence run/artifact：
+
+- [ ] evidence 满足 `config/device-gate-evidence.schema.json`，且 `testFixture = false`、顶层 `status = READY`；
+- [ ] `scripts/validate-device-gate-evidence.ps1` 将 source commit、candidate run、Quality Gate run、正式 APK/AAB、test APK、package/version/certificate 与实际下载 bytes 逐项绑定；
+- [ ] API 26/30/33/36 与获授权真机环境各自记录 WebView、system image/build fingerprint、RAM、设备 ID hash 及 host/device APK hash；
+- [ ] 16 个必需 gate 全部为单次 `PASS`，包括 API 30 serif measure/spec 1×→2×、20×/内存、recovery/ATF、4 GB 2×、TalkBack、200% font、30 分钟耐久和真机 save/share；
+- [ ] 每个 gate 的日志文件存在且 SHA-256 一致；任何缺项、旧 source、错误 artifact/log SHA、`NOT RUN`、`BLOCKED`、`FAIL` 或 attempts≠1 都必须拒绝；
+- [ ] 后置 workflow 不读取 production-signing environment/Secrets，不重新签名或重建 candidate，并对候选全部 publishable assets 重跑 GitHub attestation 验证；
+- [ ] GitHub API 证明 candidate run 与 evidence run 均来自本仓库、精确 source SHA、`main`、`completed/success`、允许的 workflow path/event；JSON producer run id/attempt/path/event 与 API 完全一致；
+- [ ] `.github/workflows/capture-device-gate-evidence.yml` producer 已由主任务在获授权设备阶段实现并成功上传真实 test APK/logs；当前 producer 缺失时保持 fail closed，不以任意 run-id/artifact-name 替代；
+- [ ] test APK 的实际 `aapt2` package/version/instrumentation target 与 `apksigner` certificate 通过；当前仅有的 `productionDebugAndroidTest` 不得冒充 target 为正式 `com.qrzzzz.lyricscard` 的 release device evidence；
+- [ ] `final-device-gate` environment 已配置 required reviewer；Reviewer 理解 attestation 只覆盖 #10 candidate assets，device evidence/final verdict 的信任来自 producer identity、API/validator 绑定与人工复核，并非已有的 GitHub artifact attestation；
+- [ ] `Final Device Gate` job 成功并产出 `status = FINAL READY` 的 verdict artifact；由人工批准确认其 run IDs、artifact names、source commit 与拟发布值完全相同。
+
+当前仓库没有 v1.0.1 的真实 `device-gate-evidence.json`，所以该门应 fail closed；`tests/fixtures/device-gate/pass` 只能用于 validator 正例测试。
+
 ## 5. Signing gate
 
 本地签名使用未跟踪 `release-signing.properties` 或以下环境变量：
@@ -130,6 +150,7 @@ CI 的 `production-signing` environment 另外保存 `LYRICS_CARD_KEYSTORE_BASE6
 `Production Release Candidate` workflow 只上传受限 Actions artifact，不创建 tag 或公开 Release。
 
 - [ ] 用户在所有 Final Gates 后另行明确授权 publication；
+- [ ] 同一 candidate 的独立 `Final Device Gate` workflow 为 success，且下载的 verdict 为 `FINAL READY`；缺失、失败或只存在 fixture 时立即 STOP；
 - [ ] 授权版本、commit、APK/AAB hash 与 release notes 完全一致；
 - [ ] 发布动作只复用已验签、已 attested 的 candidate bytes，不得重新构建；发布后对每个公开 asset 重跑 attestation 与 checksum 验证；
 - [ ] 只有在上述条件成立后，才可执行 push/tag/GitHub Release/store publication。

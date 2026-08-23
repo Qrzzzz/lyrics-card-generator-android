@@ -21,6 +21,8 @@ release-signing.properties
 *.keystore
 *.apk
 *.aab
+# Controlled final-device-run output; fixtures remain under tests/fixtures.
+/device-gate-evidence/
 
 # OS
 .DS_Store

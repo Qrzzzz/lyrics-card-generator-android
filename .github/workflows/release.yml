@@ -368,6 +368,12 @@ jobs:
               previousRelease = $signingPolicy.lastVerifiedRelease.releaseTag
               previousReleaseApkSha256 = $signingPolicy.lastVerifiedRelease.apkSha256
             }
+            readiness = [ordered]@{
+              status = 'PROVISIONAL'
+              deviceGate = 'NOT RUN'
+              finalReady = $false
+              finalGateWorkflow = '.github/workflows/final-device-gate.yml'
+            }
             artifactDigests = $artifactDigests
           } | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $assetDirectory.FullName 'release-metadata.json') -Encoding utf8
 

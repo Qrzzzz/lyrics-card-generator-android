@@ -42,6 +42,12 @@
 
 随后生成的 `SHA256SUMS` 覆盖 APK、AAB、可选 mapping 与 metadata。`signed-candidate` job 在删除临时 keystore 后，以只授予该 job 的 `id-token: write`、`attestations: write` 对 `release-assets/*` 生成 GitHub build provenance；因此 APK、AAB、mapping、metadata 与 checksums 都是 attestation subjects。普通 CI/PR 没有这些写权限或 production Secrets。
 
+该 signed candidate 仍不是最终设备结论。metadata 明确写入 `PROVISIONAL / device NOT RUN / finalReady=false`；独立 `Final Device Gate` workflow 在后置阶段以 `actions: read`、`attestations: read`、`contents: read` 下载同一 candidate artifact 和受控 device-evidence artifact，重新验证每个 candidate subject 的 provenance，再将实际 APK/AAB/test APK、日志和完整设备矩阵交给 `scripts/validate-device-gate-evidence.ps1`。后置 job 不进入 `production-signing`、不读取 Secrets、不重建或重签产物。真实 evidence 缺失或任一 gate 非 PASS 时不会产生 `FINAL READY` verdict。
+
+`Final Device Gate` 还通过 GitHub API 将 candidate run 锁定到本仓库、精确 source SHA、`main`、成功的 `workflow_dispatch` 与 `.github/workflows/release.yml`，并将 evidence run 同样锁定到未来受控 producer `.github/workflows/capture-device-gate-evidence.yml`；JSON 内的 producer run id/attempt/path/event 必须与 API 结果一致。当前仓库尚未实现或运行该获授权设备 capture producer，本提交也没有设备权限，因此这里仅完成 consumer/validator 与 fail-closed 合同；producer、真实 test APK/logs 上传和 `final-device-gate` environment reviewer 配置仍待主任务设备阶段回填。
+
+`gh attestation verify` 的证明对象仅是 #10 signed candidate 中的 APK/AAB/mapping/metadata/checksums，不把 device logs、test APK 或最终 verdict 自动升级为 GitHub build provenance。最终 verdict 的信任来自：允许的 producer workflow identity、GitHub API 的 same-repo/same-SHA/success 绑定、证据文件与真实 bytes/log hashes 的 validator、`final-device-gate` environment 人工 reviewer，以及独立发布者对 run/artifact IDs 的复核。若需要让 device evidence 或 verdict 也具备 cryptographic attestation，应作为后续独立权限设计；不得在本门中复用 signing secrets 或声称已有该属性。
+
 候选下载后，对每个拟发布文件执行（`<candidate>` 必须替换为冻结的完整 SHA）：
 
 ```powershell
