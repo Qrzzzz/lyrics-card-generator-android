@@ -15,7 +15,7 @@
 - session/generation/latest-wins、串行 export、cancel、timeout 与 renderer-process recovery；
 - 30-case Renderer Golden regression 数据集和合同/安全/JVM/instrumentation test source；
 - production R8/resource shrinking、APK/AAB 构建路径；
-- 正式 CI、手动 signed production candidate workflow、统一 local/CI signing configuration；
+- 正式 CI、受控 main-tip/same-SHA Quality Gate 的 signed production candidate workflow、生产证书连续性与同 job build provenance；
 - 正式 README、architecture、changelog、privacy、release checklist 与 third-party notices。
 
 以上项目不再作为“未来 Alpha TODO”。
@@ -43,6 +43,8 @@
 仓库只包含 signing infrastructure，不包含生产 keystore 或密码。公开 Beta 可以使用明确披露的测试证书签署，但该 APK 不是生产签名产物，不能升级为正式版；没有 production signing secrets 时，仍会阻止为当前候选生成新的正式 signed APK/AAB。
 
 即使生产 signing secrets 后续可用，仍必须先完成上述 G/真机/Reviewer Gate；手动 workflow 的 signed artifact upload 也不是 GitHub Release 或商店发布授权。
+
+仓库内已定义 source/provenance 合同，但 `main` ruleset/branch protection、`production-signing` required reviewers/deployment policy 与管理员 bypass 只能在 GitHub Settings 配置。在管理员完成并独立核验这些外部前置条件之前，P1 发布供应链边界仍为 **PROVISIONAL**；本地合同测试也不能替代真实 GitHub-hosted attestation。详见 `docs/RELEASE_PROVENANCE.md`。
 
 ## 证据来源
 

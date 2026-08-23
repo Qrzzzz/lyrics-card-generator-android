@@ -66,6 +66,12 @@ jobs:
           .\scripts\test-dependency-security-contract.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Verify production release policy contract
+        shell: pwsh
+        run: |
+          .\scripts\test-production-release-contract.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run Android JVM, lint, debug, R8, APK, and AAB gates
         shell: pwsh
         run: |

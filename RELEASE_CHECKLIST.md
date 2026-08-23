@@ -7,11 +7,21 @@
 - [ ] 从干净 worktree 开始，记录完整 40 位 candidate commit SHA；
 - [ ] 确认 candidate 包含所有计划工作流，包括最新 H release-engineering commit；
 - [ ] 确认 `applicationId = com.qrzzzz.lyricscard`；
-- [ ] 确认正式版为 `versionName = 1.0.1`、`versionCode = 10003`，高于所有已发布版本；
+- [ ] 确认输入的 `versionName` 与源码一致，`versionCode` 高于所有已发布版本；
 - [ ] 确认 `minSdk = 26`、`targetSdk = 36`、`compileSdk = 36.1`；
 - [ ] `git diff --check` 通过，且没有 keystore、password、base64 secret、APK/AAB 或 build output 被追踪。
 
 版本、package、候选 SHA 或 release notes 任一不一致时立即 STOP，不生成或发布另一个版本。
+
+### 1.1 Protected production source boundary
+
+- [ ] 仅从 `refs/heads/main` dispatch；输入 candidate、`github.sha`、`github.workflow_sha` 与刚 fetch 的 `origin/main` tip 必须是同一个完整 SHA；
+- [ ] 对该 SHA 存在 `Android Quality Gate` 的 `push` / `main` / `completed` / `success` run；PR run、其他分支、其他仓库或其他 SHA 的绿灯均无效；
+- [ ] `v<version>` remote tag 与同 tag GitHub Release 均不存在；在 environment 批准后、生成 provenance 前再次检查，任一冲突都 STOP；
+- [ ] `scripts/test-production-release-contract.ps1` 通过，其中负例必须继续拒绝未合并/过期 main、错误 SHA/版本、重复 tag/Release 与缺少 exact gate；
+- [ ] 无 Secrets 的 `authorize-candidate` job 先通过，之后才允许受 `production-signing` environment 保护的签名 job 启动。
+
+仓库内 source policy 采用“dispatch 时的精确 `origin/main` tip”，而不是“任意已合并祖先”。详细合同见 `docs/RELEASE_PROVENANCE.md`。
 
 ## 2. Renderer gate
 
@@ -87,6 +97,7 @@ CI 的 `production-signing` environment 另外保存 `LYRICS_CARD_KEYSTORE_BASE6
 - [ ] release workflow 临时目录位于 `RUNNER_TEMP`，cleanup step 在 `always()` 中执行；
 - [ ] `apksigner verify` 通过 signed Production APK；
 - [ ] `jarsigner -verify` 通过 signed Production AAB；
+- [ ] APK 与 AAB 的证书 SHA-256 均等于 `config/production-signing-policy.json` 的审计锚点；不得以本次签名产物的自我声明替代连续性来源；
 - [ ] release asset set 不含 Alpha、Debug 或 unsigned artifact。
 
 生产 secret 缺失时，只允许报告 infrastructure complete + unsigned/minified verification；public release 保持 blocked。
@@ -98,8 +109,10 @@ CI 的 `production-signing` environment 另外保存 `LYRICS_CARD_KEYSTORE_BASE6
 - [ ] 固定 bundletool 从实际 AAB 提取的 manifest 中，package/version/minSdk/targetSdk 与第 1 节完全一致；
 - [ ] AAB 签名通过，且 source/variant 与 APK 相同；
 - [ ] R8 `mapping.txt` 与 candidate 一同保存；
-- [ ] `release-metadata.json` 记录 commit/package/version/SDK/signing；
+- [ ] `release-metadata.json` 记录 source repository/commit/ref/workflow/workflow SHA/run、exact Quality Gate run、package/version/SDK、APK/AAB/mapping digest 与生产证书 SHA-256；
 - [ ] `SHA256SUMS` 覆盖 staged assets，并逐项重新计算一致；
+- [ ] 同一 `signed-candidate` job 对 `release-assets/*`（APK、AAB、mapping、metadata、`SHA256SUMS`）生成 GitHub build provenance；
+- [ ] 下载 Actions artifact 后，对每个拟公开文件执行 `gh attestation verify --repo Qrzzzz/lyrics-card-generator-android --signer-workflow Qrzzzz/lyrics-card-generator-android/.github/workflows/release.yml --source-ref refs/heads/main --source-digest <candidate>`；
 - [ ] 最终报告记录 artifact 绝对路径、bytes、SHA-256 与 signed/unsigned 状态。
 
 ## 7. Documentation and independent review
@@ -118,6 +131,17 @@ CI 的 `production-signing` environment 另外保存 `LYRICS_CARD_KEYSTORE_BASE6
 
 - [ ] 用户在所有 Final Gates 后另行明确授权 publication；
 - [ ] 授权版本、commit、APK/AAB hash 与 release notes 完全一致；
+- [ ] 发布动作只复用已验签、已 attested 的 candidate bytes，不得重新构建；发布后对每个公开 asset 重跑 attestation 与 checksum 验证；
 - [ ] 只有在上述条件成立后，才可执行 push/tag/GitHub Release/store publication。
 
 没有单独 publication 授权时必须停止在 candidate artifact，不能自动公开发布。
+
+## 9. GitHub Settings external prerequisites
+
+以下控制不在 Git commit 能力范围内；由仓库管理员在 GitHub Settings 配置并由发布者独立截图/API 核验前，Issue #10 的 P1 不能声称完全关闭：
+
+- [ ] `main` ruleset/branch protection 要求 `Android Quality Gate`，禁止 force push/删除，并限制直接写入；
+- [ ] `production-signing` environment 配置 required reviewers，deployment branch/tag policy 仅允许受控 `main` 发布路径；
+- [ ] 明确并收紧管理员 bypass（ruleset 与 environment 的 bypass/自审策略均需记录）；
+- [ ] Actions policy 保持最小 `GITHUB_TOKEN` 默认权限；PR/普通 CI 不获得 production Secrets、`id-token: write`、`attestations: write` 或 contents write；
+- [ ] Dependency Graph、Dependabot 与 Dependency Review 的外部设置继续满足 `docs/DEPENDENCY_SECURITY.md`，不得因 #10 回退 #11。

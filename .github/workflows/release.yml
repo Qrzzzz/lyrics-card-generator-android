@@ -4,35 +4,106 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: Full 40-character candidate commit SHA
+        description: Exact origin/main tip (full 40-character commit SHA)
         required: true
         type: string
       version:
-        description: Expected production versionName
+        description: Unpublished production versionName (x.y.z)
         required: true
-        default: '1.0.1'
         type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: production-candidate-${{ inputs.commit }}
   cancel-in-progress: false
 
 jobs:
-  signed-candidate:
+  authorize-candidate:
     runs-on: windows-2022
-    timeout-minutes: 45
-    environment: production-signing
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      source_commit: ${{ steps.policy.outputs.source_commit }}
+      quality_gate_run_id: ${{ steps.policy.outputs.quality_gate_run_id }}
+      quality_gate_run_url: ${{ steps.policy.outputs.quality_gate_run_url }}
 
     steps:
-      - name: Check out immutable candidate
+      - name: Check out immutable candidate without signing access
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.commit }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Authorize exact main source and Quality Gate
+        id: policy
+        shell: pwsh
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRIGGER_SHA: ${{ github.sha }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          .\scripts\verify-production-candidate.ps1 `
+            -CandidateCommit $env:CANDIDATE_COMMIT `
+            -ExpectedVersion $env:EXPECTED_VERSION `
+            -Repository $env:REPOSITORY `
+            -WorkflowEvent $env:WORKFLOW_EVENT `
+            -WorkflowRef $env:WORKFLOW_REF `
+            -WorkflowSha $env:WORKFLOW_SHA `
+            -TriggerSha $env:TRIGGER_SHA `
+            -GitHubToken $env:GH_TOKEN
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  signed-candidate:
+    needs: authorize-candidate
+    runs-on: windows-2022
+    timeout-minutes: 45
+    environment: production-signing
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out authorized immutable candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.authorize-candidate.outputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Recheck source boundary after environment approval
+        id: approved-policy
+        shell: pwsh
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRIGGER_SHA: ${{ github.sha }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          .\scripts\verify-production-candidate.ps1 `
+            -CandidateCommit $env:CANDIDATE_COMMIT `
+            -ExpectedVersion $env:EXPECTED_VERSION `
+            -Repository $env:REPOSITORY `
+            -WorkflowEvent $env:WORKFLOW_EVENT `
+            -WorkflowRef $env:WORKFLOW_REF `
+            -WorkflowSha $env:WORKFLOW_SHA `
+            -TriggerSha $env:TRIGGER_SHA `
+            -GitHubToken $env:GH_TOKEN
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify candidate identity and source version
         shell: pwsh
@@ -41,8 +112,6 @@ jobs:
           EXPECTED_VERSION: ${{ inputs.version }}
         run: |
           $requested = $env:CANDIDATE_COMMIT.ToLowerInvariant()
-          if ($requested -notmatch '^[0-9a-f]{40}$') { throw 'commit must be a full 40-character SHA.' }
-          if ($env:EXPECTED_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'version must be a production x.y.z version.' }
           $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
           if ($actual -ne $requested) { throw "Checked out '$actual', expected '$requested'." }
           $gradle = Get-Content 'app/build.gradle.kts' -Raw
@@ -150,6 +219,15 @@ jobs:
         env:
           CANDIDATE_COMMIT: ${{ inputs.commit }}
           EXPECTED_VERSION: ${{ inputs.version }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_REF: ${{ github.ref }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          QUALITY_GATE_RUN_ID: ${{ needs.authorize-candidate.outputs.quality_gate_run_id }}
+          QUALITY_GATE_RUN_URL: ${{ needs.authorize-candidate.outputs.quality_gate_run_url }}
         run: |
           $gradle = Get-Content 'app/build.gradle.kts' -Raw
           $versionName = [regex]::Match($gradle, 'versionName\s*=\s*"([^"]+)"').Groups[1].Value
@@ -158,6 +236,18 @@ jobs:
           $minSdk = [regex]::Match($gradle, 'minSdk\s*=\s*(\d+)').Groups[1].Value
           $targetSdk = [regex]::Match($gradle, 'targetSdk\s*=\s*(\d+)').Groups[1].Value
           if ($versionName -ne $env:EXPECTED_VERSION) { throw 'The built source version changed during the job.' }
+
+          $policyPath = 'config/production-signing-policy.json'
+          $signingPolicy = Get-Content -LiteralPath $policyPath -Raw | ConvertFrom-Json
+          if ($signingPolicy.repository -ne $env:SOURCE_REPOSITORY -or $signingPolicy.package -ne $applicationId) {
+            throw 'Production signing policy does not match this repository/package.'
+          }
+          $expectedCertificate = $signingPolicy.certificateSha256.ToLowerInvariant()
+          if ($expectedCertificate -notmatch '^[0-9a-f]{64}$') { throw 'Production certificate policy is malformed.' }
+          if ($signingPolicy.lastVerifiedRelease.certificateSha256.ToLowerInvariant() -ne $expectedCertificate -or
+              $signingPolicy.lastVerifiedRelease.apkSha256 -notmatch '^[0-9a-f]{64}$') {
+            throw 'The last verified public release does not preserve the production certificate trust anchor.'
+          }
 
           $apkCandidates = @(Get-ChildItem 'app/build/outputs/apk/production/release' -Filter '*.apk' -File | Where-Object { $_.Name -notmatch '(?i)unsigned|alpha|debug' })
           $bundleCandidates = @(Get-ChildItem 'app/build/outputs/bundle/productionRelease' -Filter '*.aab' -File | Where-Object { $_.Name -notmatch '(?i)alpha|debug' })
@@ -198,24 +288,37 @@ jobs:
           $androidNamespace = 'http://schemas.android.com/apk/res/android'
           $bundleRoot = $bundleManifest.manifest
           $bundleUsesSdk = $bundleRoot.'uses-sdk'
-          $bundlePackage = $bundleRoot.GetAttribute('package')
-          $bundleVersionCode = $bundleRoot.GetAttribute('versionCode', $androidNamespace)
-          $bundleVersionName = $bundleRoot.GetAttribute('versionName', $androidNamespace)
-          $bundleMinSdk = $bundleUsesSdk.GetAttribute('minSdkVersion', $androidNamespace)
-          $bundleTargetSdk = $bundleUsesSdk.GetAttribute('targetSdkVersion', $androidNamespace)
-          if ($bundlePackage -ne $applicationId -or
-              $bundleVersionCode -ne $versionCode -or
-              $bundleVersionName -ne $versionName -or
-              $bundleMinSdk -ne $minSdk -or
-              $bundleTargetSdk -ne $targetSdk) {
+          if ($bundleRoot.GetAttribute('package') -ne $applicationId -or
+              $bundleRoot.GetAttribute('versionCode', $androidNamespace) -ne $versionCode -or
+              $bundleRoot.GetAttribute('versionName', $androidNamespace) -ne $versionName -or
+              $bundleUsesSdk.GetAttribute('minSdkVersion', $androidNamespace) -ne $minSdk -or
+              $bundleUsesSdk.GetAttribute('targetSdkVersion', $androidNamespace) -ne $targetSdk) {
             throw 'Production AAB metadata does not match the Gradle release configuration.'
           }
 
-          & $apkSigner verify --verbose $apk.FullName | Out-Null
+          $apkVerification = (& $apkSigner verify --verbose --print-certs $apk.FullName 2>&1 | Out-String)
           if ($LASTEXITCODE -ne 0) { throw 'Production APK signature verification failed.' }
+          $apkCertificateMatch = [regex]::Match($apkVerification, '(?im)^Signer #1 certificate SHA-256 digest:\s*([0-9a-f:]+)\s*$')
+          if (-not $apkCertificateMatch.Success) { throw 'Could not read the production APK certificate SHA-256.' }
+          $apkCertificate = ($apkCertificateMatch.Groups[1].Value -replace ':', '').ToLowerInvariant()
+
           $bundleVerification = (& jarsigner -verify $bundle.FullName 2>&1 | Out-String)
           if ($LASTEXITCODE -ne 0 -or $bundleVerification -notmatch '(?i)jar verified' -or $bundleVerification -match '(?i)jar is unsigned') {
             throw 'Production AAB signature verification failed.'
+          }
+          $bundleCertificatePem = (& keytool -printcert -rfc -jarfile $bundle.FullName 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the production AAB signing certificate.' }
+          $pemMatch = [regex]::Match($bundleCertificatePem, '(?s)-----BEGIN CERTIFICATE-----\s*(.*?)\s*-----END CERTIFICATE-----')
+          if (-not $pemMatch.Success) { throw 'The production AAB certificate was not emitted as PEM.' }
+          $certificateBytes = [Convert]::FromBase64String(($pemMatch.Groups[1].Value -replace '\s', ''))
+          $sha256 = [Security.Cryptography.SHA256]::Create()
+          try {
+            $bundleCertificate = ([BitConverter]::ToString($sha256.ComputeHash($certificateBytes)) -replace '-', '').ToLowerInvariant()
+          } finally {
+            $sha256.Dispose()
+          }
+          if ($apkCertificate -ne $expectedCertificate -or $bundleCertificate -ne $expectedCertificate) {
+            throw 'APK/AAB certificate continuity does not match the audited production trust anchor.'
           }
 
           $assetDirectory = New-Item -ItemType Directory -Path 'release-assets' -Force
@@ -228,17 +331,45 @@ jobs:
             Copy-Item -LiteralPath $mapping -Destination (Join-Path $assetDirectory.FullName 'mapping.txt')
           }
 
+          $artifactDigests = @(
+            Get-ChildItem -LiteralPath $assetDirectory.FullName -File | Sort-Object Name | ForEach-Object {
+              [ordered]@{
+                name = $_.Name
+                bytes = $_.Length
+                sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              }
+            }
+          )
           [ordered]@{
-            commit = $env:CANDIDATE_COMMIT.ToLowerInvariant()
+            schemaVersion = 2
+            source = [ordered]@{
+              repository = $env:SOURCE_REPOSITORY
+              commit = $env:CANDIDATE_COMMIT.ToLowerInvariant()
+              ref = $env:SOURCE_REF
+              workflow = $env:WORKFLOW_NAME
+              workflowRef = $env:WORKFLOW_REF
+              workflowSha = $env:WORKFLOW_SHA.ToLowerInvariant()
+              runId = [long]$env:WORKFLOW_RUN_ID
+              runAttempt = [int]$env:WORKFLOW_RUN_ATTEMPT
+              qualityGateRunId = [long]$env:QUALITY_GATE_RUN_ID
+              qualityGateRunUrl = $env:QUALITY_GATE_RUN_URL
+            }
             package = $applicationId
             versionName = $versionName
             versionCode = [int]$versionCode
             minSdk = [int]$minSdk
             targetSdk = [int]$targetSdk
-            apk = $apkName
-            aab = $bundleName
-            signing = 'verified'
-          } | ConvertTo-Json | Set-Content (Join-Path $assetDirectory.FullName 'release-metadata.json') -Encoding utf8
+            signing = [ordered]@{
+              status = 'verified'
+              certificateSha256 = $expectedCertificate
+              continuityPolicy = $policyPath
+              trustAnchorRelease = $signingPolicy.trustAnchor.releaseTag
+              trustAnchorApkSha256 = $signingPolicy.trustAnchor.apkSha256
+              previousRelease = $signingPolicy.lastVerifiedRelease.releaseTag
+              previousReleaseApkSha256 = $signingPolicy.lastVerifiedRelease.apkSha256
+            }
+            artifactDigests = $artifactDigests
+          } | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $assetDirectory.FullName 'release-metadata.json') -Encoding utf8
 
           $files = @(Get-ChildItem -LiteralPath $assetDirectory.FullName -File | Sort-Object Name)
           if ($files.Name -match '(?i)alpha|debug|unsigned') { throw 'A non-production artifact entered the release asset set.' }
@@ -269,6 +400,36 @@ jobs:
           if (Test-Path -LiteralPath $signingDirectory) {
             Remove-Item -LiteralPath $signingDirectory -Recurse -Force
           }
+
+      - name: Reconfirm boundary before provenance
+        if: ${{ success() }}
+        shell: pwsh
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TRIGGER_SHA: ${{ github.sha }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          .\scripts\verify-production-candidate.ps1 `
+            -CandidateCommit $env:CANDIDATE_COMMIT `
+            -ExpectedVersion $env:EXPECTED_VERSION `
+            -Repository $env:REPOSITORY `
+            -WorkflowEvent $env:WORKFLOW_EVENT `
+            -WorkflowRef $env:WORKFLOW_REF `
+            -WorkflowSha $env:WORKFLOW_SHA `
+            -TriggerSha $env:TRIGGER_SHA `
+            -GitHubToken $env:GH_TOKEN
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Attest all publishable release assets
+        if: ${{ success() }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release-assets/*
 
       - name: Upload signed production candidate
         if: ${{ success() }}
