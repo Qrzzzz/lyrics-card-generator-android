@@ -18,10 +18,12 @@
 ```powershell
 cd renderer
 npm.cmd ci
+npm.cmd run audit:security
 npm.cmd run check
 ```
 
 - [ ] lockfile 安装成功；
+- [ ] `audit:security` 在本次执行时间点没有 high/critical npm advisory；结果绑定 candidate commit，不扩写为永久或全生态无漏洞；
 - [ ] validator consistency、TypeScript、Vitest 与 Vite production build 全部通过；
 - [ ] 需要 pixel evidence 的最终 Reviewer 运行既有 30-case Golden gate；
 - [ ] Renderer output、安全/session/latest-wins/cancel/recovery invariants 未改变或已有独立 diff justification。
@@ -102,7 +104,8 @@ CI 的 `production-signing` environment 另外保存 `LYRICS_CARD_KEYSTORE_BASE6
 
 ## 7. Documentation and independent review
 
-- [ ] README、ARCHITECTURE、CHANGELOG、PRIVACY、THIRD_PARTY_NOTICES 与本清单匹配最终代码；
+- [ ] README、ARCHITECTURE、CHANGELOG、PRIVACY、THIRD_PARTY_NOTICES、`docs/DEPENDENCY_SECURITY.md` 与本清单匹配最终代码；
+- [ ] 同一 candidate 的 Dependency Review 已通过，Dependency Graph/Dependabot alerts/security updates 的仓库设置已按 `docs/DEPENDENCY_SECURITY.md` 独立核验，且开放 high/critical 告警为 0 或逐项有 owner/时限；不得把 default-branch snapshot 或 Dependency Review 扩写为每个 PR 的 Gradle resolved delta 已被完整审查；
 - [ ] 网络、日志、permission、exported components 与 Manifest/source 一致；
 - [ ] `docs/RELEASE_READINESS.md` 和 internal gate evidence 没有 READY 误报；
 - [ ] 独立 release/signing/CI Reviewer 阅读 Source of Truth、actual diff 并运行针对性验证；
