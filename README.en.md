@@ -98,7 +98,7 @@ When sideloading the APK from a browser, Android may ask you to temporarily allo
 
 Manual editing, project management, card preview, and PNG export all work offline. The native client makes restricted HTTPS requests only when you explicitly search or parse NetEase Cloud Music content, fetch lyrics, or download selected cover art.
 
-The renderer WebView blocks network access, external navigation, file access, and mixed content. The app includes no analytics, tracking, advertising, telemetry, or crash-reporting SDK. Projects, cover art, and export cache remain on the device. See [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md) for the complete data and network behavior.
+The renderer WebView blocks network access, external navigation, file access, and mixed content. The app includes no analytics, tracking, advertising, telemetry, or crash-reporting SDK. Projects, cover art, and export cache remain on the device and are explicitly excluded from Android cloud backup and device transfer. See [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md) for the complete data and network behavior.
 
 <a id="how-to-use"></a>
 

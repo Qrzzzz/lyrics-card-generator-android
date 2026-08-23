@@ -12,7 +12,17 @@
 - 导出 PNG cache；
 - 主题、默认导出倍率和安全区显示偏好。
 
-项目数据库、封面和 cache 位于应用私有存储。Manifest 设置 `android:allowBackup="false"`，应用不把这些数据同步到本项目提供的账号或云服务。删除项目会更新封面引用账本并清理不再引用的私有资源；应用启动时也会 reconciliation orphan/partial files。
+项目数据库、封面和 cache 位于应用私有存储。删除项目会更新封面引用账本并清理不再引用的私有资源；应用启动时也会 reconciliation orphan/partial files。
+
+### 备份与换机策略 / Backup and device-transfer policy
+
+本项目选择不通过 Android 的系统备份或换机通道迁移应用私有数据。Manifest 保留 `android:allowBackup="false"`；Android 11 及以下的 `fullBackupContent` 规则，以及 Android 12 及以上分别针对 cloud backup 与 device-to-device transfer 的 `dataExtractionRules`，都会排除全部可备份域。因此 Room 项目与封面引用、DataStore 偏好、私有封面、缩略图、导出 cache 及临时文件不会由这些通道自动迁移。cache 与 no-backup 目录本来也由 Android 排除，规则同时拒绝其他文件、数据库、偏好、外部应用目录和 device-protected 域，避免以后新增数据被默认纳入。
+
+这项策略不影响应用升级时保留原设备上的数据，也不控制用户通过系统文件选择器另存或已分享出去的图片。Android 12 及以上部分厂商会在 D2D 中忽略单独的 `allowBackup=false`，因此这里使用显式规则定义边界；这不是对已经发生数据泄漏或损坏的声明。规则依据 Android 官方的 [Auto Backup](https://developer.android.com/identity/data/autobackup) 与 [Android 12 backup/restore changes](https://developer.android.com/about/versions/12/behavior-changes-12) 文档。
+
+This project does not migrate app-private data through Android system backup or device-transfer channels. The manifest keeps `android:allowBackup="false"`; the Android 11-and-lower `fullBackupContent` rules and the Android 12+ `dataExtractionRules` both exclude every eligible domain for cloud backup and device-to-device transfer. Room projects and cover references, DataStore preferences, private cover art, thumbnails, export cache, and temporary files therefore are not moved automatically through those channels. Android already excludes cache and no-backup directories, while these rules also deny file, database, preference, app-external, and device-protected domains so future data is not included by default.
+
+This policy does not remove data during an in-place app update and does not control images that a user saved through the system picker or shared with another app. Some Android 12+ device makers ignore `allowBackup=false` for D2D by itself, so explicit extraction rules define the intended boundary. This does not claim that a leak or corruption has occurred.
 
 通过系统文件选择器保存到应用外部位置的 PNG，以及已经分享给其他应用的文件副本，不再由本应用控制。卸载应用不会删除用户另存到外部位置的图片。
 

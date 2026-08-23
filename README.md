@@ -98,7 +98,7 @@
 
 手动编辑、项目管理、卡片预览和 PNG 导出均可离线完成。只有在你主动搜索或解析网易云音乐内容、获取歌词或下载所选封面时，Native 客户端才会发起受限的 HTTPS 请求。
 
-Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容。应用不包含分析、追踪、广告、遥测或崩溃上报 SDK；项目、封面和导出缓存保存在设备本地。完整说明见 [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md)。
+Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容。应用不包含分析、追踪、广告、遥测或崩溃上报 SDK；项目、封面和导出缓存保存在设备本地，并明确排除在 Android 云备份和换机迁移之外。完整说明见 [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md)。
 
 <a id="使用方式"></a>
 
