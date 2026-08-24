@@ -1,6 +1,6 @@
 # Privacy
 
-本文说明当前 Lyrics Card Generator Android 源码的数据、存储与网络行为。
+本文说明当前 Lyric Card Generator 源码的数据、存储与网络行为。
 
 ## 本地数据
 

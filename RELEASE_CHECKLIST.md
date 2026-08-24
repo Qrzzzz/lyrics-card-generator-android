@@ -96,7 +96,7 @@ GitHub Actions 的 `Android Quality Gate` 必须在同一 candidate 上通过。
 - [ ] `final-device-gate` environment 已配置 required reviewer；Reviewer 理解 attestation 只覆盖 #10 candidate assets，device evidence/final verdict 的信任来自 producer identity、API/validator 绑定与人工复核，并非已有的 GitHub artifact attestation；
 - [ ] `Final Device Gate` job 成功并产出 `status = FINAL READY` 的 verdict artifact；由人工批准确认其 run IDs、artifact names、source commit 与拟发布值完全相同。
 
-当前仓库没有 v1.0.1 的真实 `device-gate-evidence.json`，所以该门应 fail closed；`tests/fixtures/device-gate/pass` 只能用于 validator 正例测试。
+当前仓库没有 v1.1.0 的完整受控 `device-gate-evidence.json`，所以该门应 fail closed；`tests/fixtures/device-gate/pass` 只能用于 validator 正例测试。
 
 ## 5. Signing gate
 

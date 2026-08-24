@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">歌词卡片</string>
+    <string name="app_name" translatable="false">Lyric Card Generator</string>
 
     <string name="common_back">返回</string>
     <string name="common_undo">撤销</string>
@@ -28,7 +28,7 @@
     <string name="brand_generated_watermark" translatable="false">Generated watermark</string>
     <string name="file_png" translatable="false">PNG</string>
     <string name="file_extension_png" translatable="false">.png</string>
-    <string name="home_title">歌词卡片</string>
+    <string name="home_title" translatable="false">Lyric Card Generator</string>
     <string name="home_settings_description">设置</string>
     <string name="home_create_heading">新建项目</string>
     <string name="home_recent_projects">最近项目</string>

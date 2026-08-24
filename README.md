@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎧 Lyrics Card Generator Android
+# Lyric Card Generator
 
 ### 在 Android 上制作高质感歌词分享卡片
 

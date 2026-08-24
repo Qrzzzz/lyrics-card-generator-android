@@ -4,7 +4,7 @@
 
 **PROVISIONAL / NOT FINAL READY**
 
-源码版本当前为 `1.0.1`（`versionCode 10003`）正式发布候选。相较已完成真机冒烟的公开 Beta，本次产品变化包括应用主题新增“跟随系统”选项，以及启动器图标与 Windows 桌面版图标对齐；本文仍不把本地 build、JVM tests、Beta 冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
+源码版本当前为 `1.1.0`（`versionCode 10100`）正式发布候选。相较 1.0.1，本次集中修复中文路径构建、备份与 D2D 策略、依赖安全、正式签名 provenance 与最终真机证据门；本文仍不把本地 build、JVM tests、单台真机冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
 
 ## 已实现的产品与工程能力
 
@@ -44,7 +44,7 @@
 
 即使生产 signing secrets 后续可用，仍必须先完成上述 G/真机/Reviewer Gate；手动 workflow 的 signed artifact upload 也不是 GitHub Release 或商店发布授权。
 
-`Production Release Candidate` 与最终设备结论采用诚实的两阶段语义：第一阶段的 signed/attested artifact metadata 永远是 `PROVISIONAL / device NOT RUN / finalReady=false`；获授权设备运行另行产生受控 evidence artifact，随后由不接触 signing secrets 的 `Final Device Gate` workflow 下载同一 candidate bytes、test APK 与日志，运行 `scripts/validate-device-gate-evidence.ps1`。只有后置 job success 才能产生 `FINAL READY` verdict。当前没有 v1.0.1 的真实设备 evidence，因此该后置门按设计 fail closed；`tests/fixtures` 中的正例不能用于发布。
+`Production Release Candidate` 与最终设备结论采用诚实的两阶段语义：第一阶段的 signed/attested artifact metadata 永远是 `PROVISIONAL / device NOT RUN / finalReady=false`；获授权设备运行另行产生受控 evidence artifact，随后由不接触 signing secrets 的 `Final Device Gate` workflow 下载同一 candidate bytes、test APK 与日志，运行 `scripts/validate-device-gate-evidence.ps1`。只有后置 job success 才能产生 `FINAL READY` verdict。当前没有 v1.1.0 的完整受控设备 evidence，因此该后置门按设计 fail closed；`tests/fixtures` 中的正例不能用于发布。
 
 当前还没有 `.github/workflows/capture-device-gate-evidence.yml` 的真实 producer/run；它必须由主任务在获设备授权后另行实现或提供，并满足 same-repository、same-source-SHA、main、workflow_dispatch、completed/success 与受保护人工批准要求。consumer 已硬编码拒绝其他 workflow identity，故在 producer 和 `final-device-gate` environment reviewer 均未配置前，流程不会产生可发布的 FINAL READY。
 

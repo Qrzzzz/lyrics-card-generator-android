@@ -45,9 +45,10 @@ class AppShellResourceContractTest {
     }
 
     @Test
-    fun `launcher resources use the desktop artwork across adaptive and splash paths`() {
+    fun `launcher resources use the canonical repository artwork across every color path`() {
         val foreground = appFile("src/main/res/drawable/ic_launcher_foreground.xml").readText()
         val launcher = appFile("src/main/res/mipmap-nodpi/ic_launcher.png")
+        val canonical = repoFile("assets/branding/lyric-card-generator-icon.png")
         val adaptive = appFile("src/main/res/mipmap-anydpi-v26/ic_launcher.xml").readText()
         val round = appFile("src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml").readText()
         val themed = appFile("src/main/res/mipmap-anydpi-v33/ic_launcher.xml").readText()
@@ -56,19 +57,29 @@ class AppShellResourceContractTest {
         assertTrue(adaptive.contains("@color/launcher_background"))
         assertTrue(adaptive.contains("@drawable/ic_launcher_foreground"))
         assertTrue(round.contains("<adaptive-icon"))
-        assertTrue(themed.contains("<monochrome"))
-        assertTrue(themed.contains("@drawable/ic_launcher_monochrome"))
+        assertFalse(themed.contains("<monochrome"))
         assertTrue(foreground.contains("<bitmap"))
         assertTrue(foreground.contains("android:gravity=\"fill\""))
         assertTrue(foreground.contains("android:src=\"@mipmap/ic_launcher\""))
+        assertTrue(canonical.readBytes().contentEquals(launcher.readBytes()))
         assertEquals(
-            "62a6bea0fb3a820b012c9f0fdc2e9ff747c5738c2f45f3cf3dc766405e7de7c7",
+            "b3e613afa7695f7fe9b2b72ab8681647d37dc3a210292bce48b80d96b9daaf58",
             launcher.inputStream().use { stream ->
                 MessageDigest.getInstance("SHA-256")
                     .digest(stream.readBytes())
                     .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
             },
         )
+    }
+
+    @Test
+    fun `brand name is shared by every build variant and the home shell`() {
+        val strings = appFile("src/main/res/values/strings.xml").readText()
+        val build = appFile("build.gradle.kts").readText()
+
+        assertTrue(strings.contains("<string name=\"app_name\" translatable=\"false\">Lyric Card Generator</string>"))
+        assertTrue(strings.contains("<string name=\"home_title\" translatable=\"false\">Lyric Card Generator</string>"))
+        assertFalse(build.contains("resValue(\"string\", \"app_name\""))
     }
 
     @Test
