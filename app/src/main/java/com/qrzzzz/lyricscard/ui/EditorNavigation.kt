@@ -84,18 +84,20 @@ internal fun EditorPanelContent(
     )
     Column(modifier = modifier.windowInsetsPadding(effectiveImeWindowInsets)) {
         Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            EditorStepNavigation(
-                selectedStep = selectedStep,
-                onSelectedStep = actions.onSelectedStep,
-            )
-            Text(
-                stringResource(EditorStep.entries[selectedStep].description),
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                    .semantics { heading() },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            if (!imeInsets.isVisible) {
+                EditorStepNavigation(
+                    selectedStep = selectedStep,
+                    onSelectedStep = actions.onSelectedStep,
+                )
+                Text(
+                    stringResource(EditorStep.entries[selectedStep].description),
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .semantics { heading() },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             EditorStepContent(
                 state = state,
                 actions = actions,

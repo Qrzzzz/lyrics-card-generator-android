@@ -194,6 +194,7 @@ class AppShellAccessibilityTest {
         val startedAt = SystemClock.elapsedRealtime()
         logImeStage(startedAt, "test-start")
         val originalOrientation = compose.activity.requestedOrientation
+        val originalConfigurationOrientation = compose.activity.resources.configuration.orientation
         logImeStage(startedAt, "orientation-request-begin")
         compose.activityRule.scenario.onActivity { activity ->
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -363,6 +364,18 @@ class AppShellAccessibilityTest {
             )
             logImeStage(startedAt, "assertions-complete")
         } finally {
+            logImeStage(startedAt, "final-ime-dismiss-begin")
+            compose.activityRule.scenario.onActivity { activity ->
+                Log.i(
+                    IME_TAG,
+                    "stage=ime-dismiss screen=final requested=${activity.dismissImeFromCurrentFocus()}",
+                )
+            }
+            waitForCondition(IME_TIMEOUT_MS) {
+                currentPlatformImeBottom() == 0 && effectiveImeBottomPx.intValue == 0
+            }
+            SystemClock.sleep(IME_SETTLE_MS)
+            logImeStage(startedAt, "final-ime-dismiss-complete")
             logImeStage(startedAt, "controller-close-begin")
             compose.runOnIdle { controller.close() }
             logImeStage(startedAt, "controller-close-complete")
@@ -370,6 +383,8 @@ class AppShellAccessibilityTest {
             compose.activityRule.scenario.onActivity { activity ->
                 activity.requestedOrientation = originalOrientation
             }
+            waitForOrientation(originalConfigurationOrientation)
+            SystemClock.sleep(IME_SETTLE_MS)
             logImeStage(startedAt, "orientation-restore-complete")
         }
         logImeStage(startedAt, "test-complete")
@@ -441,7 +456,15 @@ class AppShellAccessibilityTest {
         value: String,
         effectiveImeBottomPx: Int,
     ) {
-        val bounds = compose.onNodeWithText(value).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val interaction = compose.onNodeWithText(value)
+        val bounds = interaction.fetchSemanticsNode().boundsInRoot
+        val viewport = compose.onNodeWithTag(VIEWPORT_TAG).fetchSemanticsNode().boundsInRoot
+        Log.i(
+            IME_TAG,
+            "stage=ime-pre-display-bounds label=$value viewport=$viewport action=$bounds " +
+                "effectiveImeBottomPx=$effectiveImeBottomPx visibleBottom=${viewport.bottom - effectiveImeBottomPx}",
+        )
+        interaction.assertIsDisplayed()
         assertBoundsInsideImeVisibleViewport(value, bounds, effectiveImeBottomPx)
     }
 
@@ -511,6 +534,7 @@ class AppShellAccessibilityTest {
         const val ORIENTATION_TIMEOUT_MS = 5_000L
         const val POLL_FRAME_MILLIS = 100L
         const val ESPRESSO_TIMEOUT_MS = 20_000L
+        const val IME_SETTLE_MS = 500L
         const val MIN_TOUCH_TARGET_DP = 48f
         const val IME_TAG = "LCG_IME"
     }
