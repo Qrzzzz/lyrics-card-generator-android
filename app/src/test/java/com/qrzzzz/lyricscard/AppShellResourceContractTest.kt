@@ -48,6 +48,7 @@ class AppShellResourceContractTest {
     fun `launcher resources use the canonical repository artwork across every color path`() {
         val foreground = appFile("src/main/res/drawable/ic_launcher_foreground.xml").readText()
         val launcher = appFile("src/main/res/mipmap-nodpi/ic_launcher.png")
+        val foregroundArtwork = appFile("src/main/res/mipmap-nodpi/lyric_card_generator_icon.png")
         val canonical = repoFile("assets/branding/lyric-card-generator-icon.png")
         val adaptive = appFile("src/main/res/mipmap-anydpi-v26/ic_launcher.xml").readText()
         val round = appFile("src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml").readText()
@@ -60,8 +61,9 @@ class AppShellResourceContractTest {
         assertFalse(themed.contains("<monochrome"))
         assertTrue(foreground.contains("<bitmap"))
         assertTrue(foreground.contains("android:gravity=\"fill\""))
-        assertTrue(foreground.contains("android:src=\"@mipmap/ic_launcher\""))
+        assertTrue(foreground.contains("android:src=\"@mipmap/lyric_card_generator_icon\""))
         assertTrue(canonical.readBytes().contentEquals(launcher.readBytes()))
+        assertTrue(canonical.readBytes().contentEquals(foregroundArtwork.readBytes()))
         assertEquals(
             "b3e613afa7695f7fe9b2b72ab8681647d37dc3a210292bce48b80d96b9daaf58",
             launcher.inputStream().use { stream ->

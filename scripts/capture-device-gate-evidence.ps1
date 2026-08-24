@@ -173,16 +173,42 @@ function Invoke-Instrumentation(
     $logcatRelative = "logs/$LogStem-logcat.txt"
     $instrumentationPath = Join-Path $outputRootPath ($instrumentationRelative -replace '/', '\')
     $logcatPath = Join-Path $outputRootPath ($logcatRelative -replace '/', '\')
+    $logcatErrorPath = "$logcatPath.stderr"
     $startedAt = [datetimeoffset]::UtcNow
-    $null = Invoke-Adb $Serial @('logcat', '-c')
+    $logcatProcess = Start-Process -FilePath $adb `
+        -ArgumentList @('-s', $Serial, 'logcat', '-v', 'threadtime', '-T', '1') `
+        -RedirectStandardOutput $logcatPath `
+        -RedirectStandardError $logcatErrorPath `
+        -PassThru `
+        -WindowStyle Hidden
+    Start-Sleep -Milliseconds 750
+    if ($logcatProcess.HasExited) {
+        $logcatError = if (Test-Path -LiteralPath $logcatErrorPath) { Get-Content -LiteralPath $logcatErrorPath -Raw } else { '' }
+        throw "Streaming logcat exited before instrumentation on ${Serial}: $logcatError"
+    }
     $arguments = @('shell', 'am', 'instrument', '-w', '-r')
     if (-not [string]::IsNullOrWhiteSpace($Selector)) { $arguments += @('-e', 'class', $Selector) }
     $arguments += 'com.qrzzzz.lyricscard.test/androidx.test.runner.AndroidJUnitRunner'
-    $instrumentationOutput = (& $adb -s $Serial @arguments 2>&1 | Out-String)
-    $instrumentationExit = $LASTEXITCODE
+    try {
+        $instrumentationOutput = (& $adb -s $Serial @arguments 2>&1 | Out-String)
+        $instrumentationExit = $LASTEXITCODE
+    } finally {
+        if (-not $logcatProcess.HasExited) {
+            Stop-Process -Id $logcatProcess.Id
+            $null = $logcatProcess.WaitForExit(5000)
+        }
+        if (Test-Path -LiteralPath $logcatErrorPath) {
+            $logcatError = Get-Content -LiteralPath $logcatErrorPath -Raw
+            if (-not [string]::IsNullOrWhiteSpace($logcatError)) {
+                [IO.File]::AppendAllText($logcatPath, "`n[adb logcat stderr]`n$logcatError", [Text.UTF8Encoding]::new($false))
+            }
+            Remove-Item -LiteralPath $logcatErrorPath -Force
+        }
+    }
     [IO.File]::WriteAllText($instrumentationPath, $instrumentationOutput, [Text.UTF8Encoding]::new($false))
-    $logcatOutput = (& $adb -s $Serial logcat -d -v threadtime 2>&1 | Out-String)
-    [IO.File]::WriteAllText($logcatPath, $logcatOutput, [Text.UTF8Encoding]::new($false))
+    if (-not (Test-Path -LiteralPath $logcatPath -PathType Leaf) -or (Get-Item -LiteralPath $logcatPath).Length -eq 0) {
+        throw "Streaming logcat produced no evidence for ${Serial}."
+    }
     $completedAt = [datetimeoffset]::UtcNow
     if ($instrumentationExit -ne 0 -or $instrumentationOutput -notmatch '(?m)^OK \(' -or $instrumentationOutput -match '(?m)^FAILURES!!!') {
         throw "Instrumentation failed on $Serial selector='$Selector'. See $instrumentationPath"

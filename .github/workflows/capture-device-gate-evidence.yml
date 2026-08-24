@@ -33,7 +33,7 @@ concurrency:
 jobs:
   capture-device-evidence:
     runs-on: [self-hosted, Windows, X64, lcg-device-gate]
-    timeout-minutes: 90
+    timeout-minutes: 150
     environment: final-device-gate
     permissions:
       actions: read
