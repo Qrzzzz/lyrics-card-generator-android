@@ -261,14 +261,15 @@ function Assert-TestApkInspection {
         [Parameter(Mandatory = $true)][string] $CertificateOutput
     )
 
-    $packageMatch = [regex]::Match($Badging, "(?m)^package: name='([^']+)' versionCode='([^']+)' versionName='([^']*)'")
+    $packageMatch = [regex]::Match($Badging, "(?m)^package: name='([^']+)' versionCode='([^']*)' versionName='([^']*)'")
     $instrumentationMatch = [regex]::Match($Badging, "(?m)^instrumentation: name='([^']+)' targetPackage='([^']+)'\s*$")
     if (-not $packageMatch.Success -or -not $instrumentationMatch.Success) {
         throw 'Could not read package/version/instrumentation target from the test APK.'
     }
     $testApk = $Evidence.candidate.testApk
+    $inspectedVersionCode = if ([string]::IsNullOrEmpty($packageMatch.Groups[2].Value)) { 0 } else { [int]$packageMatch.Groups[2].Value }
     if ($packageMatch.Groups[1].Value -ne $testApk.package -or
-        $packageMatch.Groups[2].Value -ne ([string]$testApk.versionCode) -or
+        $inspectedVersionCode -ne ([int]$testApk.versionCode) -or
         $packageMatch.Groups[3].Value -ne $testApk.versionName -or
         $instrumentationMatch.Groups[2].Value -ne $testApk.targetPackage) {
         throw 'Test APK package/version/targetPackage does not match device evidence.'

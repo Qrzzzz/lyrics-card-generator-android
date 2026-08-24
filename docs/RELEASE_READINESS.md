@@ -46,9 +46,9 @@
 
 `Production Release Candidate` 与最终设备结论采用诚实的两阶段语义：第一阶段的 signed/attested artifact metadata 永远是 `PROVISIONAL / device NOT RUN / finalReady=false`；获授权设备运行另行产生受控 evidence artifact，随后由不接触 signing secrets 的 `Final Device Gate` workflow 下载同一 candidate bytes、test APK 与日志，运行 `scripts/validate-device-gate-evidence.ps1`。只有后置 job success 才能产生 `FINAL READY` verdict。当前没有 v1.1.0 的完整受控设备 evidence，因此该后置门按设计 fail closed；`tests/fixtures` 中的正例不能用于发布。
 
-当前还没有 `.github/workflows/capture-device-gate-evidence.yml` 的真实 producer/run；它必须由主任务在获设备授权后另行实现或提供，并满足 same-repository、same-source-SHA、main、workflow_dispatch、completed/success 与受保护人工批准要求。consumer 已硬编码拒绝其他 workflow identity，故在 producer 和 `final-device-gate` environment reviewer 均未配置前，流程不会产生可发布的 FINAL READY。
+仓库已实现 `.github/workflows/capture-device-gate-evidence.yml` 受控 producer；它要求带 `lcg-device-gate` 标签的 Windows 自托管 Runner、精确 main SHA、同一 signed candidate 和获授权实体设备，并运行完整 API 26/30/33/36 + physical 矩阵。当前仍没有 v1.1.0 的成功 producer run，因此在真实 evidence artifact 与 `final-device-gate` environment 审批完成前，流程不会产生可发布的 FINAL READY。
 
-当前 Gradle task graph 只提供 `productionDebugAndroidTest`，没有可直接运行的 `productionReleaseAndroidTest`；因此历史/现有 Debug test APK 不能冒充正式签名 APK 的 instrumentation 证据。主任务的 capture producer 还必须先提供一个实际以 `com.qrzzzz.lyricscard` 为 target、可由 host `aapt2`/`apksigner` 验证 package/version/certificate 的受控 test APK，或明确补齐等价的 release-target 测试构建链。本提交不为绕过该缺口而接受 Debug target。
+Gradle 的受控设备路径固定使用 `productionReleaseAndroidTest`，test APK 必须由 host `aapt2`/`apksigner` 验证 package、version、目标 `com.qrzzzz.lyricscard` 与证书，并与同一 signed production candidate 一起进入设备矩阵。历史或现有 Debug test APK 不能冒充正式签名 APK 的 instrumentation 证据。
 
 仓库内已定义 source/provenance 合同，但 `main` ruleset/branch protection、`production-signing` required reviewers/deployment policy 与管理员 bypass 只能在 GitHub Settings 配置。在管理员完成并独立核验这些外部前置条件之前，P1 发布供应链边界仍为 **PROVISIONAL**；本地合同测试也不能替代真实 GitHub-hosted attestation。详见 `docs/RELEASE_PROVENANCE.md`。
 

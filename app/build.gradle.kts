@@ -61,6 +61,7 @@ android {
         versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testProguardFiles("test-proguard-rules.pro")
         vectorDrawables.useSupportLibrary = true
         buildConfigField("int", "RENDERER_SCHEMA_VERSION", "1")
         buildConfigField("String", "RENDERER_VERSION", "\"android-alpha-renderer-1\"")
@@ -126,6 +127,7 @@ android {
     }
 
     testOptions {
+        testBuildType = "release"
         unitTests.isIncludeAndroidResources = true
     }
 

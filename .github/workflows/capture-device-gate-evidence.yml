@@ -1,0 +1,150 @@
+name: Capture Device Gate Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact main commit used by the production candidate
+        required: true
+        type: string
+      candidate_run_id:
+        description: Production Release Candidate workflow run ID
+        required: true
+        type: string
+      candidate_artifact_name:
+        description: Exact production candidate artifact name
+        required: true
+        type: string
+      physical_device_serial:
+        description: Authorized adb serial attached to the controlled runner
+        required: true
+        type: string
+      authorization_reference:
+        description: Human authorization reference for the physical device run
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: capture-device-gate-${{ inputs.source_commit }}
+  cancel-in-progress: false
+
+jobs:
+  capture-device-evidence:
+    runs-on: [self-hosted, Windows, X64, lcg-device-gate]
+    timeout-minutes: 90
+    environment: final-device-gate
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out exact authorized main candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.source_commit }}
+          persist-credentials: false
+
+      - name: Validate immutable capture inputs
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          TRIGGER_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+        run: |
+          if ($env:SOURCE_COMMIT -cnotmatch '^[0-9a-f]{40}$') { throw 'source_commit must be a full lowercase SHA.' }
+          if ($env:CANDIDATE_RUN_ID -notmatch '^[1-9][0-9]*$') { throw 'candidate_run_id must be a positive integer.' }
+          if ($env:CANDIDATE_ARTIFACT_NAME -notmatch '^production-candidate-[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$') { throw 'candidate_artifact_name is invalid.' }
+          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($actual -cne $env:SOURCE_COMMIT -or $env:TRIGGER_SHA -cne $env:SOURCE_COMMIT -or
+              $env:WORKFLOW_SHA -cne $env:SOURCE_COMMIT -or $env:WORKFLOW_REF -ne 'refs/heads/main' -or
+              $env:WORKFLOW_EVENT -ne 'workflow_dispatch') {
+            throw 'Device capture must use the exact workflow and source on refs/heads/main.'
+          }
+
+      - name: Download attested signed candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.candidate_artifact_name }}
+          path: device-gate-input/candidate
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Build production-release test APK on controlled runner
+        shell: pwsh
+        run: |
+          foreach ($key in 'LYRICS_CARD_STORE_FILE','LYRICS_CARD_STORE_PASSWORD','LYRICS_CARD_KEY_ALIAS','LYRICS_CARD_KEY_PASSWORD') {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($key))) { throw "Controlled runner signing value is missing: $key" }
+          }
+          .\gradlew.bat :app:assembleProductionReleaseAndroidTest --no-parallel --no-daemon --stacktrace --console=plain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Capture authorized emulator and physical-device matrix
+        id: capture
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          PHYSICAL_DEVICE_SERIAL: ${{ inputs.physical_device_serial }}
+          AUTHORIZATION_REFERENCE: ${{ inputs.authorization_reference }}
+          EVIDENCE_RUN_ID: ${{ github.run_id }}
+          EVIDENCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          $artifactName = "final-device-evidence-$($env:SOURCE_COMMIT.Substring(0, 12))"
+          "artifact_name=$artifactName" >> $env:GITHUB_OUTPUT
+          .\scripts\capture-device-gate-evidence.ps1 `
+            -CandidateRoot 'device-gate-input/candidate' `
+            -TestApkPath 'app/build/outputs/apk/androidTest/production/release/app-production-release-androidTest.apk' `
+            -OutputRoot 'device-gate-output' `
+            -SourceCommit $env:SOURCE_COMMIT `
+            -CandidateRunId ([long]$env:CANDIDATE_RUN_ID) `
+            -CandidateArtifactName $env:CANDIDATE_ARTIFACT_NAME `
+            -EvidenceRunId ([long]$env:EVIDENCE_RUN_ID) `
+            -EvidenceRunAttempt ([int]$env:EVIDENCE_RUN_ATTEMPT) `
+            -EvidenceArtifactName $artifactName `
+            -PhysicalDeviceSerial $env:PHYSICAL_DEVICE_SERIAL `
+            -AuthorizationReference $env:AUTHORIZATION_REFERENCE `
+            -AndroidSdkRoot $env:ANDROID_HOME `
+            -AvdRoot (Join-Path $env:RUNNER_TEMP "lcg-avd-$env:EVIDENCE_RUN_ID")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Validate captured evidence before upload
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          EVIDENCE_RUN_ID: ${{ github.run_id }}
+          EVIDENCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          $metadata = Get-Content -LiteralPath 'device-gate-input/candidate/release-metadata.json' -Raw | ConvertFrom-Json
+          $artifactName = "final-device-evidence-$($env:SOURCE_COMMIT.Substring(0, 12))"
+          .\scripts\validate-device-gate-evidence.ps1 `
+            -EvidencePath 'device-gate-output/device-gate-evidence.json' `
+            -ReleaseMetadataPath 'device-gate-input/candidate/release-metadata.json' `
+            -ProductionApkPath "device-gate-input/candidate/lyrics-card-generator-android-$($metadata.versionName).apk" `
+            -ProductionAabPath "device-gate-input/candidate/lyrics-card-generator-android-$($metadata.versionName).aab" `
+            -TestApkPath 'device-gate-output/app-production-release-androidTest.apk' `
+            -ExpectedRepository $env:GITHUB_REPOSITORY `
+            -ExpectedSourceCommit $env:SOURCE_COMMIT `
+            -ExpectedEvidenceRunId ([long]$env:EVIDENCE_RUN_ID) `
+            -ExpectedEvidenceRunAttempt ([int]$env:EVIDENCE_RUN_ATTEMPT) `
+            -ExpectedEvidenceWorkflowPath '.github/workflows/capture-device-gate-evidence.yml' `
+            -ExpectedEvidenceWorkflowEvent 'workflow_dispatch' `
+            -ExpectedEvidenceArtifactName $artifactName `
+            -Aapt2Path (Join-Path $env:ANDROID_HOME 'build-tools\36.1.0\aapt2.exe') `
+            -ApkSignerPath (Join-Path $env:ANDROID_HOME 'build-tools\36.1.0\apksigner.bat')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload controlled device evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ steps.capture.outputs.artifact_name }}
+          if-no-files-found: error
+          retention-days: 90
+          path: device-gate-output/**

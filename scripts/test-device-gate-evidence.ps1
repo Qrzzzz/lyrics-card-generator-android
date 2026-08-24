@@ -155,6 +155,12 @@ foreach ($inspectionCase in @(
     }
 }
 
+$blankVersionBadging = $fixtureBadging.Replace("versionCode='20000'", "versionCode=''").Replace("versionName='2.0.0'", "versionName=''")
+$blankVersionEvidence = Read-Fixture
+$blankVersionEvidence.candidate.testApk.versionCode = 0
+$blankVersionEvidence.candidate.testApk.versionName = ''
+Assert-TestApkInspection -Evidence $blankVersionEvidence -Badging $blankVersionBadging -CertificateOutput $fixtureCertificate
+
 function New-ValidWorkflowRun {
     return [pscustomobject]@{
         id = 2002
@@ -209,8 +215,16 @@ foreach ($literal in @('actions/download-artifact@', 'gh attestation verify', 'v
 foreach ($literal in @('actions/runs/$RunId', '.github/workflows/capture-device-gate-evidence.yml', 'Assert-DeviceGateWorkflowRun', 'run_attempt', 'environment: final-device-gate', 'aapt2.exe', 'apksigner.bat')) {
     if ($finalWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Final device-gate workflow is missing producer/API/APK binding: $literal" }
 }
-if (Test-Path -LiteralPath (Join-Path $repositoryRoot '.github\workflows\capture-device-gate-evidence.yml')) {
-    throw 'This host-only task must not claim or add an authorized device capture producer.'
+$captureWorkflowPath = Join-Path $repositoryRoot '.github\workflows\capture-device-gate-evidence.yml'
+if (-not (Test-Path -LiteralPath $captureWorkflowPath -PathType Leaf)) {
+    throw 'The authorized device capture producer is missing.'
+}
+$captureWorkflow = [IO.File]::ReadAllText($captureWorkflowPath)
+foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'assembleProductionReleaseAndroidTest', 'actions/download-artifact@', 'actions/upload-artifact@')) {
+    if ($captureWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Capture workflow is missing controlled producer binding: $literal" }
+}
+if ($captureWorkflow -match '\$\{\{\s*secrets\.' -or $captureWorkflow -match '(?m)^\s+(id-token|attestations):\s*write\s*$') {
+    throw 'The capture producer must not read GitHub signing secrets or write attestations.'
 }
 foreach ($literal in @('Final Device Gate', 'device-gate-evidence.json', 'FINAL READY')) {
     if ($checklist.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Release checklist is missing final device-gate enforcement: $literal" }
@@ -222,6 +236,7 @@ foreach ($literal in @('consumer/validator', 'capture-device-gate-evidence.yml',
 
 foreach ($scriptPath in @(
     (Join-Path $PSScriptRoot 'DeviceGateEvidence.psm1'),
+    (Join-Path $PSScriptRoot 'capture-device-gate-evidence.ps1'),
     (Join-Path $PSScriptRoot 'validate-device-gate-evidence.ps1'),
     (Join-Path $PSScriptRoot 'test-device-gate-evidence.ps1')
 )) {

@@ -92,7 +92,7 @@ GitHub Actions 的 `Android Quality Gate` 必须在同一 candidate 上通过。
 - [ ] 后置 workflow 不读取 production-signing environment/Secrets，不重新签名或重建 candidate，并对候选全部 publishable assets 重跑 GitHub attestation 验证；
 - [ ] GitHub API 证明 candidate run 与 evidence run 均来自本仓库、精确 source SHA、`main`、`completed/success`、允许的 workflow path/event；JSON producer run id/attempt/path/event 与 API 完全一致；
 - [ ] `.github/workflows/capture-device-gate-evidence.yml` producer 已由主任务在获授权设备阶段实现并成功上传真实 test APK/logs；当前 producer 缺失时保持 fail closed，不以任意 run-id/artifact-name 替代；
-- [ ] test APK 的实际 `aapt2` package/version/instrumentation target 与 `apksigner` certificate 通过；当前仅有的 `productionDebugAndroidTest` 不得冒充 target 为正式 `com.qrzzzz.lyricscard` 的 release device evidence；
+- [ ] `productionReleaseAndroidTest` test APK 的实际 `aapt2` package/version/instrumentation target 与 `apksigner` certificate 通过；Debug test APK 不得冒充 target 为正式 `com.qrzzzz.lyricscard` 的 release device evidence；
 - [ ] `final-device-gate` environment 已配置 required reviewer；Reviewer 理解 attestation 只覆盖 #10 candidate assets，device evidence/final verdict 的信任来自 producer identity、API/validator 绑定与人工复核，并非已有的 GitHub artifact attestation；
 - [ ] `Final Device Gate` job 成功并产出 `status = FINAL READY` 的 verdict artifact；由人工批准确认其 run IDs、artifact names、source commit 与拟发布值完全相同。
 
