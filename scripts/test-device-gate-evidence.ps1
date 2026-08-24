@@ -227,11 +227,39 @@ if (-not (Test-Path -LiteralPath $captureWorkflowPath -PathType Leaf)) {
     throw 'The authorized device capture producer is missing.'
 }
 $captureWorkflow = [IO.File]::ReadAllText($captureWorkflowPath)
-foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'assembleProductionReleaseAndroidTest', 'actions/download-artifact@', 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020', 'npm.cmd ci --no-audit --no-fund', 'actions/upload-artifact@')) {
+foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'timeout-minutes: 150', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'assembleProductionReleaseAndroidTest', 'actions/download-artifact@', 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020', 'npm.cmd ci --no-audit --no-fund', 'actions/upload-artifact@')) {
     if ($captureWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Capture workflow is missing controlled producer binding: $literal" }
 }
 if ($captureWorkflow -match '\$\{\{\s*secrets\.' -or $captureWorkflow -match '(?m)^\s+(id-token|attestations):\s*write\s*$') {
     throw 'The capture producer must not read GitHub signing secrets or write attestations.'
+}
+$captureScript = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'scripts\capture-device-gate-evidence.ps1'))
+foreach ($literal in @("Start-Process -FilePath `$adb", "'threadtime', '-T', '1'", '-RedirectStandardOutput $logcatPath', 'Stop-Process -Id $logcatProcess.Id', 'Streaming logcat produced no evidence')) {
+    if ($captureScript.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Capture script is missing isolated streaming logcat binding: $literal" }
+}
+if ($captureScript -match "@\('logcat',\s*'-c'\)") { throw 'Capture script must not require clearing protected device log buffers.' }
+$testProguardRules = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'app\test-proguard-rules.pro'))
+foreach ($literal in @('-keep class androidx.test.** { *; }', '-keep class androidx.tracing.** { *; }')) {
+    if ($testProguardRules.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Release AndroidTest shrinker rules are missing: $literal" }
+}
+$releaseManifest = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'app\src\release\AndroidManifest.xml'))
+foreach ($literal in @('androidx.activity.ComponentActivity', 'android:exported="false"')) {
+    if ($releaseManifest.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Exact-release instrumentation host activity manifest is missing: $literal" }
+}
+$appBuild = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'app\build.gradle.kts'))
+if ($appBuild.IndexOf('releaseImplementation(libs.androidx.compose.ui.test.manifest)', [StringComparison]::Ordinal) -lt 0) {
+    throw 'The exact minified release APK must package the non-exported Compose instrumentation host.'
+}
+$productionProguardRules = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'app\proguard-rules.pro'))
+foreach ($literal in @('-keep class androidx.tracing.** { *; }', '-keep class kotlin.** { *; }', '-keep class kotlinx.coroutines.** { *; }', '-keep class androidx.compose.** { *; }', '-keep class androidx.lifecycle.** { *; }', '-keep class androidx.savedstate.** { *; }', '-keep class androidx.activity.** { *; }')) {
+    if ($productionProguardRules.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) {
+        throw "The minified production APK must retain the release instrumentation runtime: $literal"
+    }
+}
+foreach ($literal in @('-keep,allowoptimization class com.qrzzzz.lyricscard.** {', 'public protected *;')) {
+    if ($productionProguardRules.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) {
+        throw "The minified production APK must preserve the target-app ABI used by release instrumentation: $literal"
+    }
 }
 foreach ($literal in @('Final Device Gate', 'device-gate-evidence.json', 'FINAL READY')) {
     if ($checklist.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Release checklist is missing final device-gate enforcement: $literal" }

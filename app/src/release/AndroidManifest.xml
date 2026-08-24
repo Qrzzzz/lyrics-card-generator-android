@@ -3,6 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <application>
+        <!-- Non-exported host for Compose instrumentation against the exact minified release APK. -->
+        <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar"
+            tools:replace="android:exported" />
+
         <!--
           The receiver class is supplied by ProfileInstaller's runtime-only AAR, so lint's
           compile-classpath model cannot resolve it even though manifest merging and packaging do.
