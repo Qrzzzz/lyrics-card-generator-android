@@ -241,13 +241,13 @@ function New-Avd([string] $Name, [string] $Package, [int] $RamMiB) {
     "no" | & $avdManager.FullName create avd --force --name $Name --package $Package --device 'pixel_2' 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not create AVD $Name from $Package." }
     $configPath = Join-Path $avdRootPath "$Name.avd\config.ini"
-    [IO.File]::AppendAllText($configPath, "`nhw.ramSize=$RamMiB`ndisk.dataPartition.size=6G`nhw.gpu.enabled=yes`nhw.gpu.mode=swiftshader_indirect`n")
+    [IO.File]::AppendAllText($configPath, "`nhw.ramSize=$RamMiB`ndisk.dataPartition.size=6G`nhw.gpu.enabled=yes`nhw.gpu.mode=swiftshader`n")
 }
 
 function Start-Avd([string] $Name, [int] $Port, [int] $RamMiB) {
     $process = Start-Process -FilePath $emulator -ArgumentList @(
         '-avd', $Name, '-port', [string]$Port, '-no-window', '-no-audio', '-no-boot-anim',
-        '-no-snapshot', '-wipe-data', '-gpu', 'swiftshader_indirect', '-memory', [string]$RamMiB
+        '-no-snapshot', '-wipe-data', '-gpu', 'swiftshader', '-memory', [string]$RamMiB
     ) -PassThru -WindowStyle Hidden
     $serial = "emulator-$Port"
     $deadline = [datetimeoffset]::UtcNow.AddMinutes(5)
