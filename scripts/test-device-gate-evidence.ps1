@@ -91,10 +91,17 @@ $null = Assert-DeviceGateArtifactBinding `
     -TestApkPath $fixtureTestApkPath
 $fixtureBadging = @"
 package: name='com.qrzzzz.lyricscard.test' versionCode='20000' versionName='2.0.0'
-instrumentation: name='androidx.test.runner.AndroidJUnitRunner' targetPackage='com.qrzzzz.lyricscard'
+"@
+$fixtureManifestXmlTree = @"
+E: manifest
+  E: instrumentation
+    A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.test.runner.AndroidJUnitRunner"
+    A: http://schemas.android.com/apk/res/android:targetPackage(0x01010021)="com.qrzzzz.lyricscard"
+    A: http://schemas.android.com/apk/res/android:functionalTest(0x01010023)=false
+  E: application
 "@
 $fixtureCertificate = 'Signer #1 certificate SHA-256 digest: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-Assert-TestApkInspection -Evidence $positive -Badging $fixtureBadging -CertificateOutput $fixtureCertificate
+Assert-TestApkInspection -Evidence $positive -Badging $fixtureBadging -ManifestXmlTree $fixtureManifestXmlTree -CertificateOutput $fixtureCertificate
 
 try {
     $null = Invoke-EvidencePolicy -Evidence (Read-Fixture)
@@ -141,13 +148,13 @@ try {
 }
 
 foreach ($inspectionCase in @(
-    @{ Name = 'inspected-test-package'; Badging = $fixtureBadging.Replace('com.qrzzzz.lyricscard.test', 'com.example.test'); Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
-    @{ Name = 'inspected-test-version'; Badging = $fixtureBadging.Replace("versionCode='20000'", "versionCode='1'"); Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
-    @{ Name = 'inspected-test-target'; Badging = $fixtureBadging.Replace("targetPackage='com.qrzzzz.lyricscard'", "targetPackage='com.example'"); Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
-    @{ Name = 'inspected-test-certificate'; Badging = $fixtureBadging; Certificate = 'Signer #1 certificate SHA-256 digest: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'; Pattern = 'certificate does not match' }
+    @{ Name = 'inspected-test-package'; Badging = $fixtureBadging.Replace('com.qrzzzz.lyricscard.test', 'com.example.test'); Manifest = $fixtureManifestXmlTree; Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
+    @{ Name = 'inspected-test-version'; Badging = $fixtureBadging.Replace("versionCode='20000'", "versionCode='1'"); Manifest = $fixtureManifestXmlTree; Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
+    @{ Name = 'inspected-test-target'; Badging = $fixtureBadging; Manifest = $fixtureManifestXmlTree.Replace('com.qrzzzz.lyricscard"', 'com.example"'); Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
+    @{ Name = 'inspected-test-certificate'; Badging = $fixtureBadging; Manifest = $fixtureManifestXmlTree; Certificate = 'Signer #1 certificate SHA-256 digest: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'; Pattern = 'certificate does not match' }
 )) {
     try {
-        Assert-TestApkInspection -Evidence $positive -Badging $inspectionCase.Badging -CertificateOutput $inspectionCase.Certificate
+        Assert-TestApkInspection -Evidence $positive -Badging $inspectionCase.Badging -ManifestXmlTree $inspectionCase.Manifest -CertificateOutput $inspectionCase.Certificate
         throw "Negative inspection fixture '$($inspectionCase.Name)' was accepted."
     } catch {
         if ($_.Exception.Message -like 'Negative inspection fixture*') { throw }
@@ -159,7 +166,7 @@ $blankVersionBadging = $fixtureBadging.Replace("versionCode='20000'", "versionCo
 $blankVersionEvidence = Read-Fixture
 $blankVersionEvidence.candidate.testApk.versionCode = 0
 $blankVersionEvidence.candidate.testApk.versionName = ''
-Assert-TestApkInspection -Evidence $blankVersionEvidence -Badging $blankVersionBadging -CertificateOutput $fixtureCertificate
+Assert-TestApkInspection -Evidence $blankVersionEvidence -Badging $blankVersionBadging -ManifestXmlTree $fixtureManifestXmlTree -CertificateOutput $fixtureCertificate
 
 function New-ValidWorkflowRun {
     return [pscustomobject]@{
