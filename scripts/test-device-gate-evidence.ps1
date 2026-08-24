@@ -220,7 +220,7 @@ if (-not (Test-Path -LiteralPath $captureWorkflowPath -PathType Leaf)) {
     throw 'The authorized device capture producer is missing.'
 }
 $captureWorkflow = [IO.File]::ReadAllText($captureWorkflowPath)
-foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'assembleProductionReleaseAndroidTest', 'actions/download-artifact@', 'actions/upload-artifact@')) {
+foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'assembleProductionReleaseAndroidTest', 'actions/download-artifact@', 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020', 'npm.cmd ci --no-audit --no-fund', 'actions/upload-artifact@')) {
     if ($captureWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Capture workflow is missing controlled producer binding: $literal" }
 }
 if ($captureWorkflow -match '\$\{\{\s*secrets\.' -or $captureWorkflow -match '(?m)^\s+(id-token|attestations):\s*write\s*$') {
