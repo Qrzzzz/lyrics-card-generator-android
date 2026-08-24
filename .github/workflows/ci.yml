@@ -55,7 +55,27 @@ jobs:
         run: |
           npm.cmd ci
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm.cmd run audit:security
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm.cmd run check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify dependency-security contract
+        shell: pwsh
+        run: |
+          .\scripts\test-dependency-security-contract.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify production release policy contract
+        shell: pwsh
+        run: |
+          .\scripts\test-production-release-contract.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify final device-gate evidence contract
+        shell: pwsh
+        run: |
+          .\scripts\test-device-gate-evidence.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run Android JVM, lint, debug, R8, APK, and AAB gates
@@ -85,3 +105,55 @@ jobs:
             app/build/outputs/apk/production/release/*.apk
             app/build/outputs/bundle/productionRelease/*.aab
             app/build/reports/lint-results-productionRelease.*
+
+  unicode-path-jvm-smoke:
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out candidate under a Unicode path
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: 歌词卡片
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3 # v4.4.2
+
+      - name: Install pinned Android SDK packages
+        shell: pwsh
+        run: |
+          $sdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
+          $sdkManager = Get-ChildItem -Path (Join-Path $sdkRoot 'cmdline-tools') -Filter 'sdkmanager.bat' -Recurse -File | Select-Object -First 1
+          if (-not $sdkManager) { throw "sdkmanager.bat was not found under $sdkRoot\cmdline-tools" }
+          & $sdkManager.FullName 'platforms;android-36.1' 'build-tools;36.1.0'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run a real JVM test through the Unicode-path wrapper
+        working-directory: 歌词卡片
+        shell: pwsh
+        run: |
+          .\scripts\gradle-via-ascii-worktree.ps1 `
+            -StagingRoot (Join-Path $env:RUNNER_TEMP 'lyrics-card-gradle-staging') `
+            -GradleArguments @(
+              ':app:testAlphaDebugUnitTest',
+              '--tests',
+              'com.qrzzzz.lyricscard.model.LyricTextCleanerTest',
+              '--no-parallel',
+              '--no-daemon',
+              '--rerun-tasks',
+              '--stacktrace',
+              '--console=plain'
+            )
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

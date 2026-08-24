@@ -57,10 +57,11 @@ android {
         applicationId = "com.qrzzzz.lyricscard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10003
-        versionName = "1.0.1"
+        versionCode = 10100
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testProguardFiles("test-proguard-rules.pro")
         vectorDrawables.useSupportLibrary = true
         buildConfigField("int", "RENDERER_SCHEMA_VERSION", "1")
         buildConfigField("String", "RENDERER_VERSION", "\"android-alpha-renderer-1\"")
@@ -83,11 +84,9 @@ android {
             dimension = "channel"
             applicationIdSuffix = ".alpha"
             versionNameSuffix = "-alpha03"
-            resValue("string", "app_name", "歌词卡片 Alpha")
         }
         create("production") {
             dimension = "channel"
-            resValue("string", "app_name", "歌词卡片")
             productionReleaseSigning?.let { signingConfig = it }
         }
     }
@@ -128,6 +127,7 @@ android {
     }
 
     testOptions {
+        testBuildType = "release"
         unitTests.isIncludeAndroidResources = true
     }
 

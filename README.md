@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎧 Lyrics Card Generator Android
+# Lyric Card Generator
 
 ### 在 Android 上制作高质感歌词分享卡片
 
@@ -98,7 +98,7 @@
 
 手动编辑、项目管理、卡片预览和 PNG 导出均可离线完成。只有在你主动搜索或解析网易云音乐内容、获取歌词或下载所选封面时，Native 客户端才会发起受限的 HTTPS 请求。
 
-Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容。应用不包含分析、追踪、广告、遥测或崩溃上报 SDK；项目、封面和导出缓存保存在设备本地。完整说明见 [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md)。
+Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容。应用不包含分析、追踪、广告、遥测或崩溃上报 SDK；项目、封面和导出缓存保存在设备本地，并明确排除在 Android 云备份和换机迁移之外。完整说明见 [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md)。
 
 <a id="使用方式"></a>
 
@@ -125,6 +125,10 @@ Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容
 ### Windows
 
 ```powershell
+$env:JAVA_HOME = 'C:\path\to\jdk-17'
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
+
 cd renderer
 npm.cmd ci
 npm.cmd run check
@@ -132,6 +136,23 @@ npm.cmd run check
 cd ..
 .\gradlew.bat :app:test :app:lintProductionRelease :app:assembleAlphaDebug --no-parallel
 ```
+
+Gradle/JVM test worker 在 Windows 的非 ASCII 仓库路径中可能错误解码 classpath，表现为所有测试类同时 `ClassNotFoundException`。不要跳过测试，也不要把 junction 当作修复。请先提交需要验证的改动，然后从原仓库路径运行受控 wrapper；它会把精确 `HEAD` 放入临时的真实 ASCII detached worktree，安装锁定的 Renderer 依赖，执行原始 Gradle 参数，传播退出码，并清理 staging worktree：
+
+```powershell
+.\scripts\gradle-via-ascii-worktree.ps1 -GradleArguments @(
+    ':app:test',
+    ':app:lintProductionRelease',
+    ':app:assembleAlphaDebug',
+    '--no-parallel',
+    '--no-daemon',
+    '--rerun-tasks',
+    '--stacktrace',
+    '--console=plain'
+)
+```
+
+wrapper 默认使用 `JAVA_HOME` 和 `ANDROID_HOME`（或 `ANDROID_SDK_ROOT`）。默认 staging root 是系统临时目录下的 `lyrics-card-gradle-staging`；如果该路径本身包含非 ASCII 字符，请通过 `-StagingRoot C:\an-ascii-path` 指定真实 ASCII 目录。为避免验证错对象，工作树有未提交改动时 wrapper 会拒绝执行。
 
 ### macOS / Linux
 

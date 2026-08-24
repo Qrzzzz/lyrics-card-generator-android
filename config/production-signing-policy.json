@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "repository": "Qrzzzz/lyrics-card-generator-android",
+  "package": "com.qrzzzz.lyricscard",
+  "certificateSha256": "b02a1b6c391545c2bdbcc33bda3a708741e259a4efea60bdc4958522f5bc82f5",
+  "trustAnchor": {
+    "releaseTag": "v1.0.0",
+    "sourceCommit": "661b3e6e2af47a6898266adfdd2347dbc0e4a5fc",
+    "apk": "lyrics-card-generator-android-1.0.0.apk",
+    "apkSha256": "f9be5e8b4850c84b5b66fc30d18655f89eae7dd87c5eed9cb4e0dd62ab8f91dc",
+    "releaseUrl": "https://github.com/Qrzzzz/lyrics-card-generator-android/releases/tag/v1.0.0"
+  },
+  "lastVerifiedRelease": {
+    "releaseTag": "v1.0.1",
+    "sourceCommit": "5a21bb4666f2ad3e6b57709e1efb5ad9cb711481",
+    "apk": "lyrics-card-generator-android-1.0.1.apk",
+    "apkSha256": "41e056f19913c39727da7575b06f0d48d2554bdad57585611ff9a2924e990ae0",
+    "certificateSha256": "b02a1b6c391545c2bdbcc33bda3a708741e259a4efea60bdc4958522f5bc82f5",
+    "releaseUrl": "https://github.com/Qrzzzz/lyrics-card-generator-android/releases/tag/v1.0.1"
+  }
+}

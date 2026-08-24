@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎧 Lyrics Card Generator Android
+# Lyric Card Generator
 
 ### Create polished lyric sharing cards on Android
 
@@ -98,7 +98,7 @@ When sideloading the APK from a browser, Android may ask you to temporarily allo
 
 Manual editing, project management, card preview, and PNG export all work offline. The native client makes restricted HTTPS requests only when you explicitly search or parse NetEase Cloud Music content, fetch lyrics, or download selected cover art.
 
-The renderer WebView blocks network access, external navigation, file access, and mixed content. The app includes no analytics, tracking, advertising, telemetry, or crash-reporting SDK. Projects, cover art, and export cache remain on the device. See [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md) for the complete data and network behavior.
+The renderer WebView blocks network access, external navigation, file access, and mixed content. The app includes no analytics, tracking, advertising, telemetry, or crash-reporting SDK. Projects, cover art, and export cache remain on the device and are explicitly excluded from Android cloud backup and device transfer. See [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md) for the complete data and network behavior.
 
 <a id="how-to-use"></a>
 
@@ -125,6 +125,10 @@ The renderer WebView blocks network access, external navigation, file access, an
 ### Windows
 
 ```powershell
+$env:JAVA_HOME = 'C:\path\to\jdk-17'
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
+
 cd renderer
 npm.cmd ci
 npm.cmd run check
@@ -132,6 +136,23 @@ npm.cmd run check
 cd ..
 .\gradlew.bat :app:test :app:lintProductionRelease :app:assembleAlphaDebug --no-parallel
 ```
+
+On Windows, the Gradle/JVM test worker can misdecode its classpath when the repository path contains non-ASCII characters, making every test class fail with `ClassNotFoundException`. Do not skip tests or treat a junction as a fix. Commit the changes you need to verify, then run the controlled wrapper from the original repository path. It places the exact `HEAD` in a temporary, real ASCII detached worktree, installs the locked Renderer dependencies, runs the original Gradle arguments, propagates the exit code, and removes the staging worktree:
+
+```powershell
+.\scripts\gradle-via-ascii-worktree.ps1 -GradleArguments @(
+    ':app:test',
+    ':app:lintProductionRelease',
+    ':app:assembleAlphaDebug',
+    '--no-parallel',
+    '--no-daemon',
+    '--rerun-tasks',
+    '--stacktrace',
+    '--console=plain'
+)
+```
+
+The wrapper uses `JAVA_HOME` and `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) by default. Its default staging root is `lyrics-card-gradle-staging` under the system temporary directory. If that path itself contains non-ASCII characters, pass a real ASCII directory such as `-StagingRoot C:\an-ascii-path`. To prevent testing the wrong source, the wrapper refuses to run when the source worktree has uncommitted changes.
 
 ### macOS / Linux
 

@@ -4,7 +4,7 @@
 
 **PROVISIONAL / NOT FINAL READY**
 
-源码版本当前为 `1.0.1`（`versionCode 10003`）正式发布候选。相较已完成真机冒烟的公开 Beta，本次产品变化包括应用主题新增“跟随系统”选项，以及启动器图标与 Windows 桌面版图标对齐；本文仍不把本地 build、JVM tests、Beta 冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
+源码版本当前为 `1.1.0`（`versionCode 10100`）正式发布候选。相较 1.0.1，本次集中修复中文路径构建、备份与 D2D 策略、依赖安全、正式签名 provenance 与最终真机证据门；本文仍不把本地 build、JVM tests、单台真机冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
 
 ## 已实现的产品与工程能力
 
@@ -15,7 +15,7 @@
 - session/generation/latest-wins、串行 export、cancel、timeout 与 renderer-process recovery；
 - 30-case Renderer Golden regression 数据集和合同/安全/JVM/instrumentation test source；
 - production R8/resource shrinking、APK/AAB 构建路径；
-- 正式 CI、手动 signed production candidate workflow、统一 local/CI signing configuration；
+- 正式 CI、受控 main-tip/same-SHA Quality Gate 的 signed production candidate workflow、生产证书连续性与同 job build provenance；
 - 正式 README、architecture、changelog、privacy、release checklist 与 third-party notices。
 
 以上项目不再作为“未来 Alpha TODO”。
@@ -43,6 +43,14 @@
 仓库只包含 signing infrastructure，不包含生产 keystore 或密码。公开 Beta 可以使用明确披露的测试证书签署，但该 APK 不是生产签名产物，不能升级为正式版；没有 production signing secrets 时，仍会阻止为当前候选生成新的正式 signed APK/AAB。
 
 即使生产 signing secrets 后续可用，仍必须先完成上述 G/真机/Reviewer Gate；手动 workflow 的 signed artifact upload 也不是 GitHub Release 或商店发布授权。
+
+`Production Release Candidate` 与最终设备结论采用诚实的两阶段语义：第一阶段的 signed/attested artifact metadata 永远是 `PROVISIONAL / device NOT RUN / finalReady=false`；获授权设备运行另行产生受控 evidence artifact，随后由不接触 signing secrets 的 `Final Device Gate` workflow 下载同一 candidate bytes、test APK 与日志，运行 `scripts/validate-device-gate-evidence.ps1`。只有后置 job success 才能产生 `FINAL READY` verdict。当前没有 v1.1.0 的完整受控设备 evidence，因此该后置门按设计 fail closed；`tests/fixtures` 中的正例不能用于发布。
+
+仓库已实现 `.github/workflows/capture-device-gate-evidence.yml` 受控 producer；它要求带 `lcg-device-gate` 标签的 Windows 自托管 Runner、精确 main SHA、同一 signed candidate 和获授权实体设备，并运行完整 API 26/30/33/36 + physical 矩阵。当前仍没有 v1.1.0 的成功 producer run，因此在真实 evidence artifact 与 `final-device-gate` environment 审批完成前，流程不会产生可发布的 FINAL READY。
+
+Gradle 的受控设备路径固定使用 `productionReleaseAndroidTest`，test APK 必须由 host `aapt2`/`apksigner` 验证 package、version、目标 `com.qrzzzz.lyricscard` 与证书，并与同一 signed production candidate 一起进入设备矩阵。历史或现有 Debug test APK 不能冒充正式签名 APK 的 instrumentation 证据。
+
+仓库内已定义 source/provenance 合同，但 `main` ruleset/branch protection、`production-signing` required reviewers/deployment policy 与管理员 bypass 只能在 GitHub Settings 配置。在管理员完成并独立核验这些外部前置条件之前，P1 发布供应链边界仍为 **PROVISIONAL**；本地合同测试也不能替代真实 GitHub-hosted attestation。详见 `docs/RELEASE_PROVENANCE.md`。
 
 ## 证据来源
 
