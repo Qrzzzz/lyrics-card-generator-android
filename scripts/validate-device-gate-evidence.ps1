@@ -60,9 +60,11 @@ foreach ($tool in @($Aapt2Path, $ApkSignerPath)) {
 }
 $badging = (& $Aapt2Path dump badging $TestApkPath 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) { throw 'aapt2 could not inspect the test APK.' }
+$manifestXmlTree = (& $Aapt2Path dump xmltree $TestApkPath --file AndroidManifest.xml 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0) { throw 'aapt2 could not inspect the test APK manifest.' }
 $certificateOutput = (& $ApkSignerPath verify --print-certs $TestApkPath 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) { throw 'apksigner could not verify the test APK.' }
-Assert-TestApkInspection -Evidence $evidence -Badging $badging -CertificateOutput $certificateOutput
+Assert-TestApkInspection -Evidence $evidence -Badging $badging -ManifestXmlTree $manifestXmlTree -CertificateOutput $certificateOutput
 
 Write-Output "Final device gate PASS: source=$ExpectedSourceCommit version=$($evidence.candidate.versionName) environments=$(@($evidence.environments).Count) gates=$(@($evidence.gates).Count)"
 exit 0

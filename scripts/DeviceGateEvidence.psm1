@@ -258,11 +258,12 @@ function Assert-TestApkInspection {
     param(
         [Parameter(Mandatory = $true)][object] $Evidence,
         [Parameter(Mandatory = $true)][string] $Badging,
+        [Parameter(Mandatory = $true)][string] $ManifestXmlTree,
         [Parameter(Mandatory = $true)][string] $CertificateOutput
     )
 
     $packageMatch = [regex]::Match($Badging, "(?m)^package: name='([^']+)' versionCode='([^']*)' versionName='([^']*)'")
-    $instrumentationMatch = [regex]::Match($Badging, "(?m)^instrumentation: name='([^']+)' targetPackage='([^']+)'\s*$")
+    $instrumentationMatch = [regex]::Match($ManifestXmlTree, '(?ms)E: instrumentation.*?:name\([^)]*\)="([^"]+)".*?:targetPackage\([^)]*\)="([^"]+)"')
     if (-not $packageMatch.Success -or -not $instrumentationMatch.Success) {
         throw 'Could not read package/version/instrumentation target from the test APK.'
     }

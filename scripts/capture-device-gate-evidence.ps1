@@ -75,8 +75,10 @@ function Get-CertificateSha256([string] $ApkPath) {
 
 $testBadging = (& $aapt2 dump badging $TestApkPath 2>&1 | Out-String)
 if ($LASTEXITCODE -ne 0) { throw 'aapt2 could not inspect the release test APK.' }
+$testManifestXmlTree = (& $aapt2 dump xmltree $TestApkPath --file AndroidManifest.xml 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0) { throw 'aapt2 could not inspect the release test APK manifest.' }
 $testPackageMatch = [regex]::Match($testBadging, "(?m)^package: name='([^']+)' versionCode='([^']*)' versionName='([^']*)'")
-$testInstrumentationMatch = [regex]::Match($testBadging, "(?m)^instrumentation: name='([^']+)' targetPackage='([^']+)'\s*$")
+$testInstrumentationMatch = [regex]::Match($testManifestXmlTree, '(?ms)E: instrumentation.*?:name\([^)]*\)="([^"]+)".*?:targetPackage\([^)]*\)="([^"]+)"')
 if (-not $testPackageMatch.Success -or -not $testInstrumentationMatch.Success) { throw 'Release test APK metadata is incomplete.' }
 $testVersionCode = if ([string]::IsNullOrEmpty($testPackageMatch.Groups[2].Value)) { 0 } else { [int]$testPackageMatch.Groups[2].Value }
 $testApkName = 'app-production-release-androidTest.apk'
