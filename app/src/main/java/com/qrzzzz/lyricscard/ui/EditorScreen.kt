@@ -80,6 +80,7 @@ fun EditorScreen(
     val project = checkNotNull(state.currentProject)
     val selectedStep = state.selectedStep
     val windowWidth = currentLyricsWindowWidth(windowWidthSizeClass)
+    val imeInsets = rememberLyricsImeInsets()
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(onSelectCover)
     }
@@ -101,39 +102,41 @@ fun EditorScreen(
     Scaffold(
         modifier = Modifier.semantics { paneTitle = project.name },
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(project.name, maxLines = 1, fontWeight = FontWeight.Bold)
-                        EditorProgressStatus(state)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack, enabled = !state.isLeaving) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.common_back),
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onUndo, enabled = state.canUndo && !state.isLeaving) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.Undo,
-                            contentDescription = stringResource(R.string.common_undo),
-                        )
-                    }
-                    IconButton(onClick = onRedo, enabled = state.canRedo && !state.isLeaving) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.Redo,
-                            contentDescription = stringResource(R.string.common_redo),
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
+            if (!imeInsets.isVisible) {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(project.name, maxLines = 1, fontWeight = FontWeight.Bold)
+                            EditorProgressStatus(state)
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack, enabled = !state.isLeaving) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = stringResource(R.string.common_back),
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = onUndo, enabled = state.canUndo && !state.isLeaving) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.Undo,
+                                contentDescription = stringResource(R.string.common_undo),
+                            )
+                        }
+                        IconButton(onClick = onRedo, enabled = state.canRedo && !state.isLeaving) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.Redo,
+                                contentDescription = stringResource(R.string.common_redo),
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            }
         },
         snackbarHost = snackbarHost,
     ) { padding ->

@@ -3,10 +3,12 @@ package com.qrzzzz.lyricscard.ui
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets as PlatformWindowInsets
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
@@ -47,8 +49,6 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.data.NeteaseSongSearchResult
@@ -663,7 +663,7 @@ class EditorExportProductionTest {
             var platformImeBottomPx = 0
             waitForCondition(IME_TIMEOUT_MS) {
                 platformImeBottomPx = currentPlatformImeBottom()
-                platformImeBottomPx > 0
+                platformImeBottomPx > 0 || effectiveImeBottomPx.intValue > 0
             }
             waitForCondition(IME_TIMEOUT_MS) { effectiveImeBottomPx.intValue > 0 }
             widthField.performTextReplacement("900")
@@ -774,9 +774,21 @@ class EditorExportProductionTest {
     private fun currentPlatformImeBottom(): Int {
         var bottom = 0
         compose.activityRule.scenario.onActivity { activity ->
-            val insets = ViewCompat.getRootWindowInsets(activity.window.decorView)
-            if (insets?.isVisible(WindowInsetsCompat.Type.ime()) == true) {
-                bottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val decor = activity.window.decorView
+            val platformInsets = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                decor.rootWindowInsets
+            } else {
+                null
+            }
+            val typedVisible = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                platformInsets?.isVisible(PlatformWindowInsets.Type.ime()) == true
+            } else {
+                false
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && typedVisible) {
+                bottom = platformInsets?.getInsets(PlatformWindowInsets.Type.ime())?.bottom ?: 0
+            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                bottom = com.qrzzzz.lyricscard.ui.currentPlatformImeBottom(decor)
             }
         }
         return bottom
