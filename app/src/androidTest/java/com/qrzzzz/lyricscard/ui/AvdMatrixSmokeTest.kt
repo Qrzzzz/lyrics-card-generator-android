@@ -1,7 +1,10 @@
 package com.qrzzzz.lyricscard.ui
 
 import android.content.Context
+import android.content.ContentValues
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.util.Log
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -14,6 +17,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
+import androidx.test.filters.SdkSuppress
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.core.content.FileProvider
 import com.qrzzzz.lyricscard.LyricsCardApplication
 import com.qrzzzz.lyricscard.MainActivity
 import com.qrzzzz.lyricscard.R
@@ -21,6 +27,7 @@ import com.qrzzzz.lyricscard.renderer.ExportedImage
 import com.qrzzzz.lyricscard.renderer.RENDERER_PREVIEW_TAG
 import com.qrzzzz.lyricscard.renderer.RendererStatus
 import java.io.File
+import java.security.MessageDigest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -40,7 +47,13 @@ class AvdMatrixSmokeTest {
     private val app = ApplicationProvider.getApplicationContext<Context>() as LyricsCardApplication
 
     @Test
-    fun productionMainActivitySixStepPreviewAndOneTwoXExportsWork() {
+    fun productionMainActivitySixStepPreviewAndOneTwoXExportsWork() = runSmoke(verifyPlatformExport = false)
+
+    @Test
+    @SdkSuppress(minSdkVersion = 29)
+    fun productionMainActivitySavesAndSharesExportedBytes() = runSmoke(verifyPlatformExport = true)
+
+    private fun runSmoke(verifyPlatformExport: Boolean) {
         val beforeIds = projectIds()
         val exported = mutableListOf<File>()
         var returnedHome = false
@@ -97,6 +110,7 @@ class AvdMatrixSmokeTest {
             assertEquals(oneX.height * 2, twoX.height)
             assertNotEquals(oneX.file.canonicalPath, twoX.file.canonicalPath)
             assertNoPartialExports(oneX.file.parentFile)
+            if (verifyPlatformExport) verifySaveAndShare(twoX)
 
             compose.onNodeWithText(
                 compose.activity.getString(R.string.editor_export_png, compose.activity.getString(R.string.file_png)),
@@ -135,6 +149,55 @@ class AvdMatrixSmokeTest {
             }
         }
     }
+
+    private fun verifySaveAndShare(image: ExportedImage) {
+        val resolver = app.contentResolver
+        val originalDigest = sha256(image.file.readBytes())
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "lcg-release-validation-${System.currentTimeMillis()}.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/LyricCardValidation")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+        val destination = checkNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+        try {
+            runBlocking { app.container.exportFiles.copyTo(image, destination) }
+            val saved = checkNotNull(resolver.openInputStream(destination)).use { it.readBytes() }
+            assertEquals("saved PNG bytes differ", originalDigest, sha256(saved))
+            assertEquals(1, resolver.update(destination, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null))
+
+            val shareUri = FileProvider.getUriForFile(app, "${app.packageName}.files", image.file)
+            val shared = checkNotNull(resolver.openInputStream(shareUri)).use { it.readBytes() }
+            assertEquals("shared FileProvider bytes differ", originalDigest, sha256(shared))
+            val intent = buildShareIntent(app, image, shareUri)
+            assertTrue("share URI grant is missing", intent.flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+            var shareError: UiText? = null
+            compose.activityRule.scenario.onActivity { shareError = shareImage(it, image) }
+            assertEquals("share chooser launch failed", null, shareError)
+            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+            val deadline = SystemClock.elapsedRealtime() + 10_000
+            var chooserVisible = false
+            while (!chooserVisible && SystemClock.elapsedRealtime() < deadline) {
+                val activities = ParcelFileDescriptor.AutoCloseInputStream(
+                    automation.executeShellCommand("dumpsys activity activities"),
+                ).bufferedReader().use { it.readText() }
+                chooserVisible = activities.lineSequence().any {
+                    (it.contains("mResumedActivity") || it.contains("topResumedActivity")) &&
+                        (it.contains("Chooser", ignoreCase = true) || it.contains("Resolver", ignoreCase = true))
+                }
+                if (!chooserVisible) SystemClock.sleep(100)
+            }
+            assertTrue("platform share chooser did not become visible", chooserVisible)
+            ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand("input keyevent 4")).use { it.readBytes() }
+            SystemClock.sleep(500)
+            Log.i("LCG_RELEASE", "platform-export savedSha256=$originalDigest shareSha256=$originalDigest chooserVisible=true sent=false")
+        } finally {
+            assertEquals("validation image cleanup failed", 1, resolver.delete(destination, null, null))
+        }
+    }
+
+    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(bytes).joinToString("") { "%02x".format(it) }
 
     private fun qualityStage(stage: String) {
         Log.i(QUALITY_TAG, "matrix-smoke stage=$stage api=${android.os.Build.VERSION.SDK_INT}")

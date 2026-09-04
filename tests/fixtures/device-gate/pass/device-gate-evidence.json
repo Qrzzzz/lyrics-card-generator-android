@@ -60,7 +60,10 @@
       "deviceIdSha256": "2222222222222222222222222222222222222222222222222222222222222222",
       "ramMiB": 4096,
       "avdName": "fixture-api26",
-      "webView": { "package": "com.android.chrome", "version": "69.0.0.0" },
+      "webView": {
+        "package": "com.android.chrome",
+        "version": "69.0.0.0"
+      },
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
@@ -70,7 +73,8 @@
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-      }
+      },
+      "buildFingerprint": "fixture/api26/build"
     },
     {
       "id": "api30",
@@ -81,7 +85,10 @@
       "deviceIdSha256": "3333333333333333333333333333333333333333333333333333333333333333",
       "ramMiB": 4096,
       "avdName": "fixture-api30",
-      "webView": { "package": "com.google.android.webview", "version": "83.0.4103.106" },
+      "webView": {
+        "package": "com.google.android.webview",
+        "version": "83.0.4103.106"
+      },
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
@@ -91,7 +98,8 @@
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-      }
+      },
+      "buildFingerprint": "fixture/api30/build"
     },
     {
       "id": "api33",
@@ -102,7 +110,10 @@
       "deviceIdSha256": "4444444444444444444444444444444444444444444444444444444444444444",
       "ramMiB": 4096,
       "avdName": "fixture-api33",
-      "webView": { "package": "com.google.android.webview", "version": "TEST-FIXTURE" },
+      "webView": {
+        "package": "com.google.android.webview",
+        "version": "TEST-FIXTURE"
+      },
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
@@ -112,7 +123,8 @@
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-      }
+      },
+      "buildFingerprint": "fixture/api33/build"
     },
     {
       "id": "api36",
@@ -123,7 +135,10 @@
       "deviceIdSha256": "5555555555555555555555555555555555555555555555555555555555555555",
       "ramMiB": 4096,
       "avdName": "fixture-api36",
-      "webView": { "package": "com.google.android.webview", "version": "TEST-FIXTURE" },
+      "webView": {
+        "package": "com.google.android.webview",
+        "version": "TEST-FIXTURE"
+      },
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
@@ -133,7 +148,8 @@
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-      }
+      },
+      "buildFingerprint": "fixture/api36/build"
     },
     {
       "id": "physical",
@@ -147,7 +163,10 @@
       "model": "TEST-FIXTURE",
       "securityPatch": "2026-08-01",
       "authorizationReference": "TEST-FIXTURE-ONLY",
-      "webView": { "package": "com.google.android.webview", "version": "TEST-FIXTURE" },
+      "webView": {
+        "package": "com.google.android.webview",
+        "version": "TEST-FIXTURE"
+      },
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
@@ -157,25 +176,346 @@
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-      }
+      },
+      "buildFingerprint": "fixture/physical/build"
     }
   ],
   "gates": [
-    { "id": "api26-core", "environmentId": "api26", "status": "PASS", "attempts": 1, "testSelector": "AvdMatrixSmokeTest", "startedAt": "2026-08-24T00:00:00Z", "completedAt": "2026-08-24T00:01:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api26-renderer-webview", "environmentId": "api26", "status": "PASS", "attempts": 1, "testSelector": "RendererControllerLifecycleTest", "startedAt": "2026-08-24T00:01:00Z", "completedAt": "2026-08-24T00:02:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api26-recovery-atf", "environmentId": "api26", "status": "PASS", "attempts": 1, "testSelector": "ArchitectureRestorationTest+AccessibilityFrameworkTest", "startedAt": "2026-08-24T00:02:00Z", "completedAt": "2026-08-24T00:03:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api30-serif-measure-spec-1x-2x", "environmentId": "api30", "status": "PASS", "attempts": 1, "testSelector": "QualityStressTest#a_serifOneXThenTwoXProbeUsesTheSameRendererLifecycle", "startedAt": "2026-08-24T00:03:00Z", "completedAt": "2026-08-24T00:04:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api30-export-20x", "environmentId": "api30", "status": "PASS", "attempts": 1, "testSelector": "QualityStressTest#a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope", "startedAt": "2026-08-24T00:04:00Z", "completedAt": "2026-08-24T00:05:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api30-cancel-retry-temp-cleanup", "environmentId": "api30", "status": "PASS", "attempts": 1, "testSelector": "RendererControllerLifecycleTest", "startedAt": "2026-08-24T00:05:00Z", "completedAt": "2026-08-24T00:06:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api30-memory", "environmentId": "api30", "status": "PASS", "attempts": 1, "testSelector": "host-app-renderer-memory-matrix", "startedAt": "2026-08-24T00:06:00Z", "completedAt": "2026-08-24T00:07:00Z", "logs": [{ "kind": "manual", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api33-core", "environmentId": "api33", "status": "PASS", "attempts": 1, "testSelector": "AvdMatrixSmokeTest", "startedAt": "2026-08-24T00:07:00Z", "completedAt": "2026-08-24T00:08:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api33-recovery-atf", "environmentId": "api33", "status": "PASS", "attempts": 1, "testSelector": "ArchitectureRestorationTest+AccessibilityFrameworkTest", "startedAt": "2026-08-24T00:08:00Z", "completedAt": "2026-08-24T00:09:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api33-talkback", "environmentId": "api33", "status": "PASS", "attempts": 1, "testSelector": "TalkBack-core-flow", "startedAt": "2026-08-24T00:09:00Z", "completedAt": "2026-08-24T00:10:00Z", "logs": [{ "kind": "manual", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api33-font-scale-200", "environmentId": "api33", "status": "PASS", "attempts": 1, "testSelector": "font-scale-200-core-flow", "startedAt": "2026-08-24T00:10:00Z", "completedAt": "2026-08-24T00:11:00Z", "logs": [{ "kind": "manual", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api36-connected-production", "environmentId": "api36", "status": "PASS", "attempts": 1, "testSelector": "connectedProductionReleaseAndroidTest", "startedAt": "2026-08-24T00:11:00Z", "completedAt": "2026-08-24T00:12:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "api36-export-20x", "environmentId": "api36", "status": "PASS", "attempts": 1, "testSelector": "QualityStressTest#a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope", "startedAt": "2026-08-24T00:12:00Z", "completedAt": "2026-08-24T00:13:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "four-gb-2x-memory", "environmentId": "api30", "status": "PASS", "attempts": 1, "testSelector": "QualityStressTest#c_largeCoverImportDownsamplesPreviewsAndExportsOnFourGbDevice", "startedAt": "2026-08-24T00:13:00Z", "completedAt": "2026-08-24T00:14:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "endurance-30m", "environmentId": "api36", "status": "PASS", "attempts": 1, "testSelector": "QualityStressTest#b_thirtyMinuteEditingEndurancePreservesAutosaveRendererAndRestorationState", "startedAt": "2026-08-24T00:14:00Z", "completedAt": "2026-08-24T00:44:00Z", "logs": [{ "kind": "instrumentation", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] },
-    { "id": "physical-core-save-share", "environmentId": "physical", "status": "PASS", "attempts": 1, "testSelector": "authorized-physical-core-save-share", "startedAt": "2026-08-24T00:44:00Z", "completedAt": "2026-08-24T00:45:00Z", "logs": [{ "kind": "manual", "path": "logs/instrumentation.log", "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98" }, { "kind": "logcat", "path": "logs/logcat.txt", "sha256": "42374683c48c68913ae79330b429f3ab143e3bb273cd1578c72beac5addfd2c8" }] }
+    {
+      "id": "api26-core",
+      "environmentId": "api26",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "AvdMatrixSmokeTest",
+      "startedAt": "2026-08-24T00:00:00Z",
+      "completedAt": "2026-08-24T00:01:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api26-renderer-webview",
+      "environmentId": "api26",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "RendererControllerLifecycleTest",
+      "startedAt": "2026-08-24T00:01:00Z",
+      "completedAt": "2026-08-24T00:02:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api26-recovery-atf",
+      "environmentId": "api26",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "ArchitectureRestorationTest+AccessibilityFrameworkTest",
+      "startedAt": "2026-08-24T00:02:00Z",
+      "completedAt": "2026-08-24T00:03:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api30-serif-measure-spec-1x-2x",
+      "environmentId": "api30",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "QualityStressTest#a_serifOneXThenTwoXProbeUsesTheSameRendererLifecycle",
+      "startedAt": "2026-08-24T00:03:00Z",
+      "completedAt": "2026-08-24T00:04:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api30-export-20x",
+      "environmentId": "api30",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "QualityStressTest#a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope",
+      "startedAt": "2026-08-24T00:04:00Z",
+      "completedAt": "2026-08-24T00:05:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api30-cancel-retry-temp-cleanup",
+      "environmentId": "api30",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "RendererControllerLifecycleTest",
+      "startedAt": "2026-08-24T00:05:00Z",
+      "completedAt": "2026-08-24T00:06:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api30-memory",
+      "environmentId": "api30",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "host-app-renderer-memory-matrix",
+      "startedAt": "2026-08-24T00:06:00Z",
+      "completedAt": "2026-08-24T00:07:00Z",
+      "logs": [
+        {
+          "kind": "manual",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api33-core",
+      "environmentId": "api33",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "AvdMatrixSmokeTest",
+      "startedAt": "2026-08-24T00:07:00Z",
+      "completedAt": "2026-08-24T00:08:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api33-recovery-atf",
+      "environmentId": "api33",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "ArchitectureRestorationTest+AccessibilityFrameworkTest",
+      "startedAt": "2026-08-24T00:08:00Z",
+      "completedAt": "2026-08-24T00:09:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api33-talkback",
+      "environmentId": "api33",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "com.qrzzzz.lyricscard.ui.TalkBackReleaseTest",
+      "startedAt": "2026-08-24T00:09:00Z",
+      "completedAt": "2026-08-24T00:10:00Z",
+      "logs": [
+        {
+          "kind": "manual",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api33-font-scale-200",
+      "environmentId": "api33",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "font-scale-200-core-flow",
+      "startedAt": "2026-08-24T00:10:00Z",
+      "completedAt": "2026-08-24T00:11:00Z",
+      "logs": [
+        {
+          "kind": "manual",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api36-connected-production",
+      "environmentId": "api36",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "connectedProductionReleaseAndroidTest",
+      "startedAt": "2026-08-24T00:11:00Z",
+      "completedAt": "2026-08-24T00:12:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "api36-export-20x",
+      "environmentId": "api36",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "QualityStressTest#a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope",
+      "startedAt": "2026-08-24T00:12:00Z",
+      "completedAt": "2026-08-24T00:13:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "four-gb-2x-memory",
+      "environmentId": "api30",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "QualityStressTest#c_largeCoverImportDownsamplesPreviewsAndExportsOnFourGbDevice",
+      "startedAt": "2026-08-24T00:13:00Z",
+      "completedAt": "2026-08-24T00:14:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "endurance-30m",
+      "environmentId": "api36",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "QualityStressTest#b_thirtyMinuteEditingEndurancePreservesAutosaveRendererAndRestorationState",
+      "startedAt": "2026-08-24T00:14:00Z",
+      "completedAt": "2026-08-24T00:44:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    },
+    {
+      "id": "physical-core-save-share",
+      "environmentId": "physical",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest#productionMainActivitySavesAndSharesExportedBytes",
+      "startedAt": "2026-08-24T00:44:00Z",
+      "completedAt": "2026-08-24T00:45:00Z",
+      "logs": [
+        {
+          "kind": "manual",
+          "path": "logs/instrumentation.log",
+          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+        }
+      ]
+    }
   ]
 }

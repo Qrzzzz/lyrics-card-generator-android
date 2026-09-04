@@ -1,1 +1,5 @@
 TEST FIXTURE ONLY: no renderer error, ANR, OOM, or partial-file marker.
+TEST FIXTURE ONLY: talkback-service-active package=com.google.android.marvin.talkback version=fixture touchExploration=true
+TEST FIXTURE ONLY: talkback-core-complete stages=home,editor,export,settings input=swipe-double-tap
+TEST FIXTURE ONLY: platform-export savedSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa shareSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa chooserVisible=true sent=false
+TEST FIXTURE ONLY: edit-summary durationMs=1800000 operations=100

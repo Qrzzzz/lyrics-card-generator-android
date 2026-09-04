@@ -120,6 +120,9 @@ Assert-Rejected -Name 'wrong-aab-certificate' -Mutate { param($e) $e.candidate.p
 Assert-Rejected -Name 'wrong-test-apk-package' -Mutate { param($e) $e.candidate.testApk.package = 'com.example.test' } -MessagePattern 'production package plus .test'
 Assert-Rejected -Name 'wrong-test-apk-target' -Mutate { param($e) $e.candidate.testApk.targetPackage = 'com.example' } -MessagePattern 'targetPackage'
 Assert-Rejected -Name 'missing-webview-version' -Mutate { param($e) $e.environments[1].webView.version = '' } -MessagePattern 'webView.version is required'
+Assert-Rejected -Name 'missing-build-fingerprint' -Mutate { param($e) $e.environments[1].buildFingerprint = '' } -MessagePattern 'buildFingerprint is required'
+Assert-Rejected -Name 'atf-is-not-talkback' -Mutate { param($e) ($e.gates | Where-Object id -eq 'api33-talkback').testSelector = 'AccessibilityFrameworkTest' } -MessagePattern 'ATF alone is insufficient'
+Assert-Rejected -Name 'export-route-is-not-save-share' -Mutate { param($e) ($e.gates | Where-Object id -eq 'physical-core-save-share').testSelector = 'AvdMatrixSmokeTest export route only' } -MessagePattern 'not export-route readiness'
 Assert-Rejected -Name 'wrong-system-image-api' -Mutate { param($e) $e.environments[1].systemImage = 'system-images;android-29;google_apis;x86_64' } -MessagePattern 'does not bind API 30'
 Assert-Rejected -Name 'missing-api36-environment' -Mutate { param($e) $e.environments[3].apiLevel = 35; $e.environments[3].systemImage = 'system-images;android-35;google_apis;x86_64' } -MessagePattern 'Exactly one AVD environment is required for API 36'
 Assert-Rejected -Name 'duplicate-environment' -Mutate { param($e) $e.environments[1].id = 'api26' } -MessagePattern 'Duplicate environment id'
@@ -227,11 +230,14 @@ if (-not (Test-Path -LiteralPath $captureWorkflowPath -PathType Leaf)) {
     throw 'The authorized device capture producer is missing.'
 }
 $captureWorkflow = [IO.File]::ReadAllText($captureWorkflowPath)
-foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'timeout-minutes: 150', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'assembleProductionReleaseAndroidTest', 'actions/download-artifact@', 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020', 'npm.cmd ci --no-audit --no-fund', 'actions/upload-artifact@')) {
+foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'timeout-minutes: 150', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'production-device-test-*', 'actions/download-artifact@', 'gh attestation verify', 'actions/upload-artifact@')) {
     if ($captureWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Capture workflow is missing controlled producer binding: $literal" }
 }
 if ($captureWorkflow -match '\$\{\{\s*secrets\.' -or $captureWorkflow -match '(?m)^\s+(id-token|attestations):\s*write\s*$') {
     throw 'The capture producer must not read GitHub signing secrets or write attestations.'
+}
+if ($captureWorkflow -match 'LYRICS_CARD_(STORE|KEY)_' -or $captureWorkflow -match 'gradlew\.bat') {
+    throw 'The device runner must consume the attested test APK and must not rebuild it or require signing credentials.'
 }
 $captureScript = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'scripts\capture-device-gate-evidence.ps1'))
 foreach ($literal in @("Start-Process -FilePath `$adb", "'threadtime', '-T', '1'", '-RedirectStandardOutput $logcatPath', 'Stop-Process -Id $logcatProcess.Id', 'Streaming logcat produced no evidence')) {

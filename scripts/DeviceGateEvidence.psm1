@@ -166,6 +166,7 @@ function Assert-DeviceGateEvidence {
         if ($kind -notin @('AVD', 'PHYSICAL')) { throw "environment[$id].kind is invalid." }
         $apiLevel = [int](Get-RequiredProperty $environment 'apiLevel' "environment[$id]")
         Assert-Text (Get-RequiredProperty $environment 'androidVersion' "environment[$id]") "environment[$id].androidVersion"
+        Assert-Text (Get-RequiredProperty $environment 'buildFingerprint' "environment[$id]") "environment[$id].buildFingerprint"
         Assert-Text (Get-RequiredProperty $environment 'systemImage' "environment[$id]") "environment[$id].systemImage"
         Assert-Sha256 (Get-RequiredProperty $environment 'deviceIdSha256' "environment[$id]") "environment[$id].deviceIdSha256"
         if ([int](Get-RequiredProperty $environment 'ramMiB' "environment[$id]") -lt 1024) { throw "environment[$id].ramMiB is invalid." }
@@ -243,6 +244,27 @@ function Assert-DeviceGateEvidence {
             if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) { throw "gate[$gateId] log is missing: $relativePath" }
             $actualHash = (Get-FileHash -LiteralPath $logPath -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actualHash -cne $expectedHash) { throw "gate[$gateId] log SHA-256 mismatch: $relativePath" }
+        }
+        $logcatText = (@($logs | Where-Object { $_.kind -eq 'logcat' }) | ForEach-Object {
+            [IO.File]::ReadAllText((Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $_.path))
+        }) -join "`n"
+        if ($gateId -eq 'api33-talkback') {
+            if ($gate.testSelector -cne 'com.qrzzzz.lyricscard.ui.TalkBackReleaseTest' -or
+                $logcatText -notmatch 'talkback-service-active package=com\.google\.android\.marvin\.talkback version=\S+ touchExploration=true' -or
+                $logcatText -notmatch 'talkback-core-complete stages=home,editor,export,settings input=swipe-double-tap') {
+                throw 'TalkBack gate requires the real active service and completed gesture navigation; ATF alone is insufficient.'
+            }
+        }
+        if ($gateId -eq 'physical-core-save-share' -and
+            ($gate.testSelector -cne 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest#productionMainActivitySavesAndSharesExportedBytes' -or
+             $logcatText -notmatch 'platform-export savedSha256=([0-9a-f]{64}) shareSha256=\1 chooserVisible=true sent=false')) {
+            throw 'Physical gate requires saved/shared byte equality and a real share chooser, not export-route readiness.'
+        }
+        if ($gateId -eq 'endurance-30m') {
+            $duration = [regex]::Match($logcatText, 'edit-summary durationMs=(\d+)')
+            if (-not $duration.Success -or [long]$duration.Groups[1].Value -lt 1800000) {
+                throw 'Endurance gate requires an actual completed thirty-minute edit summary.'
+            }
         }
     }
     foreach ($requiredGate in $script:RequiredGateEnvironment.Keys) {

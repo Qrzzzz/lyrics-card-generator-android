@@ -133,6 +133,16 @@ function Install-Candidate([string] $Serial) {
     if ($installTest -notmatch 'Success') { throw "Test APK installation failed on ${Serial}: $installTest" }
 }
 
+function Get-InstalledApkSha256([string] $Serial, [string] $Package) {
+    $paths = @((Invoke-Adb $Serial @('shell', 'pm', 'path', $Package)) -split "\r?\n" | Where-Object { $_ -match '^package:' })
+    if ($paths.Count -ne 1) { throw "Expected one installed base APK for $Package on $Serial." }
+    $path = $paths[0].Substring('package:'.Length).Trim()
+    if ($path -notmatch '^/data/app/[A-Za-z0-9_+/=.-]+/base\.apk$') { throw 'Unexpected installed APK path.' }
+    $digest = Invoke-Adb $Serial @('shell', 'sha256sum', $path)
+    if ($digest -notmatch '^([0-9a-f]{64})\s+') { throw "Could not hash installed APK for $Package on $Serial." }
+    return $Matches[1]
+}
+
 function Add-Environment(
     [string] $Id,
     [string] $Serial,
@@ -142,16 +152,32 @@ function Add-Environment(
     [string] $SystemImage,
     [string] $AvdName
 ) {
+    $actualProductionSha = Get-InstalledApkSha256 $Serial ([string]$metadata.package)
+    $actualTestSha = Get-InstalledApkSha256 $Serial ([string]$testPackageMatch.Groups[1].Value)
+    if ($actualProductionSha -cne $productionApkSha -or $actualTestSha -cne $testApkSha) {
+        throw "Installed APK bytes on $Serial do not match the frozen host artifacts."
+    }
+    $devicePackage = Invoke-Adb $Serial @('shell', 'dumpsys', 'package', [string]$metadata.package)
+    $deviceVersionName = [regex]::Match($devicePackage, '(?m)^\s*versionName=([^\r\n]+)').Groups[1].Value.Trim()
+    $deviceVersionCode = [regex]::Match($devicePackage, '(?m)^\s*versionCode=(\d+)').Groups[1].Value
+    if ($deviceVersionName -cne [string]$metadata.versionName -or $deviceVersionCode -ne [string]$metadata.versionCode) {
+        throw "Installed package version on $Serial differs from the frozen candidate."
+    }
+    $deviceArtifacts = [ordered]@{}
+    foreach ($key in $installedArtifacts.Keys) { $deviceArtifacts[$key] = $installedArtifacts[$key] }
+    $deviceArtifacts.productionApkSha256 = $actualProductionSha
+    $deviceArtifacts.testApkSha256 = $actualTestSha
     $environment = [ordered]@{
         id = $Id
         kind = $Kind
         apiLevel = $ApiLevel
         androidVersion = Get-DeviceProperty $Serial 'ro.build.version.release'
+        buildFingerprint = Get-DeviceProperty $Serial 'ro.build.fingerprint'
         systemImage = $SystemImage
         deviceIdSha256 = Get-TextSha256 $Serial
         ramMiB = $RamMiB
         webView = Get-WebView $Serial
-        installedArtifacts = $installedArtifacts
+        installedArtifacts = $deviceArtifacts
     }
     if ($Kind -eq 'AVD') {
         $environment.avdName = $AvdName
@@ -176,7 +202,7 @@ function Invoke-Instrumentation(
     $logcatErrorPath = "$logcatPath.stderr"
     $startedAt = [datetimeoffset]::UtcNow
     $logcatProcess = Start-Process -FilePath $adb `
-        -ArgumentList @('-s', $Serial, 'logcat', '-v', 'threadtime', '-T', '1') `
+        -ArgumentList @('-s', $Serial, 'logcat', '-v', 'threadtime', '-T', '1', 'LCG_QUALITY:I', 'LCG_ATF:I', 'LCG_RELEASE:I', '*:S') `
         -RedirectStandardOutput $logcatPath `
         -RedirectStandardError $logcatErrorPath `
         -PassThru `
@@ -189,6 +215,7 @@ function Invoke-Instrumentation(
     $arguments = @('shell', 'am', 'instrument', '-w', '-r')
     if (-not [string]::IsNullOrWhiteSpace($Selector)) { $arguments += @('-e', 'class', $Selector) }
     $arguments += 'com.qrzzzz.lyricscard.test/androidx.test.runner.AndroidJUnitRunner'
+    $null = Invoke-Adb $Serial @('shell', 'log', '-t', 'LCG_RELEASE', "gate-start-$LogStem")
     try {
         $instrumentationOutput = (& $adb -s $Serial @arguments 2>&1 | Out-String)
         $instrumentationExit = $LASTEXITCODE
@@ -210,7 +237,7 @@ function Invoke-Instrumentation(
         throw "Streaming logcat produced no evidence for ${Serial}."
     }
     $completedAt = [datetimeoffset]::UtcNow
-    if ($instrumentationExit -ne 0 -or $instrumentationOutput -notmatch '(?m)^OK \(' -or $instrumentationOutput -match '(?m)^FAILURES!!!') {
+    if ($instrumentationExit -ne 0 -or $instrumentationOutput -notmatch '(?m)^OK \([1-9][0-9]* tests?\)' -or $instrumentationOutput -match '(?m)^FAILURES!!!') {
         throw "Instrumentation failed on $Serial selector='$Selector'. See $instrumentationPath"
     }
     return [pscustomobject]@{
@@ -308,9 +335,20 @@ foreach ($entry in $avdMatrix) {
                 Add-Gate 'api33-core' $entry.Id $core
                 $accessibility = Invoke-Instrumentation $handle.serial 'api33-accessibility' 'com.qrzzzz.lyricscard.ui.ArchitectureRestorationTest,com.qrzzzz.lyricscard.ui.AccessibilityFrameworkTest'
                 Add-Gate 'api33-recovery-atf' $entry.Id $accessibility
-                Add-Gate 'api33-talkback' $entry.Id $accessibility 'AccessibilityFrameworkTest core TalkBack semantics and ATF'
                 $font = Invoke-Instrumentation $handle.serial 'api33-font-scale-200' 'com.qrzzzz.lyricscard.ui.HomeSettingsProductionTest#compactWideLandscapeAndTwoHundredPercentFontKeepKeyTargetsReachable'
                 Add-Gate 'api33-font-scale-200' $entry.Id $font
+                $previousServices = Invoke-Adb $handle.serial @('shell', 'settings', 'get', 'secure', 'enabled_accessibility_services')
+                $previousAccessibility = Invoke-Adb $handle.serial @('shell', 'settings', 'get', 'secure', 'accessibility_enabled')
+                try {
+                    $null = Invoke-Adb $handle.serial @('shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', 'com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService')
+                    $null = Invoke-Adb $handle.serial @('shell', 'settings', 'put', 'secure', 'accessibility_enabled', '1')
+                    Start-Sleep -Seconds 5
+                    $talkback = Invoke-Instrumentation $handle.serial 'api33-talkback' 'com.qrzzzz.lyricscard.ui.TalkBackReleaseTest'
+                    Add-Gate 'api33-talkback' $entry.Id $talkback
+                } finally {
+                    $null = Invoke-Adb $handle.serial @('shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', $previousServices)
+                    $null = Invoke-Adb $handle.serial @('shell', 'settings', 'put', 'secure', 'accessibility_enabled', $previousAccessibility)
+                }
             }
             36 {
                 $connected = Invoke-Instrumentation $handle.serial 'api36-connected-production' ''
@@ -328,8 +366,8 @@ $physicalApi = [int](Get-DeviceProperty $PhysicalDeviceSerial 'ro.build.version.
 Install-Candidate $PhysicalDeviceSerial
 $physicalMemKb = [int64]([regex]::Match((Invoke-Adb $PhysicalDeviceSerial @('shell', 'cat', '/proc/meminfo')), '(?m)^MemTotal:\s+(\d+)\s+kB').Groups[1].Value)
 Add-Environment 'physical' $PhysicalDeviceSerial 'PHYSICAL' $physicalApi ([int]($physicalMemKb / 1024)) 'physical-device' ''
-$physicalRun = Invoke-Instrumentation $PhysicalDeviceSerial 'physical-core-save-share' 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest'
-Add-Gate 'physical-core-save-share' 'physical' $physicalRun 'authorized physical core export save/share readiness'
+$physicalRun = Invoke-Instrumentation $PhysicalDeviceSerial 'physical-core-save-share' 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest#productionMainActivitySavesAndSharesExportedBytes'
+Add-Gate 'physical-core-save-share' 'physical' $physicalRun
 
 $productionApkInfo = Get-Item -LiteralPath $productionApkPath
 $productionAabInfo = Get-Item -LiteralPath $productionAabPath
