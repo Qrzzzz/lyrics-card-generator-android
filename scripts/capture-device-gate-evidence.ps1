@@ -34,7 +34,7 @@ trap {
         workflowRunId = $EvidenceRunId
         startedAt = $scriptStartedAt.ToString('o')
         failedAt = [datetimeoffset]::UtcNow.ToString('o')
-        message = $_.Exception.Message
+        message = $_.Exception.Message.Replace($PhysicalDeviceSerial, '[physical device]')
         completedGateIds = @(if (Get-Variable gates -ErrorAction SilentlyContinue) { $gates | ForEach-Object { $_.id } })
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outputRootPath 'capture-failure.json') -Encoding utf8
     throw
