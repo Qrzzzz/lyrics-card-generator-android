@@ -60,10 +60,10 @@ jobs:
           if ($env:SOURCE_COMMIT -cnotmatch '^[0-9a-f]{40}$') { throw 'source_commit must be a full lowercase SHA.' }
           if ($env:CANDIDATE_RUN_ID -notmatch '^[1-9][0-9]*$') { throw 'candidate_run_id must be a positive integer.' }
           if ($env:CANDIDATE_ARTIFACT_NAME -notmatch '^production-candidate-[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$') { throw 'candidate_artifact_name is invalid.' }
-          if ($env:TRIGGER_SHA -cne $env:SOURCE_COMMIT -or
-              $env:WORKFLOW_SHA -cne $env:SOURCE_COMMIT -or $env:WORKFLOW_REF -ne 'refs/heads/main' -or
+          if ($env:WORKFLOW_SHA -cnotmatch '^[0-9a-f]{40}$' -or
+              $env:TRIGGER_SHA -cne $env:WORKFLOW_SHA -or $env:WORKFLOW_REF -ne 'refs/heads/main' -or
               $env:WORKFLOW_EVENT -ne 'workflow_dispatch') {
-            throw 'Device capture must use the exact workflow and source on refs/heads/main.'
+            throw 'Device capture must use the trusted workflow dispatched on refs/heads/main.'
           }
           $testArtifactName = $env:CANDIDATE_ARTIFACT_NAME.Replace('production-candidate-', 'production-device-test-')
           "test_artifact_name=$testArtifactName" >> $env:GITHUB_OUTPUT
@@ -73,6 +73,16 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
+
+      - name: Verify frozen source belongs to trusted main history
+        shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          VALIDATOR_COMMIT: ${{ github.workflow_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Import-Module ./scripts/ProductionReleasePolicy.psm1 -Force
+          Assert-CommitAncestor -AncestorCommit $env:SOURCE_COMMIT -DescendantCommit $env:VALIDATOR_COMMIT -Repository $env:GITHUB_REPOSITORY -GitHubToken $env:GH_TOKEN
 
       - name: Download attested signed candidate
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

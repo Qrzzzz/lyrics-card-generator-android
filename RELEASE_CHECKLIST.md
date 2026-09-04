@@ -15,19 +15,21 @@
 
 ### 1.1 Protected production source boundary
 
-- [ ] 仅从 `refs/heads/main` dispatch；输入 candidate、`github.sha`、`github.workflow_sha` 与刚 fetch 的 `origin/main` tip 必须是同一个完整 SHA；
+- [ ] 仅从 `refs/heads/main` dispatch；输入 candidate、`github.sha`、`github.workflow_sha` 必须是同一个完整 SHA；fresh main 必须仍包含候选；
 - [ ] 对该 SHA 存在 `Android Quality Gate` 的 `push` / `main` / `completed` / `success` run；PR run、其他分支、其他仓库或其他 SHA 的绿灯均无效；
 - [ ] `v<version>` remote tag 与同 tag GitHub Release 均不存在；在 environment 批准后、生成 provenance 前再次检查，任一冲突都 STOP；
-- [ ] `scripts/test-production-release-contract.ps1` 通过，其中负例必须继续拒绝未合并/过期 main、错误 SHA/版本、重复 tag/Release 与缺少 exact gate；
+- [ ] `scripts/test-production-release-contract.ps1` 通过，其中负例必须继续拒绝未合并/已移出主干历史的提交、错误 SHA/版本、重复 tag/Release 与缺少 exact gate；
 - [ ] 无 Secrets 的 `authorize-candidate` job 先通过，之后才允许受 `production-signing` environment 保护的签名 job 启动。
 
-仓库内 source policy 采用“dispatch 时的精确 `origin/main` tip”，而不是“任意已合并祖先”。详细合同见 `docs/RELEASE_PROVENANCE.md`。
+仓库内 source policy 固定 main dispatch 时的提交，审批期间主干前进不废弃获批候选。详细合同见 `docs/RELEASE_PROVENANCE.md`。
 
 ## 2. Renderer gate
 
+同 SHA 主干 Quality Gate 已证明类型、单测与构建时直接引用 run，无需本地再跑下列完整命令。签名候选仍执行当前依赖审计，Gradle 构建最终 assets。
+
 ```powershell
 cd renderer
-npm.cmd ci
+npm.cmd ci --no-audit --no-fund
 npm.cmd run audit:security
 npm.cmd run check
 ```
@@ -39,6 +41,8 @@ npm.cmd run check
 - [ ] Renderer output、安全/session/latest-wins/cancel/recovery invariants 未改变或已有独立 diff justification。
 
 ## 3. Non-device Android gate
+
+以下是完整主干门。发布阶段引用其同 SHA 结果，仅重跑 productionRelease JVM/lint 与签名 APK/AAB/test APK 构建；不重复 alpha/debug 全套。
 
 ```powershell
 .\gradlew.bat :app:test `
@@ -90,7 +94,7 @@ GitHub Actions 的 `Android Quality Gate` 必须在同一 candidate 上通过。
 - [ ] 18 个必需 gate 全部为单次 `PASS`，包括 API 30 serif measure/spec 1×→2×、20×/内存、core/recovery/ATF、4 GB 2×、TalkBack、200% font、30 分钟耐久和真机 save/share；
 - [ ] 每个 gate 的日志文件存在且 SHA-256 一致；任何缺项、旧 source、错误 artifact/log SHA、`NOT RUN`、`BLOCKED`、`FAIL` 或 attempts≠1 都必须拒绝；
 - [ ] 后置 workflow 不读取 production-signing environment/Secrets，不重新签名或重建 candidate，并对候选全部 publishable assets 重跑 GitHub attestation 验证；
-- [ ] GitHub API 证明 candidate run 与 evidence run 均来自本仓库、精确 source SHA、`main`、`completed/success`、允许的 workflow path/event；JSON producer run id/attempt/path/event 与 API 完全一致；
+- [ ] GitHub API 证明 candidate run 来自本仓库与精确 source SHA；evidence run 来自实际 producer SHA；两者均为 `main`、`completed/success`、允许的 workflow path/event，并验证 source → producer → final validator 的祖先链；JSON producer run id/attempt/path/event 与 API 完全一致；
 - [ ] `.github/workflows/capture-device-gate-evidence.yml` producer 已由主任务在获授权设备阶段实现并成功上传真实 test APK/logs；producer 未成功时保持 fail closed，不以任意 run-id/artifact-name 替代；
 - [ ] `productionReleaseAndroidTest` test APK 的实际 `aapt2` package/version/instrumentation target 与 `apksigner` certificate 通过；test APK 必须下载自同一候选 run 并通过 release workflow 的 attestation；Debug test APK 不得冒充 target 为正式 `com.qrzzzz.lyricscard` 的 release device evidence；
 - [ ] `final-device-gate` environment 已配置 required reviewer；Reviewer 理解 attestation 只覆盖 #10 candidate assets，test APK 另有同签名 job 的 provenance；device logs/final verdict 的信任来自 producer identity、API/validator 绑定与人工复核；

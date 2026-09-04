@@ -49,15 +49,33 @@ jobs:
           & $sdkManager.FullName 'platforms;android-36.1' 'build-tools;36.1.0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify renderer
+      - name: Install renderer dependencies
         working-directory: renderer
         shell: pwsh
         run: |
-          npm.cmd ci
+          npm.cmd ci --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Audit renderer dependencies with bounded service retries
+        working-directory: renderer
+        shell: pwsh
+        run: |
           npm.cmd run audit:security
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm.cmd run check
+
+      - name: Verify renderer types and tests
+        working-directory: renderer
+        shell: pwsh
+        run: |
+          npm.cmd run typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm.cmd run test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify CI scope and audit failure handling
+        shell: pwsh
+        run: |
+          node --test scripts/test-ci-tools.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify dependency-security contract
@@ -70,6 +88,8 @@ jobs:
         shell: pwsh
         run: |
           .\scripts\test-production-release-contract.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\scripts\test-frozen-source-contract.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify final device-gate evidence contract
@@ -115,23 +135,39 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: 歌词卡片
+          fetch-depth: 0
           persist-credentials: false
 
+      - name: Determine Unicode smoke scope
+        id: scope
+        working-directory: 歌词卡片
+        shell: pwsh
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node scripts/ci-scope.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Set up JDK 17
+        if: steps.scope.outputs.unicode == 'true'
         uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Node.js 24
+        if: steps.scope.outputs.unicode == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
 
       - name: Set up Gradle
+        if: steps.scope.outputs.unicode == 'true'
         uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3 # v4.4.2
 
       - name: Install pinned Android SDK packages
+        if: steps.scope.outputs.unicode == 'true'
         shell: pwsh
         run: |
           $sdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
@@ -141,6 +177,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run a real JVM test through the Unicode-path wrapper
+        if: steps.scope.outputs.unicode == 'true'
         working-directory: 歌词卡片
         shell: pwsh
         run: |
@@ -148,11 +185,11 @@ jobs:
             -StagingRoot (Join-Path $env:RUNNER_TEMP 'lyrics-card-gradle-staging') `
             -GradleArguments @(
               ':app:testAlphaDebugUnitTest',
+              '--rerun',
               '--tests',
               'com.qrzzzz.lyricscard.model.LyricTextCleanerTest',
               '--no-parallel',
               '--no-daemon',
-              '--rerun-tasks',
               '--stacktrace',
               '--console=plain'
             )

@@ -68,6 +68,9 @@ $remoteMain = (git rev-parse refs/remotes/origin/main).Trim().ToLowerInvariant()
 if ($LASTEXITCODE -ne 0) {
     throw 'Could not resolve refreshed origin/main.'
 }
+git merge-base --is-ancestor $candidate $remoteMain
+if ($LASTEXITCODE -notin @(0, 1)) { throw 'Could not verify candidate ancestry on main.' }
+$candidateOnMain = $LASTEXITCODE -eq 0
 
 $gradle = Get-Content 'app/build.gradle.kts' -Raw
 $repositoryVersion = [regex]::Match($gradle, 'versionName\s*=\s*"([^"]+)"').Groups[1].Value
@@ -94,6 +97,7 @@ $qualityRun = Assert-ProductionCandidatePolicy `
     -RepositoryVersion $repositoryVersion `
     -Repository $Repository `
     -RemoteMainCommit $remoteMain `
+    -CandidateOnMain $candidateOnMain `
     -WorkflowEvent $WorkflowEvent `
     -WorkflowRef $WorkflowRef `
     -WorkflowSha $WorkflowSha `

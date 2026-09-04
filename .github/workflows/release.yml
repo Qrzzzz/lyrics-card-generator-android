@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: Exact origin/main tip (full 40-character commit SHA)
+        description: Main commit frozen by this dispatch (full 40-character SHA)
         required: true
         type: string
       version:
@@ -58,8 +58,12 @@ jobs:
           }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
           $main = Invoke-RestMethod -Method Get -Uri "$env:API_BASE_URL/repos/$env:REPOSITORY/git/ref/heads/main" -Headers $headers
-          if ($main.object.type -ne 'commit' -or $main.object.sha -ne $candidate) {
-            throw 'Candidate must equal fresh remote main before checkout.'
+          if ($main.object.type -ne 'commit' -or $main.object.sha -notmatch '^[0-9a-f]{40}$') {
+            throw 'Fresh remote main did not resolve to a commit.'
+          }
+          $comparison = Invoke-RestMethod -Method Get -Uri "$env:API_BASE_URL/repos/$env:REPOSITORY/compare/$candidate...$($main.object.sha)" -Headers $headers
+          if ($comparison.status -notin @('ahead', 'identical') -or $comparison.merge_base_commit.sha -cne $candidate) {
+            throw 'Frozen candidate is no longer in remote main history before checkout.'
           }
 
       - name: Check out trusted workflow source without signing access
@@ -133,8 +137,12 @@ jobs:
           }
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
           $main = Invoke-RestMethod -Method Get -Uri "$env:API_BASE_URL/repos/$env:REPOSITORY/git/ref/heads/main" -Headers $headers
-          if ($main.object.type -ne 'commit' -or $main.object.sha -ne $candidate) {
-            throw 'Candidate must equal fresh remote main before checkout.'
+          if ($main.object.type -ne 'commit' -or $main.object.sha -notmatch '^[0-9a-f]{40}$') {
+            throw 'Fresh remote main did not resolve to a commit.'
+          }
+          $comparison = Invoke-RestMethod -Method Get -Uri "$env:API_BASE_URL/repos/$env:REPOSITORY/compare/$candidate...$($main.object.sha)" -Headers $headers
+          if ($comparison.status -notin @('ahead', 'identical') -or $comparison.merge_base_commit.sha -cne $candidate) {
+            throw 'Frozen candidate is no longer in remote main history before checkout.'
           }
 
       - name: Check out trusted authorized source
@@ -219,15 +227,18 @@ jobs:
           & $sdkManager.FullName 'platforms;android-36.1' 'build-tools;36.1.0'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify renderer
+      - name: Install renderer dependencies
         working-directory: renderer
         shell: pwsh
         run: |
-          npm.cmd ci
+          npm.cmd ci --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Audit candidate dependencies with bounded service retries
+        working-directory: renderer
+        shell: pwsh
+        run: |
           npm.cmd run audit:security
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm.cmd run check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Decode production signing store
@@ -264,7 +275,7 @@ jobs:
           LYRICS_CARD_KEY_ALIAS: ${{ secrets.LYRICS_CARD_KEY_ALIAS }}
           LYRICS_CARD_KEY_PASSWORD: ${{ secrets.LYRICS_CARD_KEY_PASSWORD }}
         run: |
-          .\gradlew.bat :app:test :app:lintProductionRelease :app:assembleProductionRelease :app:bundleProductionRelease :app:dumpProductionReleaseBundleManifest --no-parallel --no-daemon --stacktrace --console=plain
+          .\gradlew.bat :app:testProductionReleaseUnitTest :app:lintProductionRelease :app:assembleProductionRelease :app:bundleProductionRelease :app:dumpProductionReleaseBundleManifest --no-parallel --no-daemon --stacktrace --console=plain
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .\gradlew.bat :app:assembleProductionReleaseAndroidTest --no-parallel --no-daemon --stacktrace --console=plain
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -526,7 +537,7 @@ jobs:
         with:
           name: production-candidate-${{ steps.assets.outputs.version }}-${{ steps.assets.outputs.short_sha }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
           path: release-assets/*
 
       - name: Upload production device-test APK separately
@@ -535,5 +546,5 @@ jobs:
         with:
           name: production-device-test-${{ steps.assets.outputs.version }}-${{ steps.assets.outputs.short_sha }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
           path: app/build/outputs/apk/androidTest/production/release/app-production-release-androidTest.apk

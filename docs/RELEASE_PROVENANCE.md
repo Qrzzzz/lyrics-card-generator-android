@@ -7,16 +7,16 @@
 正式候选必须同时满足：
 
 1. workflow 由 `workflow_dispatch` 从 `refs/heads/main` 启动；
-2. 输入的完整 candidate SHA 等于 dispatch 的 `github.sha`、workflow 定义的 `github.workflow_sha`，也等于 fresh fetch 后的 `origin/main` tip；
+2. 输入的完整 candidate SHA 等于 dispatch 的 `github.sha` 与 workflow 定义的 `github.workflow_sha`；fresh main 必须仍包含这个冻结提交；
 3. `app/build.gradle.kts` 的 `versionName` 等于输入版本，版本格式为 `x.y.z`；
 4. 远端不存在 `v<version>` tag，GitHub 也不存在同 tag Release；
 5. `.github/workflows/ci.yml` 对同一仓库、同一 SHA 存在 `Android Quality Gate` 的成功 run，且该 run 必须是 `push` event、`main` branch、`completed` status、`success` conclusion。
 
-这里有意采用“精确 main tip”而不是“main 上任意祖先”。这样能阻止把已经被后续提交取代的 SHA、未合并 SHA、PR 绿灯或另一个 SHA 的绿灯送入生产签名环境。若 main 在审批或构建期间前进，或 tag/Release 在期间出现，recheck 会停止旧候选；需要从新的 main tip 重新取得 exact Quality Gate 证据。
+候选在 main dispatch 时冻结，environment 审批针对这个明确的 SHA。审批或构建期间 main 前进不会使候选失效；API/git 仍检查候选属于主干历史。被移出主干历史的提交、未合并提交、错配 workflow/trigger、其他 SHA 或 PR 的绿灯均被拒绝。tag/Release 冲突仍立即停止。修改候选内容需要新的 source 和对应 CI，不能借用旧候选证据。
 
-`authorize-candidate` 只有 `actions: read` 与 `contents: read`，不绑定 environment，也不引用 Secrets。两个 job 都先执行可信 workflow 定义内的内联检查，在任何 checkout 或仓库脚本执行前确认 candidate、workflow SHA、trigger SHA 与实时远端 main 相同；签名 job 同时核对上游授权输出。checkout 始终使用 `github.workflow_sha`，不使用 candidate 输入或上游输出选择校验代码，防止未合并候选替换自己的验证器后自行授权。授权通过后，`signed-candidate` 才进入现有 `production-signing` environment；签名 job 在 environment 审批后和 provenance 前再次运行完整合同，复核版本唯一性和 exact-SHA Quality Gate。
+`authorize-candidate` 只有 `actions: read` 与 `contents: read`，不绑定 environment，也不引用 Secrets。两个 job 都先执行可信 workflow 定义内的内联检查，在任何 checkout 或仓库脚本执行前确认 candidate、workflow SHA、trigger SHA 相同且候选仍在实时主干历史中；签名 job 同时核对上游授权输出。checkout 始终使用 `github.workflow_sha`，不使用 candidate 输入或上游输出选择校验代码，防止未合并候选替换自己的验证器后自行授权。授权通过后，`signed-candidate` 才进入现有 `production-signing` environment；签名 job 在 environment 审批后和 provenance 前再次运行完整合同，复核版本唯一性和 exact-SHA Quality Gate。
 
-纯逻辑位于 `scripts/ProductionReleasePolicy.psm1`，GitHub/git 取证入口为 `scripts/verify-production-candidate.ps1`。`scripts/test-production-release-contract.ps1` 提供主机可运行的正/负向合同，并由正常 `Android Quality Gate` 执行；它还直接运行从 workflow 提取的两个内联入口，通过本地替换验证器的候选夹具检验拒绝时未执行候选代码，以及远端 main 前进和授权输出污染均会停止流程。此夹具不调用 GitHub、不申请生产凭据，也不触发真实签名。
+纯逻辑位于 `scripts/ProductionReleasePolicy.psm1`，GitHub/git 取证入口为 `scripts/verify-production-candidate.ps1`。`scripts/test-production-release-contract.ps1` 提供主机可运行的正/负向合同，并由正常 `Android Quality Gate` 执行；它还直接运行从 workflow 提取的两个内联入口，通过本地替换验证器的候选夹具检验拒绝时未执行候选代码，以及主干正常前进可继续、候选移出主干或授权输出污染会停止流程。此夹具不调用 GitHub、不申请生产凭据，也不触发真实签名。
 
 ## Certificate continuity
 
@@ -46,7 +46,7 @@
 
 该 signed candidate 仍不是最终设备结论。metadata 明确写入 `PROVISIONAL / device NOT RUN / finalReady=false`；独立 `Final Device Gate` workflow 在后置阶段以 `actions: read`、`attestations: read`、`contents: read` 下载同一 candidate artifact 和受控 device-evidence artifact，重新验证每个 candidate subject 的 provenance，再将实际 APK/AAB/test APK、日志和完整设备矩阵交给 `scripts/validate-device-gate-evidence.ps1`。后置 job 不进入 `production-signing`、不读取 Secrets、不重建或重签产物。真实 evidence 缺失或任一 gate 非 PASS 时不会产生 `FINAL READY` verdict。
 
-`Final Device Gate` 仍是独立 consumer/validator：它通过 GitHub API 将 candidate run 锁定到本仓库、精确 source SHA、`main`、成功的 `workflow_dispatch` 与 `.github/workflows/release.yml`，并将 evidence run 同样锁定到受控 producer `.github/workflows/capture-device-gate-evidence.yml`；JSON 内的 producer run id/attempt/path/event 必须与 API 结果一致。producer 只允许带 `lcg-device-gate` 标签的 Windows 自托管 Runner，从同一候选 run 下载并验证 production bytes 和带独立来源证明的 production-release test APK，并按 stop-on-first-failure 规则运行 API 26/30/33/36 与获授权实体设备矩阵。真实 producer run、test APK/logs artifact 和 `final-device-gate` environment 审批仍必须在具体发布时逐项核验。
+`Final Device Gate` 仍是独立 consumer/validator：它通过 GitHub API 将 candidate run 锁定到本仓库、精确 source SHA、`main`、成功的 `workflow_dispatch` 与 `.github/workflows/release.yml`，并将 evidence run 锁定到受控 producer `.github/workflows/capture-device-gate-evidence.yml` 的实际 workflow SHA。Capture/Final 均从受保护 main dispatch，验证器 SHA 等于各自 trigger SHA；候选 source 可以更早。Final 用 GitHub compare API 验证 source → evidence workflow SHA → final validator SHA 的主干祖先链；JSON 内的 producer run id/attempt/path/event 必须与 API 结果一致。producer 只允许带 `lcg-device-gate` 标签的 Windows 自托管 Runner，从同一候选 run 下载并验证 production bytes 和带独立来源证明的 production-release test APK，并按 stop-on-first-failure 规则运行 API 26/30/33/36 与获授权实体设备矩阵。真实 producer run、test APK/logs artifact 和 `final-device-gate` environment 审批仍必须在具体发布时逐项核验。
 
 `gh attestation verify` 的证明对象是 #10 signed candidate 中的 APK/AAB/mapping/metadata/checksums，以及同一签名 job 单独构建、证明的正式 test APK，不把 device logs 或最终 verdict 自动升级为 GitHub build provenance。最终 verdict 的信任来自：允许的 producer workflow identity、GitHub API 的 same-repo/same-SHA/success 绑定、证据文件与真实 bytes/log hashes 的 validator、`final-device-gate` environment 人工 reviewer，以及独立发布者对 run/artifact IDs 的复核。若需要让 device evidence 或 verdict 也具备 cryptographic attestation，应作为后续独立权限设计；不得在本门中复用 signing secrets 或声称已有该属性。
 
