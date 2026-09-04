@@ -46,7 +46,8 @@ internal class PlatformExportUiDriver(
         assertFalse("unique validation destination already exists", destinationExists())
         automation.serviceInfo = automation.serviceInfo.apply {
             flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
         }
         instrumentation.addMonitor(monitor)
     }
@@ -59,27 +60,54 @@ internal class PlatformExportUiDriver(
         Log.i("LCG_RELEASE", "platform-ui createDocumentObserved=true mime=image/png uniqueFixture=true")
         await("DocumentsUI did not become visible") { foregroundIsDocumentsUi() }
 
-        // Select the platform's local Downloads root, rather than relying on the user's last folder.
-        val rootsButton = awaitNode("DocumentsUI roots button") {
-            it.contentDescription?.toString() in ROOTS_LABELS || it.viewIdResourceName == "android:id/home"
+        // Select an actual row in the platform's root list. A matching title or a successful
+        // accessibility click alone does not establish that DocumentsUI changed directories.
+        if (!rootsListVisible()) {
+            awaitNode("DocumentsUI roots button") {
+                it.contentDescription?.toString() in ROOTS_LABELS || it.viewIdResourceName == "android:id/home"
+            }.useNode(::click)
         }
-        click(rootsButton)
-        val downloads = awaitNode("DocumentsUI Downloads root") {
-            it.text?.toString() in DOWNLOADS_LABELS && it.viewIdResourceName == "android:id/title"
+        await("DocumentsUI roots list did not become visible") { rootsListVisible() }
+        await("DocumentsUI Downloads root row could not be selected") {
+            findDownloadsRootRow()?.useNode { row ->
+                val clicked = row.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                if (clicked) {
+                    Log.i("LCG_RELEASE", "platform-ui rootsRowClicked=true targetId=${row.viewIdResourceName} targetClass=${row.className}")
+                }
+                clicked
+            } ?: false
         }
-        click(downloads)
-        val name = awaitNode("DocumentsUI filename field") { it.className?.toString() == "android.widget.EditText" }
-        if (name.text?.toString() != fixtureName) {
-            assertTrue("cannot set unique document filename", name.performAction(
-                AccessibilityNodeInfo.ACTION_SET_TEXT,
-                Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, fixtureName) },
-            ))
+        var name: AccessibilityNodeInfo? = null
+        var drawerVisible = true
+        var saveFormVisible = false
+        try {
+            await("DocumentsUI root selection did not expose the filename field") {
+                // Re-read the window after the click; do not retain the drawer's stale tree.
+                drawerVisible = rootsListVisible()
+                name = findSaveFilename()
+                saveFormVisible = name != null
+                if (drawerVisible) {
+                    name?.useNode { }
+                    name = null
+                }
+                !drawerVisible && saveFormVisible
+            }
+        } finally {
+            Log.i("LCG_RELEASE", "platform-ui rootsNavigation drawerVisible=$drawerVisible saveFormVisible=$saveFormVisible")
         }
-        val save = awaitNode("DocumentsUI Save button") {
+        checkNotNull(name).useNode { filename ->
+            if (filename.text?.toString() != fixtureName) {
+                assertTrue("cannot set unique document filename", filename.performAction(
+                    AccessibilityNodeInfo.ACTION_SET_TEXT,
+                    Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, fixtureName) },
+                ))
+            }
+        }
+        awaitNode("DocumentsUI Save button") {
             val id = it.viewIdResourceName.orEmpty().substringAfterLast('/')
-            id == "action_menu_save" || (id == "button1" && it.text?.toString()?.lowercase() in SAVE_LABELS)
-        }
-        click(save)
+            it.isEnabled && it.isClickable &&
+                (id == "action_menu_save" || (id == "button1" && it.text?.toString()?.lowercase() in SAVE_LABELS))
+        }.useNode(::click)
         await("DocumentsUI did not return to the app") { foregroundIsApp() }
         Log.i("LCG_RELEASE", "platform-ui documentsSaveClicked=true returnedToApp=true")
     }
@@ -148,30 +176,86 @@ internal class PlatformExportUiDriver(
     private fun resumedActivities(): List<String> = shell("dumpsys activity activities").lineSequence()
         .filter { it.contains("mResumedActivity") || it.contains("topResumedActivity") }.toList()
 
+    private fun rootsListVisible(): Boolean = findNode { isDocumentsUiView(it, "roots_list") }
+        ?.useNode { true } ?: false
+
+    @Suppress("DEPRECATION")
+    private fun findDownloadsRootRow(): AccessibilityNodeInfo? {
+        val roots = findNode { isDocumentsUiView(it, "roots_list") } ?: return null
+        roots.useNode { list ->
+            repeat(list.childCount) { index ->
+                list.getChild(index)?.useNode { row ->
+                    // The roots ListView exposes its item rows here. The title may be nested
+                    // or flattened by accessibility, so search inside the row, not its parent.
+                    if (row.isVisibleToUser && row.isEnabled && row.isClickable) {
+                        val hasDownloadsTitle = findNode(AccessibilityNodeInfo.obtain(row)) {
+                            it.viewIdResourceName == "android:id/title" && it.text?.toString() in DOWNLOADS_LABELS
+                        }?.useNode { true } ?: false
+                        if (hasDownloadsTitle) return AccessibilityNodeInfo.obtain(row)
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun findSaveFilename(): AccessibilityNodeInfo? {
+        val form = findNode { isDocumentsUiView(it, "container_save") } ?: return null
+        return findNode(form) {
+            it.viewIdResourceName == "android:id/title" && it.className?.toString() == "android.widget.EditText"
+        }
+    }
+
+    private fun isDocumentsUiView(node: AccessibilityNodeInfo, id: String): Boolean =
+        node.packageName?.toString()?.contains("documentsui", ignoreCase = true) == true &&
+            node.viewIdResourceName?.substringAfterLast('/') == id
+
     private fun awaitNode(description: String, predicate: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo {
         var found: AccessibilityNodeInfo? = null
         await("missing $description") {
-            val queue = ArrayDeque<AccessibilityNodeInfo>()
-            automation.rootInActiveWindow?.let(queue::add)
-            while (queue.isNotEmpty()) {
-                val node = queue.removeFirst()
-                if (node.isVisibleToUser && predicate(node)) {
-                    found = node
-                    break
-                }
-                repeat(node.childCount) { node.getChild(it)?.let(queue::add) }
-            }
+            found = findNode(predicate = predicate)
             found != null
         }
         return checkNotNull(found)
     }
 
+    /** Consumes root and returns a separate node owned by the caller. */
+    @Suppress("DEPRECATION")
+    private fun findNode(
+        root: AccessibilityNodeInfo? = automation.rootInActiveWindow,
+        predicate: (AccessibilityNodeInfo) -> Boolean,
+    ): AccessibilityNodeInfo? {
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        root?.let(queue::add)
+        try {
+            while (queue.isNotEmpty()) {
+                queue.removeFirst().useNode { node ->
+                    if (node.isVisibleToUser && predicate(node)) return AccessibilityNodeInfo.obtain(node)
+                    repeat(node.childCount) { node.getChild(it)?.let(queue::add) }
+                }
+            }
+        } finally {
+            queue.forEach { it.recycle() }
+        }
+        return null
+    }
+
+    @Suppress("DEPRECATION")
+    private inline fun <T> AccessibilityNodeInfo.useNode(action: (AccessibilityNodeInfo) -> T): T =
+        try { action(this) } finally { recycle() }
+
+    @Suppress("DEPRECATION")
     private fun click(node: AccessibilityNodeInfo) {
-        var target: AccessibilityNodeInfo? = node
-        repeat(6) {
-            val current = target ?: return@repeat
-            if (current.isClickable && current.isEnabled && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return
-            target = current.parent
+        var target: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
+        try {
+            repeat(6) {
+                val current = target ?: return@repeat
+                if (current.isClickable && current.isEnabled && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return
+                target = current.parent
+                current.recycle()
+            }
+        } finally {
+            target?.recycle()
         }
         throw AssertionError("platform UI node could not be clicked")
     }
