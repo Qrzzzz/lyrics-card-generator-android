@@ -35,6 +35,19 @@ $outputRootPath = [IO.Path]::GetFullPath($OutputRoot)
 $avdRootPath = [IO.Path]::GetFullPath($AvdRoot)
 New-Item -ItemType Directory -Path $outputRootPath -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $outputRootPath 'logs') -Force | Out-Null
+trap {
+    if (-not (Get-Variable outputRootPath -ErrorAction SilentlyContinue) -or -not (Test-Path -LiteralPath $outputRootPath -PathType Container)) { throw }
+    [ordered]@{
+        status = 'FAILED'
+        sourceCommit = $SourceCommit
+        workflowRunId = $EvidenceRunId
+        startedAt = $scriptStartedAt.ToString('o')
+        failedAt = [datetimeoffset]::UtcNow.ToString('o')
+        message = $_.Exception.Message
+        completedGateIds = if (Get-Variable gates -ErrorAction SilentlyContinue) { @($gates | ForEach-Object { $_.id }) } else { @() }
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outputRootPath 'capture-failure.json') -Encoding utf8
+    throw
+}
 New-Item -ItemType Directory -Path $avdRootPath -Force | Out-Null
 $env:ANDROID_AVD_HOME = $avdRootPath
 
@@ -80,6 +93,9 @@ if ($LASTEXITCODE -ne 0) { throw 'aapt2 could not inspect the release test APK m
 $testPackageMatch = [regex]::Match($testBadging, "(?m)^package: name='([^']+)' versionCode='([^']*)' versionName='([^']*)'")
 $testInstrumentationMatch = [regex]::Match($testManifestXmlTree, '(?ms)E: instrumentation.*?:name\([^)]*\)="([^"]+)".*?:targetPackage\([^)]*\)="([^"]+)"')
 if (-not $testPackageMatch.Success -or -not $testInstrumentationMatch.Success) { throw 'Release test APK metadata is incomplete.' }
+if ($testInstrumentationMatch.Groups[1].Value -cne 'com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner') {
+    throw 'Release evidence requires the test runner that removes console credentials before framework logging.'
+}
 $testVersionCode = if ([string]::IsNullOrEmpty($testPackageMatch.Groups[2].Value)) { 0 } else { [int]$testPackageMatch.Groups[2].Value }
 $testApkName = 'app-production-release-androidTest.apk'
 $capturedTestApk = Join-Path $outputRootPath $testApkName
@@ -118,12 +134,10 @@ function Get-DeviceProperty([string] $Serial, [string] $Name) {
 }
 
 function Get-WebView([string] $Serial) {
-    foreach ($packageName in @('com.google.android.webview', 'com.android.webview')) {
-        $dump = Invoke-Adb $Serial @('shell', 'dumpsys', 'package', $packageName)
-        $versionMatch = [regex]::Match($dump, '(?m)^\s*versionName=([^\s]+)')
-        if ($versionMatch.Success) { return [ordered]@{ package = $packageName; version = $versionMatch.Groups[1].Value } }
-    }
-    throw "No WebView package version was found on $Serial."
+    $dump = Invoke-Adb $Serial @('shell', 'dumpsys', 'webviewupdate')
+    $current = [regex]::Match($dump, '(?m)^\s*Current WebView package \(name, version\):\s*\(([A-Za-z0-9_.]+),\s*([^\s)]+)\)')
+    if (-not $current.Success) { throw "No active WebView provider was found on $Serial." }
+    return [ordered]@{ package = $current.Groups[1].Value; version = $current.Groups[2].Value }
 }
 
 function Install-Candidate([string] $Serial) {
@@ -131,6 +145,19 @@ function Install-Candidate([string] $Serial) {
     if ($installProduction -notmatch 'Success') { throw "Production APK installation failed on ${Serial}: $installProduction" }
     $installTest = Invoke-Adb $Serial @('install', '-r', '-t', $capturedTestApk)
     if ($installTest -notmatch 'Success') { throw "Test APK installation failed on ${Serial}: $installTest" }
+}
+
+function Assert-DeviceIdentity([string] $Serial, [string] $Kind, [int] $ApiLevel = 0, [string] $AvdName = '') {
+    $actualApi = [int](Get-DeviceProperty $Serial 'ro.build.version.sdk')
+    $isEmulator = $Serial -match '^emulator-' -or
+        (Get-DeviceProperty $Serial 'ro.kernel.qemu') -eq '1' -or
+        (Get-DeviceProperty $Serial 'ro.boot.qemu') -eq '1'
+    if ($ApiLevel -gt 0 -and $actualApi -ne $ApiLevel) { throw "Device $Serial API $actualApi differs from requested API $ApiLevel." }
+    if (($Kind -eq 'AVD') -ne $isEmulator) { throw "Device $Serial does not match required device kind $Kind." }
+    if ($Kind -eq 'AVD') {
+        $actualName = ((Invoke-Adb $Serial @('emu', 'avd', 'name')) -split "\r?\n")[0].Trim()
+        if ($actualName -cne $AvdName) { throw "Device $Serial is not the expected AVD $AvdName." }
+    }
 }
 
 function Get-InstalledApkSha256([string] $Serial, [string] $Package) {
@@ -152,6 +179,7 @@ function Add-Environment(
     [string] $SystemImage,
     [string] $AvdName
 ) {
+    Assert-DeviceIdentity $Serial $Kind $ApiLevel $AvdName
     $actualProductionSha = Get-InstalledApkSha256 $Serial ([string]$metadata.package)
     $actualTestSha = Get-InstalledApkSha256 $Serial ([string]$testPackageMatch.Groups[1].Value)
     if ($actualProductionSha -cne $productionApkSha -or $actualTestSha -cne $testApkSha) {
@@ -167,15 +195,22 @@ function Add-Environment(
     foreach ($key in $installedArtifacts.Keys) { $deviceArtifacts[$key] = $installedArtifacts[$key] }
     $deviceArtifacts.productionApkSha256 = $actualProductionSha
     $deviceArtifacts.testApkSha256 = $actualTestSha
+    $memInfo = Invoke-Adb $Serial @('shell', 'cat', '/proc/meminfo')
+    $actualRamMiB = [int]([int64]([regex]::Match($memInfo, '(?m)^MemTotal:\s+(\d+)\s+kB').Groups[1].Value) / 1024)
+    if ($Kind -eq 'AVD' -and ($actualRamMiB -lt ($RamMiB * 0.70) -or $actualRamMiB -gt ($RamMiB * 1.05))) {
+        throw "Device $Serial measured RAM is inconsistent with its requested AVD memory configuration."
+    }
     $environment = [ordered]@{
         id = $Id
         kind = $Kind
-        apiLevel = $ApiLevel
+        apiLevel = [int](Get-DeviceProperty $Serial 'ro.build.version.sdk')
+        isEmulator = ($Kind -eq 'AVD')
         androidVersion = Get-DeviceProperty $Serial 'ro.build.version.release'
         buildFingerprint = Get-DeviceProperty $Serial 'ro.build.fingerprint'
         systemImage = $SystemImage
         deviceIdSha256 = Get-TextSha256 $Serial
         ramMiB = $RamMiB
+        actualRamMiB = $actualRamMiB
         webView = Get-WebView $Serial
         installedArtifacts = $deviceArtifacts
     }
@@ -193,8 +228,13 @@ function Add-Environment(
 function Invoke-Instrumentation(
     [string] $Serial,
     [string] $LogStem,
-    [string] $Selector
+    [string] $Selector,
+    [int] $TalkBackConsolePort = 0,
+    [string] $TalkBackConsoleToken = ''
 ) {
+    if ($TalkBackConsolePort -gt 0 -and ($Serial -cne "emulator-$TalkBackConsolePort" -or $TalkBackConsoleToken -notmatch '^[A-Za-z0-9_-]+$')) {
+        throw 'TalkBack console credentials do not match the authorized emulator.'
+    }
     $instrumentationRelative = "logs/$LogStem-instrumentation.log"
     $logcatRelative = "logs/$LogStem-logcat.txt"
     $instrumentationPath = Join-Path $outputRootPath ($instrumentationRelative -replace '/', '\')
@@ -207,16 +247,20 @@ function Invoke-Instrumentation(
         -RedirectStandardError $logcatErrorPath `
         -PassThru `
         -WindowStyle Hidden
-    Start-Sleep -Milliseconds 750
-    if ($logcatProcess.HasExited) {
-        $logcatError = if (Test-Path -LiteralPath $logcatErrorPath) { Get-Content -LiteralPath $logcatErrorPath -Raw } else { '' }
-        throw "Streaming logcat exited before instrumentation on ${Serial}: $logcatError"
-    }
     $arguments = @('shell', 'am', 'instrument', '-w', '-r')
     if (-not [string]::IsNullOrWhiteSpace($Selector)) { $arguments += @('-e', 'class', $Selector) }
-    $arguments += 'com.qrzzzz.lyricscard.test/androidx.test.runner.AndroidJUnitRunner'
-    $null = Invoke-Adb $Serial @('shell', 'log', '-t', 'LCG_RELEASE', "gate-start-$LogStem")
+    if ($TalkBackConsolePort -gt 0) {
+        if ($env:GITHUB_ACTIONS -eq 'true') { Write-Host "::add-mask::$TalkBackConsoleToken" }
+        $arguments += @('-e', 'lcgTalkBackConsolePort', [string]$TalkBackConsolePort, '-e', 'lcgTalkBackConsoleToken', $TalkBackConsoleToken)
+    }
+    $arguments += 'com.qrzzzz.lyricscard.test/com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner'
     try {
+        Start-Sleep -Milliseconds 750
+        if ($logcatProcess.HasExited) {
+            $logcatError = if (Test-Path -LiteralPath $logcatErrorPath) { Get-Content -LiteralPath $logcatErrorPath -Raw } else { '' }
+            throw "Streaming logcat exited before instrumentation on ${Serial}: $logcatError"
+        }
+        $null = Invoke-Adb $Serial @('shell', 'log', '-t', 'LCG_RELEASE', "gate-start-$LogStem")
         $instrumentationOutput = (& $adb -s $Serial @arguments 2>&1 | Out-String)
         $instrumentationExit = $LASTEXITCODE
     } finally {
@@ -265,35 +309,48 @@ function Add-Gate([string] $Id, [string] $EnvironmentId, [object] $Run, [string]
 }
 
 function New-Avd([string] $Name, [string] $Package, [int] $RamMiB) {
-    "no" | & $avdManager.FullName create avd --force --name $Name --package $Package --device 'pixel_2' 2>&1 | Out-Null
+    if (Test-Path -LiteralPath (Join-Path $avdRootPath "$Name.ini")) { throw "Capture AVD already exists; use a fresh run-specific AvdRoot: $Name" }
+    "no" | & $avdManager.FullName create avd --name $Name --package $Package --device 'pixel_2' 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not create AVD $Name from $Package." }
     $configPath = Join-Path $avdRootPath "$Name.avd\config.ini"
     [IO.File]::AppendAllText($configPath, "`nhw.ramSize=$RamMiB`ndisk.dataPartition.size=6G`nhw.gpu.enabled=yes`nhw.gpu.mode=swiftshader`n")
 }
 
 function Start-Avd([string] $Name, [int] $Port, [int] $RamMiB) {
+    $serial = "emulator-$Port"
+    $existingDevices = (& $adb devices 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0 -or $existingDevices -match "(?m)^$([regex]::Escape($serial))\s") { throw "Capture emulator port is already in use: $Port" }
+    $listeners = [Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners()
+    if (@($listeners | Where-Object { $_.Port -eq $Port -or $_.Port -eq ($Port + 1) }).Count -gt 0) { throw "Capture console/ADB port is already in use: $Port" }
     $process = Start-Process -FilePath $emulator -ArgumentList @(
         '-avd', $Name, '-port', [string]$Port, '-no-window', '-no-audio', '-no-boot-anim',
         '-no-snapshot', '-wipe-data', '-gpu', 'swiftshader', '-memory', [string]$RamMiB
-    ) -PassThru -WindowStyle Hidden
-    $serial = "emulator-$Port"
-    $deadline = [datetimeoffset]::UtcNow.AddMinutes(5)
-    do {
-        if ($process.HasExited) { throw "AVD $Name exited before boot completed." }
-        Start-Sleep -Seconds 2
-        $booted = (& $adb -s $serial shell getprop sys.boot_completed 2>$null | Out-String).Trim()
-    } while ($booted -ne '1' -and [datetimeoffset]::UtcNow -lt $deadline)
-    if ($booted -ne '1') { throw "AVD $Name did not boot within five minutes." }
-    $null = Invoke-Adb $serial @('shell', 'settings', 'put', 'global', 'window_animation_scale', '0')
-    $null = Invoke-Adb $serial @('shell', 'settings', 'put', 'global', 'transition_animation_scale', '0')
-    $null = Invoke-Adb $serial @('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0')
-    return [pscustomobject]@{ serial = $serial; process = $process }
+    ) -RedirectStandardOutput (Join-Path $outputRootPath "logs/$Name-emulator.log") -RedirectStandardError (Join-Path $outputRootPath "logs/$Name-emulator.stderr.log") -PassThru -WindowStyle Hidden
+    $handle = [pscustomobject]@{ serial = $serial; process = $process; name = $Name }
+    try {
+        $deadline = [datetimeoffset]::UtcNow.AddMinutes(5)
+        do {
+            if ($process.HasExited) { throw "AVD $Name exited before boot completed." }
+            Start-Sleep -Seconds 2
+            $booted = (& $adb -s $serial shell getprop sys.boot_completed 2>$null | Out-String).Trim()
+        } while ($booted -ne '1' -and [datetimeoffset]::UtcNow -lt $deadline)
+        if ($booted -ne '1') { throw "AVD $Name did not boot within five minutes." }
+        $null = Invoke-Adb $serial @('shell', 'settings', 'put', 'global', 'window_animation_scale', '0')
+        $null = Invoke-Adb $serial @('shell', 'settings', 'put', 'global', 'transition_animation_scale', '0')
+        $null = Invoke-Adb $serial @('shell', 'settings', 'put', 'global', 'animator_duration_scale', '0')
+        return $handle
+    } catch {
+        Stop-Avd $handle
+        throw
+    }
 }
 
 function Stop-Avd([object] $Handle) {
     if ($null -eq $Handle) { return }
-    & $adb -s $Handle.serial emu kill 2>$null | Out-Null
-    if (-not $Handle.process.WaitForExit(30000)) { Stop-Process -Id $Handle.process.Id -Force }
+    if ($Handle.process.HasExited) { return }
+    $name = ((& $adb -s $Handle.serial emu avd name 2>$null | Out-String) -split "\r?\n")[0].Trim()
+    if ($name -ceq $Handle.name) { & $adb -s $Handle.serial emu kill 2>$null | Out-Null }
+    if (-not $Handle.process.WaitForExit(15000)) { Stop-Process -Id $Handle.process.Id -Force }
 }
 
 $avdMatrix = @(
@@ -303,11 +360,13 @@ $avdMatrix = @(
     [pscustomobject]@{ Id = 'api36'; Api = 36; Ram = 4096; Name = 'lcg-final-api36'; Package = 'system-images;android-36;google_apis_playstore;x86_64'; Port = 5560 }
 )
 
+Assert-DeviceIdentity $PhysicalDeviceSerial 'PHYSICAL'
 foreach ($entry in $avdMatrix) {
     $handle = $null
     try {
         New-Avd $entry.Name $entry.Package $entry.Ram
         $handle = Start-Avd $entry.Name $entry.Port $entry.Ram
+        Assert-DeviceIdentity $handle.serial 'AVD' $entry.Api $entry.Name
         Install-Candidate $handle.serial
         Add-Environment $entry.Id $handle.serial 'AVD' $entry.Api $entry.Ram $entry.Package $entry.Name
         switch ($entry.Api) {
@@ -325,10 +384,14 @@ foreach ($entry in $avdMatrix) {
                 $exports = Invoke-Instrumentation $handle.serial 'api30-export-20x' 'com.qrzzzz.lyricscard.quality.QualityStressTest#a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope'
                 Add-Gate 'api30-export-20x' $entry.Id $exports
                 Add-Gate 'api30-memory' $entry.Id $exports 'QualityStressTest#a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope memory envelope'
-                $cleanup = Invoke-Instrumentation $handle.serial 'api30-cancel-retry-cleanup' 'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#exportControlsExposeOnlyOneAndTwoXAndMatchBusyFailureAndSuccessStates'
+                $cleanup = Invoke-Instrumentation $handle.serial 'api30-cancel-retry-cleanup' 'com.qrzzzz.lyricscard.quality.QualityStressTest#a_cancelledExportRemovesPartialAndRetryProducesValidPng'
                 Add-Gate 'api30-cancel-retry-temp-cleanup' $entry.Id $cleanup
                 $fourGb = Invoke-Instrumentation $handle.serial 'api30-four-gb' 'com.qrzzzz.lyricscard.quality.QualityStressTest#c_largeCoverImportDownsamplesPreviewsAndExportsOnFourGbDevice'
                 Add-Gate 'four-gb-2x-memory' $entry.Id $fourGb
+                $core = Invoke-Instrumentation $handle.serial 'api30-core' 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest'
+                Add-Gate 'api30-core' $entry.Id $core
+                $recovery = Invoke-Instrumentation $handle.serial 'api30-recovery-atf' 'com.qrzzzz.lyricscard.ui.ArchitectureRestorationTest,com.qrzzzz.lyricscard.ui.AccessibilityFrameworkTest'
+                Add-Gate 'api30-recovery-atf' $entry.Id $recovery
             }
             33 {
                 $core = Invoke-Instrumentation $handle.serial 'api33-core' 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest'
@@ -340,10 +403,13 @@ foreach ($entry in $avdMatrix) {
                 $previousServices = Invoke-Adb $handle.serial @('shell', 'settings', 'get', 'secure', 'enabled_accessibility_services')
                 $previousAccessibility = Invoke-Adb $handle.serial @('shell', 'settings', 'get', 'secure', 'accessibility_enabled')
                 try {
+                    $null = Invoke-Adb $handle.serial @('shell', 'pm', 'grant', 'com.google.android.marvin.talkback', 'android.permission.POST_NOTIFICATIONS')
                     $null = Invoke-Adb $handle.serial @('shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', 'com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService')
                     $null = Invoke-Adb $handle.serial @('shell', 'settings', 'put', 'secure', 'accessibility_enabled', '1')
                     Start-Sleep -Seconds 5
-                    $talkback = Invoke-Instrumentation $handle.serial 'api33-talkback' 'com.qrzzzz.lyricscard.ui.TalkBackReleaseTest'
+                    $consoleTokenPath = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.emulator_console_auth_token'
+                    $consoleToken = [IO.File]::ReadAllText($consoleTokenPath).Trim()
+                    $talkback = Invoke-Instrumentation $handle.serial 'api33-talkback' 'com.qrzzzz.lyricscard.ui.TalkBackReleaseTest' $entry.Port $consoleToken
                     Add-Gate 'api33-talkback' $entry.Id $talkback
                 } finally {
                     $null = Invoke-Adb $handle.serial @('shell', 'settings', 'put', 'secure', 'enabled_accessibility_services', $previousServices)
@@ -363,6 +429,7 @@ foreach ($entry in $avdMatrix) {
 }
 
 $physicalApi = [int](Get-DeviceProperty $PhysicalDeviceSerial 'ro.build.version.sdk')
+Assert-DeviceIdentity $PhysicalDeviceSerial 'PHYSICAL' $physicalApi
 Install-Candidate $PhysicalDeviceSerial
 $physicalMemKb = [int64]([regex]::Match((Invoke-Adb $PhysicalDeviceSerial @('shell', 'cat', '/proc/meminfo')), '(?m)^MemTotal:\s+(\d+)\s+kB').Groups[1].Value)
 Add-Environment 'physical' $PhysicalDeviceSerial 'PHYSICAL' $physicalApi ([int]($physicalMemKb / 1024)) 'physical-device' ''

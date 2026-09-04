@@ -1,59 +1,38 @@
 # Release Readiness
 
-## 当前结论
+本文定义 `1.1.1`（`versionCode 10101`）及后续修订版的发布条件。`FINAL READY` 是绑定具体 source SHA、产物字节和 Actions run 的结论；静态文档、旧版结果、单台设备启动成功或合同测试均不能签发该结论。
 
-**PROVISIONAL / NOT FINAL READY**
+## 必须闭合的发布链
 
-源码版本当前为 `1.1.0`（`versionCode 10100`）正式发布候选。相较 1.0.1，本次集中修复中文路径构建、备份与 D2D 策略、依赖安全、正式签名 provenance 与最终真机证据门；本文仍不把本地 build、JVM tests、单台真机冒烟或 CI infrastructure 等同于完整设备矩阵与最终 Reviewer PASS。
+1. 同一主干提交的 Android Quality Gate 和 Dependency Security 成功。Renderer、四变体 JVM、lint、R8、APK/AAB 与 Windows 中文路径门均必须执行。
+2. `Production Release Candidate` 只接受可信 workflow 的精确 main SHA，并重新检查 Quality Gate 和版本唯一性。签名 job 在审批前后拒绝来源错配；候选自带脚本不能授权自身。
+3. 同一签名 job 生成生产 APK/AAB、metadata、mapping、checksums 以及单独的正式测试 APK，验证生产证书连续性并生成 GitHub build provenance。公开候选 metadata 固定为 `PROVISIONAL / device NOT RUN / finalReady=false`。
+4. `Capture Device Gate Evidence` 从同一候选 run 下载并验证上述产物，在获授权的 API 26/30/33/36 AVD 与实体设备执行真实测试。设备 Runner 不构建或重签 APK，也不持有生产签名凭据。
+5. `Final Device Gate` 重新核对 workflow identity、same-SHA/run/artifact、公开候选及测试 APK 的 provenance、实际字节哈希、完整设备矩阵和成功日志，产生 `FINAL READY` verdict。
+6. 发布者核对三个 run 的来源和产物，上传已验证的候选原字节。Release 必须列出 source、candidate/evidence/final run、证书指纹及 checksums；公开下载后的哈希与 provenance 仍须通过。
 
-## 已实现的产品与工程能力
+任何缺失、失败、跳过、旧候选或未完成项必须保留 `NOT RUN/BLOCKED/FAIL`，不能通过修改文档、手工填写 PASS 或重复运行后抹掉失败记录来关闭门。诊断实验与正式一次性矩阵分开保存；修改产品、测试或验收脚本后重新冻结候选。
 
-- Compose 原生 Home、Editor、Export、Settings 与 typed Navigation；
-- 六步编辑流程、UDF state ownership、autosave、undo/redo 与 project-ID 恢复；
-- Room v2 `cover_assets` reference ledger、v1→v2 migration、orphan cleanup、thumbnail/export lifecycle；
-- 固定 Origin、no-network、no-file/content-access Renderer WebView；
-- session/generation/latest-wins、串行 export、cancel、timeout 与 renderer-process recovery；
-- 30-case Renderer Golden regression 数据集和合同/安全/JVM/instrumentation test source；
-- production R8/resource shrinking、APK/AAB 构建路径；
-- 正式 CI、受控 main-tip/same-SHA Quality Gate 的 signed production candidate workflow、生产证书连续性与同 job build provenance；
-- 正式 README、architecture、changelog、privacy、release checklist 与 third-party notices。
+## 设备验收范围
 
-以上项目不再作为“未来 Alpha TODO”。
+- API 26：fresh install、核心编辑和导出、Renderer/WebView 生命周期、恢复与 ATF。
+- API 30：fresh serif 1×→2× measure/spec、20 次连续 2× 导出、实际取消与重试后的临时文件清理、4 GB 配置与实际内存记录、核心编辑/导出与恢复/ATF。
+- API 33：核心编辑、恢复/ATF、运行中的真实 TalkBack 手势导航、200% 字体。
+- API 36：完整正式 instrumentation、20 次导出、至少 30 分钟编辑耐久及状态恢复。
+- 获授权实体设备：实际安装字节、核心编辑、真实保存和分享选择器。测试不向联系人发送文件，只清理自身创建的项目和验证文件。
 
-## H 后必须重验的 Gate
+每个环境记录实际 API、设备/模拟器类型、AVD 身份、build fingerprint、WebView、配置及实际 RAM。安装后从设备的真实 base APK 重新计算生产与测试 APK SHA-256，并检查实际 package/version；不能复制主机哈希冒充设备读数。ATF 不能代替 TalkBack，打开导出页不能代替保存/分享，失败 instrumentation 或不足 30 分钟的日志不能支持 PASS。
 
-工作流 H 修改了 signing/build variant 使用方式、CI/release workflow 和正式文档。因此最终工作流 G 与独立 Final Reviewer 必须从 H 的最终 commit 重新构建同一 production candidate，并按该候选 APK/AAB 的 SHA-256 绑定所有设备证据。H 之前 binary 的结果不能替代 H 后产物。
+## 外部保护与依赖基线
 
-当前工作流 G 的终局 Reviewer 已判定设备门 **NOT PASS**：最终 renderer binary 在 fresh API 30 的 serif 1×→2× probe 中，于导出前的 measure/spec 请求触发既有 8 秒 timeout。该事实不能被 H 的非设备构建结果覆盖或改写。
+2026-09-04 复核：main 已设置 required checks 并对管理员强制执行；`production-signing` 和 `final-device-gate` 仅接受受保护分支、保留 Qrzzzz reviewer，管理员 bypass 已关闭。仓库目前只有该维护者，因此允许其本人审核自己发起的运行；这项明确的单维护者设置不等同于取消 required reviewer。具体运行仍需通过 GitHub 环境批准点。
 
-仍未决的最终候选门：
+Dependency Graph、Dependabot alerts/security updates 和三生态更新已启用。npm 已修复本轮发现的依赖漏洞；构建/测试工具链的原始告警、范围、逐项负责人、截止日期和公开处置链接见 [依赖基线](security/dependency-baseline-2026-09-04.md)。不得把正式运行时图没有这些依赖扩大为所有生态零风险。
 
-- API 26、30、33、36 的候选安装、核心流程、恢复与导出验证；
-- API 30 的上述 timeout 修复后重新执行 20 次连续导出；
-- 4 GB 环境的 2× 导出与内存证据；
-- 30 分钟连续编辑、后台/进程恢复与 temp cleanup；
-- API 33 TalkBack 核心流程；
-- 200% font scale；
-- 一台获明确授权的实体设备。
+## 历史结论的边界
 
-历史工作流 H 不包含物理设备授权。本 Beta 工作流已单独授权固定真机 `b2601eb1` 执行最小冒烟并安装最终 Beta；该授权不包含修改 MIUI/USB 安全策略，也不等同于四 API 矩阵、20 次导出或 30 分钟耐久 PASS。
+- 2026-08-08 的 API 30 超时绑定旧 Debug 候选。后续 `c3ff32f` 候选的 API 30 serif probe、20× 和 4 GB 项已有成功诊断日志，但 API 36 测试失败；这些记录不能代替本版同一最终候选矩阵。
+- v1.1.0 发布说明明确记录设备矩阵和耐久门由 owner 豁免；其公开 APK/AAB 使用连续生产证书，但五个公开资产没有 GitHub attestation，metadata 也未满足现行来源合同。本版不得追溯伪造其 provenance，或将该豁免沿用为新版验收。
+- #13 的中文路径 wrapper 已由 PR #14 实现并复核关闭；#9–#12 的剩余修复必须分别绑定实际 PR 与对应发布/验收证据。
 
-## External release gate
-
-仓库只包含 signing infrastructure，不包含生产 keystore 或密码。公开 Beta 可以使用明确披露的测试证书签署，但该 APK 不是生产签名产物，不能升级为正式版；没有 production signing secrets 时，仍会阻止为当前候选生成新的正式 signed APK/AAB。
-
-即使生产 signing secrets 后续可用，仍必须先完成上述 G/真机/Reviewer Gate；手动 workflow 的 signed artifact upload 也不是 GitHub Release 或商店发布授权。
-
-`Production Release Candidate` 与最终设备结论采用诚实的两阶段语义：第一阶段的 signed/attested artifact metadata 永远是 `PROVISIONAL / device NOT RUN / finalReady=false`；获授权设备运行另行产生受控 evidence artifact，随后由不接触 signing secrets 的 `Final Device Gate` workflow 下载同一 candidate bytes、test APK 与日志，运行 `scripts/validate-device-gate-evidence.ps1`。只有后置 job success 才能产生 `FINAL READY` verdict。当前没有 v1.1.0 的完整受控设备 evidence，因此该后置门按设计 fail closed；`tests/fixtures` 中的正例不能用于发布。
-
-仓库已实现 `.github/workflows/capture-device-gate-evidence.yml` 受控 producer；它要求带 `lcg-device-gate` 标签的 Windows 自托管 Runner、精确 main SHA、同一 signed candidate 和获授权实体设备，并运行完整 API 26/30/33/36 + physical 矩阵。当前仍没有 v1.1.0 的成功 producer run，因此在真实 evidence artifact 与 `final-device-gate` environment 审批完成前，流程不会产生可发布的 FINAL READY。
-
-Gradle 的受控设备路径固定使用 `productionReleaseAndroidTest`，test APK 必须由 host `aapt2`/`apksigner` 验证 package、version、目标 `com.qrzzzz.lyricscard` 与证书，并与同一 signed production candidate 一起进入设备矩阵。历史或现有 Debug test APK 不能冒充正式签名 APK 的 instrumentation 证据。
-
-仓库内已定义 source/provenance 合同，但 `main` ruleset/branch protection、`production-signing` required reviewers/deployment policy 与管理员 bypass 只能在 GitHub Settings 配置。在管理员完成并独立核验这些外部前置条件之前，P1 发布供应链边界仍为 **PROVISIONAL**；本地合同测试也不能替代真实 GitHub-hosted attestation。详见 `docs/RELEASE_PROVENANCE.md`。
-
-## 证据来源
-
-- H 的最终本地命令、artifact path/hash 与 source cleanliness：`docs/internal/release-engineering-gate-2026-08-09.md`；
-- H 起点前的 G 终局失败：`docs/internal/quality-gate-2026-08-08.md`；
-- 完整发布步骤与 STOP 条件：根目录 `RELEASE_CHECKLIST.md`。
+详细执行清单见 [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md)，来源合同见 [RELEASE_PROVENANCE.md](RELEASE_PROVENANCE.md)。

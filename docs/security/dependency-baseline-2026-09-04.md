@@ -1,6 +1,6 @@
 # Gradle dependency advisory remediation baseline — 2026-09-04
 
-Tracking issue: **pending publication**. This document is the proposed body of the public remediation issue required by [Issue #11](https://github.com/Qrzzzz/lyrics-card-generator-android/issues/11). Create that issue, assign `Qrzzzz`, and replace this line with its URL before closing #11. A committed draft alone does not complete the public tracking requirement.
+Tracking issue: [#35 — Gradle build/test advisory remediation](https://github.com/Qrzzzz/lyrics-card-generator-android/issues/35), assigned to **Qrzzzz**. Every unresolved high/critical item below has an explicit owner, due date and next action in that public issue.
 
 Owner: **Qrzzzz** for every item below. Status: **OPEN — upgrade compatibility validation pending** for the Gradle items. Due dates are remediation/reassessment deadlines, not vulnerability suppressions or release waivers. Keep the original GitHub severity and each alert open until a verified upgrade or an explicitly reviewed disposition is recorded.
 

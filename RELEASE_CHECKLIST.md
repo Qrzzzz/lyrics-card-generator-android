@@ -67,7 +67,7 @@ GitHub Actions 的 `Android Quality Gate` 必须在同一 candidate 上通过。
 
 - [ ] API 26：fresh install、核心流程、Renderer/WebView compatibility、recovery；
 - [ ] API 30：先重验 serif 1×→2× probe，确认既有 measure/spec timeout 已解决；
-- [ ] API 30：通过前项后执行 20 次连续导出、cancel/retry/temp cleanup 与内存记录；
+- [ ] API 30：通过前项后执行 20 次连续导出、实际取消与重试后的临时文件清理、内存记录，以及 core/recovery/ATF；
 - [ ] API 33：核心流程、recovery、TalkBack；
 - [ ] API 36：完整 connected Production instrumentation、20 次连续导出；
 - [ ] 4 GB 环境：标准 2× 导出与峰值/回落证据；
@@ -87,16 +87,16 @@ GitHub Actions 的 `Android Quality Gate` 必须在同一 candidate 上通过。
 - [ ] evidence 满足 `config/device-gate-evidence.schema.json`，且 `testFixture = false`、顶层 `status = READY`；
 - [ ] `scripts/validate-device-gate-evidence.ps1` 将 source commit、candidate run、Quality Gate run、正式 APK/AAB、test APK、package/version/certificate 与实际下载 bytes 逐项绑定；
 - [ ] API 26/30/33/36 与获授权真机环境各自记录 WebView、system image/build fingerprint、RAM、设备 ID hash 及 host/device APK hash；
-- [ ] 16 个必需 gate 全部为单次 `PASS`，包括 API 30 serif measure/spec 1×→2×、20×/内存、recovery/ATF、4 GB 2×、TalkBack、200% font、30 分钟耐久和真机 save/share；
+- [ ] 18 个必需 gate 全部为单次 `PASS`，包括 API 30 serif measure/spec 1×→2×、20×/内存、core/recovery/ATF、4 GB 2×、TalkBack、200% font、30 分钟耐久和真机 save/share；
 - [ ] 每个 gate 的日志文件存在且 SHA-256 一致；任何缺项、旧 source、错误 artifact/log SHA、`NOT RUN`、`BLOCKED`、`FAIL` 或 attempts≠1 都必须拒绝；
 - [ ] 后置 workflow 不读取 production-signing environment/Secrets，不重新签名或重建 candidate，并对候选全部 publishable assets 重跑 GitHub attestation 验证；
 - [ ] GitHub API 证明 candidate run 与 evidence run 均来自本仓库、精确 source SHA、`main`、`completed/success`、允许的 workflow path/event；JSON producer run id/attempt/path/event 与 API 完全一致；
-- [ ] `.github/workflows/capture-device-gate-evidence.yml` producer 已由主任务在获授权设备阶段实现并成功上传真实 test APK/logs；当前 producer 缺失时保持 fail closed，不以任意 run-id/artifact-name 替代；
-- [ ] `productionReleaseAndroidTest` test APK 的实际 `aapt2` package/version/instrumentation target 与 `apksigner` certificate 通过；Debug test APK 不得冒充 target 为正式 `com.qrzzzz.lyricscard` 的 release device evidence；
-- [ ] `final-device-gate` environment 已配置 required reviewer；Reviewer 理解 attestation 只覆盖 #10 candidate assets，device evidence/final verdict 的信任来自 producer identity、API/validator 绑定与人工复核，并非已有的 GitHub artifact attestation；
+- [ ] `.github/workflows/capture-device-gate-evidence.yml` producer 已由主任务在获授权设备阶段实现并成功上传真实 test APK/logs；producer 未成功时保持 fail closed，不以任意 run-id/artifact-name 替代；
+- [ ] `productionReleaseAndroidTest` test APK 的实际 `aapt2` package/version/instrumentation target 与 `apksigner` certificate 通过；test APK 必须下载自同一候选 run 并通过 release workflow 的 attestation；Debug test APK 不得冒充 target 为正式 `com.qrzzzz.lyricscard` 的 release device evidence；
+- [ ] `final-device-gate` environment 已配置 required reviewer；Reviewer 理解 attestation 只覆盖 #10 candidate assets，test APK 另有同签名 job 的 provenance；device logs/final verdict 的信任来自 producer identity、API/validator 绑定与人工复核；
 - [ ] `Final Device Gate` job 成功并产出 `status = FINAL READY` 的 verdict artifact；由人工批准确认其 run IDs、artifact names、source commit 与拟发布值完全相同。
 
-当前仓库没有 v1.1.0 的完整受控 `device-gate-evidence.json`，所以该门应 fail closed；`tests/fixtures/device-gate/pass` 只能用于 validator 正例测试。
+每个新版本必须提供自己的完整受控 `device-gate-evidence.json`，缺失时该门应 fail closed；`tests/fixtures/device-gate/pass` 只能用于 validator 正例测试。
 
 ## 5. Signing gate
 

@@ -42,6 +42,7 @@ jobs:
 
     steps:
       - name: Validate immutable capture inputs
+        id: input-policy
         shell: pwsh
         env:
           SOURCE_COMMIT: ${{ inputs.source_commit }}
@@ -60,6 +61,8 @@ jobs:
               $env:WORKFLOW_EVENT -ne 'workflow_dispatch') {
             throw 'Device capture must use the exact workflow and source on refs/heads/main.'
           }
+          $testArtifactName = $env:CANDIDATE_ARTIFACT_NAME.Replace('production-candidate-', 'production-device-test-')
+          "test_artifact_name=$testArtifactName" >> $env:GITHUB_OUTPUT
 
       - name: Check out trusted workflow source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -79,9 +82,8 @@ jobs:
       - name: Download the same candidate run's signed test APK
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: production-device-test-*
+          name: ${{ steps.input-policy.outputs.test_artifact_name }}
           path: device-gate-input/test
-          merge-multiple: true
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ github.token }}
@@ -99,6 +101,7 @@ jobs:
           $null = Assert-DeviceGateWorkflowRun -Run $run -ExpectedRepository $env:GITHUB_REPOSITORY -ExpectedSourceCommit $env:SOURCE_COMMIT -ExpectedPath '.github/workflows/release.yml' -ExpectedEvent 'workflow_dispatch'
           $assets = @(Get-ChildItem device-gate-input/candidate -File)
           $testApk = Get-Item 'device-gate-input/test/app-production-release-androidTest.apk'
+          if (@(Get-ChildItem device-gate-input/test -File).Count -ne 1) { throw 'Exactly one signed device test APK is required.' }
           foreach ($asset in @($assets) + @($testApk)) {
             gh attestation verify $asset.FullName --repo $env:GITHUB_REPOSITORY --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/release.yml" --source-ref refs/heads/main --source-digest $env:SOURCE_COMMIT
             if ($LASTEXITCODE -ne 0) { throw "Candidate/test attestation failed: $($asset.Name)" }

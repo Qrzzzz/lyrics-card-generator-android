@@ -248,7 +248,7 @@ if ($verifier -notmatch 'actions/workflows/ci\.yml/runs\?branch=main&event=push&
 if ($policy.certificateSha256 -notmatch '^[0-9a-f]{64}$' -or
     $policy.trustAnchor.releaseTag -ne 'v1.0.0' -or
     $policy.trustAnchor.apkSha256 -notmatch '^[0-9a-f]{64}$' -or
-    $policy.lastVerifiedRelease.releaseTag -ne 'v1.0.1' -or
+    $policy.lastVerifiedRelease.releaseTag -ne 'v1.1.0' -or
     $policy.lastVerifiedRelease.apkSha256 -notmatch '^[0-9a-f]{64}$' -or
     $policy.lastVerifiedRelease.certificateSha256 -ne $policy.certificateSha256) {
     throw 'The production certificate continuity policy must contain an auditable release trust anchor.'
