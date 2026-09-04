@@ -212,6 +212,67 @@ function Resolve-EvidenceLogPath {
     return $resolved
 }
 
+function Assert-DeviceGateRunEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object] $Gate,
+        [Parameter(Mandatory = $true)][string] $EvidenceRoot
+    )
+
+    # The producer calls this before recording PASS or starting another gate.
+    # The final consumer repeats the exact same checks on the uploaded bytes.
+    $gateId = [string](Get-RequiredProperty $Gate 'id' 'gate')
+    if (-not $script:RequiredGateEnvironment.Contains($gateId)) { throw "Unexpected gate '$gateId'." }
+    Assert-Text (Get-RequiredProperty $Gate 'testSelector' "gate[$gateId]") "gate[$gateId].testSelector"
+    $gateStarted = Assert-UtcTimestamp (Get-RequiredProperty $Gate 'startedAt' "gate[$gateId]") "gate[$gateId].startedAt"
+    $gateCompleted = Assert-UtcTimestamp (Get-RequiredProperty $Gate 'completedAt' "gate[$gateId]") "gate[$gateId].completedAt"
+    if ($gateCompleted -lt $gateStarted) { throw "gate[$gateId].completedAt precedes startedAt." }
+    $logs = @(Get-RequiredProperty $gate 'logs' "gate[$gateId]")
+    if ($logs.Count -lt 2) { throw "gate[$gateId] requires instrumentation and logcat evidence." }
+    $logKinds = @($logs | ForEach-Object { [string](Get-RequiredProperty $_ 'kind' "gate[$gateId].log") })
+    if ('logcat' -notin $logKinds -or @($logs | Where-Object { $_.kind -eq 'instrumentation' }).Count -ne 1) {
+        throw "gate[$gateId] requires exactly one instrumentation result plus logcat evidence."
+    }
+    foreach ($log in $logs) {
+        $relativePath = [string](Get-RequiredProperty $log 'path' "gate[$gateId].log")
+        $expectedHash = [string](Get-RequiredProperty $log 'sha256' "gate[$gateId].log")
+        Assert-Sha256 $expectedHash "gate[$gateId].log.sha256"
+        $logPath = Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $relativePath
+        if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) { throw "gate[$gateId] log is missing: $relativePath" }
+        $actualHash = (Get-FileHash -LiteralPath $logPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualHash -cne $expectedHash) { throw "gate[$gateId] log SHA-256 mismatch: $relativePath" }
+    }
+    $instrumentationLog = @($logs | Where-Object { $_.kind -eq 'instrumentation' })[0]
+    Assert-InstrumentationResult -Text ([IO.File]::ReadAllText((Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $instrumentationLog.path))) -GateId $gateId
+    $logcatText = (@($logs | Where-Object { $_.kind -eq 'logcat' }) | ForEach-Object {
+        [IO.File]::ReadAllText((Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $_.path))
+    }) -join "`n"
+    if ($gateId -eq 'api30-cancel-retry-temp-cleanup' -and
+        ($gate.testSelector -cne "${script:QualityTest}a_cancelledExportRemovesPartialAndRetryProducesValidPng" -or
+         $logcatText -notmatch '(?m)cancel-retry-cleanup cancellationObserved=true partialCreated=true partialsAfterCancel=0 retryPngValid=true generationAdvanced=true\s*$')) {
+        throw 'Cancellation gate requires a real cancelled partial export, cleanup and successful renderer retry; UI state alone is insufficient.'
+    }
+    if ($gateId -eq 'api33-talkback') {
+        if ($gate.testSelector -cne 'com.qrzzzz.lyricscard.ui.TalkBackReleaseTest' -or
+            $logcatText -notmatch 'talkback-service-active package=com\.google\.android\.marvin\.talkback version=\S+ touchExploration=true' -or
+            $logcatText -notmatch '(?m)talkback-core-complete stages=home,editor,export,settings input=kernel-console-swipe-double-tap\s*$') {
+            throw 'TalkBack gate requires the real active service and completed gesture navigation; ATF alone is insufficient.'
+        }
+    }
+    if ($gateId -eq 'physical-core-save-share' -and
+        ($gate.testSelector -cne 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest#productionMainActivitySavesAndSharesExportedBytes' -or
+         $logcatText -notmatch '(?m)platform-export savedSha256=([0-9a-f]{64}) shareSha256=\1 chooserVisible=true sent=false\s*$')) {
+        throw 'Physical gate requires saved/shared byte equality and a real share chooser, not export-route readiness.'
+    }
+    if ($gateId -eq 'endurance-30m') {
+        $duration = [regex]::Match($logcatText, 'edit-summary durationMs=(\d+)')
+        if (-not $duration.Success -or [long]$duration.Groups[1].Value -lt 1800000 -or
+            ($gateCompleted - $gateStarted).TotalSeconds -lt 1800) {
+            throw 'Endurance gate requires an actual completed thirty-minute edit summary.'
+        }
+    }
+}
+
 function Assert-DeviceGateEvidence {
     [CmdletBinding()]
     param(
@@ -373,50 +434,7 @@ function Assert-DeviceGateEvidence {
             throw "gate[$gateId] requires an exact $expectedRamMiB MiB AVD."
         }
 
-        $logs = @(Get-RequiredProperty $gate 'logs' "gate[$gateId]")
-        if ($logs.Count -lt 2) { throw "gate[$gateId] requires instrumentation and logcat evidence." }
-        $logKinds = @($logs | ForEach-Object { [string](Get-RequiredProperty $_ 'kind' "gate[$gateId].log") })
-        if ('logcat' -notin $logKinds -or @($logs | Where-Object { $_.kind -eq 'instrumentation' }).Count -ne 1) {
-            throw "gate[$gateId] requires exactly one instrumentation result plus logcat evidence."
-        }
-        foreach ($log in $logs) {
-            $relativePath = [string](Get-RequiredProperty $log 'path' "gate[$gateId].log")
-            $expectedHash = [string](Get-RequiredProperty $log 'sha256' "gate[$gateId].log")
-            Assert-Sha256 $expectedHash "gate[$gateId].log.sha256"
-            $logPath = Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $relativePath
-            if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) { throw "gate[$gateId] log is missing: $relativePath" }
-            $actualHash = (Get-FileHash -LiteralPath $logPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            if ($actualHash -cne $expectedHash) { throw "gate[$gateId] log SHA-256 mismatch: $relativePath" }
-        }
-        $instrumentationLog = @($logs | Where-Object { $_.kind -eq 'instrumentation' })[0]
-        Assert-InstrumentationResult -Text ([IO.File]::ReadAllText((Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $instrumentationLog.path))) -GateId $gateId
-        $logcatText = (@($logs | Where-Object { $_.kind -eq 'logcat' }) | ForEach-Object {
-            [IO.File]::ReadAllText((Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $_.path))
-        }) -join "`n"
-        if ($gateId -eq 'api30-cancel-retry-temp-cleanup' -and
-            ($gate.testSelector -cne "${script:QualityTest}a_cancelledExportRemovesPartialAndRetryProducesValidPng" -or
-             $logcatText -notmatch '(?m)cancel-retry-cleanup cancellationObserved=true partialCreated=true partialsAfterCancel=0 retryPngValid=true generationAdvanced=true\s*$')) {
-            throw 'Cancellation gate requires a real cancelled partial export, cleanup and successful renderer retry; UI state alone is insufficient.'
-        }
-        if ($gateId -eq 'api33-talkback') {
-            if ($gate.testSelector -cne 'com.qrzzzz.lyricscard.ui.TalkBackReleaseTest' -or
-                $logcatText -notmatch 'talkback-service-active package=com\.google\.android\.marvin\.talkback version=\S+ touchExploration=true' -or
-                $logcatText -notmatch '(?m)talkback-core-complete stages=home,editor,export,settings input=kernel-console-swipe-double-tap\s*$') {
-                throw 'TalkBack gate requires the real active service and completed gesture navigation; ATF alone is insufficient.'
-            }
-        }
-        if ($gateId -eq 'physical-core-save-share' -and
-            ($gate.testSelector -cne 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest#productionMainActivitySavesAndSharesExportedBytes' -or
-             $logcatText -notmatch '(?m)platform-export savedSha256=([0-9a-f]{64}) shareSha256=\1 chooserVisible=true sent=false\s*$')) {
-            throw 'Physical gate requires saved/shared byte equality and a real share chooser, not export-route readiness.'
-        }
-        if ($gateId -eq 'endurance-30m') {
-            $duration = [regex]::Match($logcatText, 'edit-summary durationMs=(\d+)')
-            if (-not $duration.Success -or [long]$duration.Groups[1].Value -lt 1800000 -or
-                ($gateCompleted - $gateStarted).TotalSeconds -lt 1800) {
-                throw 'Endurance gate requires an actual completed thirty-minute edit summary.'
-            }
-        }
+        Assert-DeviceGateRunEvidence -Gate $gate -EvidenceRoot $EvidenceRoot
     }
     foreach ($requiredGate in $script:RequiredGateEnvironment.Keys) {
         if (-not $gateById.ContainsKey($requiredGate)) { throw "Required gate '$requiredGate' is missing." }
@@ -544,4 +562,4 @@ function Assert-DeviceGateArtifactBinding {
     return $metadata
 }
 
-Export-ModuleMember -Function Assert-DeviceGateEvidence, Assert-DeviceGateArtifactBinding, Assert-TestApkInspection, Assert-DeviceGateWorkflowRun
+Export-ModuleMember -Function Assert-DeviceGateRunEvidence, Assert-DeviceGateEvidence, Assert-DeviceGateArtifactBinding, Assert-TestApkInspection, Assert-DeviceGateWorkflowRun

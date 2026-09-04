@@ -71,7 +71,7 @@ function Assert-Rejected {
 }
 
 function Assert-RejectedLog {
-    param([string] $Name, [scriptblock] $Mutate, [string] $MessagePattern, [string] $Kind = 'instrumentation')
+    param([string] $Name, [scriptblock] $Mutate, [string] $MessagePattern, [string] $Kind = 'instrumentation', [string] $GateId = 'api26-core')
 
     $case = Copy-Evidence (Read-Fixture)
     $relativePath = @($case.gates[0].logs | Where-Object { $_.kind -eq $Kind })[0].path
@@ -92,6 +92,15 @@ function Assert-RejectedLog {
         } catch {
             if ($_.Exception.Message -like 'Hash-consistent negative log*' -or $_.Exception.Message -notmatch $MessagePattern) { throw }
         }
+        # Exercise the producer's public entry point as well: it must reject the
+        # current run before capture can record PASS or advance to another gate.
+        $producerGate = @($case.gates | Where-Object id -eq $GateId)[0]
+        try {
+            Assert-DeviceGateRunEvidence -Gate $producerGate -EvidenceRoot $fixtureRoot
+            throw "Producer accepted negative log '$Name'."
+        } catch {
+            if ($_.Exception.Message -like 'Producer accepted negative log*' -or $_.Exception.Message -notmatch $MessagePattern) { throw }
+        }
     } finally {
         [IO.File]::WriteAllBytes($path, $originalBytes)
     }
@@ -110,6 +119,7 @@ $positive = Invoke-EvidencePolicy -Evidence (Read-Fixture) -AllowFixture
 if (@($positive.gates).Count -ne 18 -or @($positive.environments).Count -ne 5) {
     throw 'The positive fixture did not preserve the complete matrix.'
 }
+foreach ($gate in $positive.gates) { Assert-DeviceGateRunEvidence -Gate $gate -EvidenceRoot $fixtureRoot }
 $null = Assert-DeviceGateArtifactBinding `
     -Evidence $positive `
     -ReleaseMetadataPath $fixtureMetadataPath `
@@ -189,8 +199,8 @@ Assert-RejectedLog -Name 'summary-without-test-events' -Mutate { param($text) "O
 Assert-RejectedLog -Name 'started-without-completion' -Mutate { param($text) $text.Replace('INSTRUMENTATION_STATUS_CODE: 0', 'INSTRUMENTATION_STATUS_CODE: 1') } -MessagePattern 'repeats a test'
 Assert-RejectedLog -Name 'wrong-successful-method' -Mutate { param($text) $text.Replace('productionMainActivitySixStepPreviewAndOneTwoXExportsWork', 'differentSuccessfulTest') } -MessagePattern 'required test.*did not finish with INSTRUMENTATION_STATUS_CODE: 0'
 Assert-RejectedLog -Name 'runner-did-not-complete' -Mutate { param($text) $text.Replace('INSTRUMENTATION_CODE: -1', 'INSTRUMENTATION_CODE: 0') } -MessagePattern 'positive test count'
-Assert-RejectedLog -Name 'old-injected-talkback-marker' -Kind 'logcat' -Mutate { param($text) $text.Replace('input=kernel-console-swipe-double-tap', 'input=swipe-double-tap') } -MessagePattern 'real active service and completed gesture'
-Assert-RejectedLog -Name 'no-real-cancellation' -Kind 'logcat' -Mutate { param($text) $text.Replace('cancellationObserved=true', 'cancellationObserved=false') } -MessagePattern 'real cancelled partial export'
+Assert-RejectedLog -Name 'old-injected-talkback-marker' -GateId 'api33-talkback' -Kind 'logcat' -Mutate { param($text) $text.Replace('input=kernel-console-swipe-double-tap', 'input=swipe-double-tap') } -MessagePattern 'real active service and completed gesture'
+Assert-RejectedLog -Name 'no-real-cancellation' -GateId 'api30-cancel-retry-temp-cleanup' -Kind 'logcat' -Mutate { param($text) $text.Replace('cancellationObserved=true', 'cancellationObserved=false') } -MessagePattern 'real cancelled partial export'
 
 # AndroidJUnitRunner emits -3 for ignored tests and -4 for assumption failures.
 # A non-required API 33 test may be skipped by the full API 36 run, but a required
@@ -447,7 +457,7 @@ for ($lineIndex = 0; $lineIndex -lt $workflowLines.Count; $lineIndex++) {
     if ($errors.Count -ne 0) { throw "PowerShell run block parse failed near workflow line $($lineIndex + 1): $($errors[0].Message)" }
 }
 
-Write-Output 'Device-gate evidence contract PASS (fixture-only matrix, raw instrumentation success/skip/failure cases, measured environment fields, and executable final-consumer test provenance rejection).'
+Write-Output 'Device-gate evidence contract PASS (18 fixture-only gates, shared producer/final raw success/skip/failure/marker checks, measured environments, and executable final-consumer test provenance rejection).'
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
 $resolvedFixtureRoot = [IO.Path]::GetFullPath($fixtureRoot)
 if (-not $resolvedFixtureRoot.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or
