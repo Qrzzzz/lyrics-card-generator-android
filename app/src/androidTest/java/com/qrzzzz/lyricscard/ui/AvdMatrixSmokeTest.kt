@@ -1,25 +1,25 @@
 package com.qrzzzz.lyricscard.ui
 
 import android.content.Context
-import android.content.ContentValues
-import android.os.ParcelFileDescriptor
 import android.os.SystemClock
-import android.provider.MediaStore
 import android.util.Log
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import androidx.test.filters.SdkSuppress
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.core.content.FileProvider
 import com.qrzzzz.lyricscard.LyricsCardApplication
 import com.qrzzzz.lyricscard.MainActivity
 import com.qrzzzz.lyricscard.R
@@ -28,6 +28,7 @@ import com.qrzzzz.lyricscard.renderer.RENDERER_PREVIEW_TAG
 import com.qrzzzz.lyricscard.renderer.RendererStatus
 import java.io.File
 import java.security.MessageDigest
+import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -110,8 +111,6 @@ class AvdMatrixSmokeTest {
             assertEquals(oneX.height * 2, twoX.height)
             assertNotEquals(oneX.file.canonicalPath, twoX.file.canonicalPath)
             assertNoPartialExports(oneX.file.parentFile)
-            if (verifyPlatformExport) verifySaveAndShare(twoX)
-
             compose.onNodeWithText(
                 compose.activity.getString(R.string.editor_export_png, compose.activity.getString(R.string.file_png)),
             ).performClick()
@@ -122,6 +121,7 @@ class AvdMatrixSmokeTest {
                 ).fetchSemanticsNodes().isNotEmpty()
             }
             qualityStage("export-route")
+            if (verifyPlatformExport) verifySaveAndShare()
 
             returnToHome(navigationDepth)
             navigationDepth = 0
@@ -141,8 +141,7 @@ class AvdMatrixSmokeTest {
         } finally {
             exported.forEach { file -> if (file.exists()) assertTrue("smoke export cleanup failed", file.delete()) }
             if (returnedHome) {
-                val createdIds = projectIds() - beforeIds
-                createdIds.forEach { id -> runBlocking { app.container.projects.delete(id) } }
+                createdId?.let { id -> runBlocking { app.container.projects.delete(id) } }
                 qualityStage("cleanup-complete")
                 repeat(2) { settleNavigation() }
                 qualityStage("teardown-settled")
@@ -150,49 +149,41 @@ class AvdMatrixSmokeTest {
         }
     }
 
-    private fun verifySaveAndShare(image: ExportedImage) {
-        val resolver = app.contentResolver
-        val originalDigest = sha256(image.file.readBytes())
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "lcg-release-validation-${System.currentTimeMillis()}.png")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/LyricCardValidation")
-            put(MediaStore.Images.Media.IS_PENDING, 1)
-        }
-        val destination = checkNotNull(resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
-        try {
-            runBlocking { app.container.exportFiles.copyTo(image, destination) }
-            val saved = checkNotNull(resolver.openInputStream(destination)).use { it.readBytes() }
-            assertEquals("saved PNG bytes differ", originalDigest, sha256(saved))
-            assertEquals(1, resolver.update(destination, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null))
+    private fun verifySaveAndShare() {
+        val fixtureName = "lcg-ui-validation-${UUID.randomUUID()}.png"
+        PlatformExportUiDriver(app, fixtureName, advanceAppFrames = {
+            compose.mainClock.advanceTimeBy(POLL_FRAME_MILLIS)
+            compose.waitForIdle()
+        }).use { platform ->
+            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                .performScrollToNode(hasTestTag(EXPORT_FILE_NAME_TAG))
+            compose.onNodeWithTag(EXPORT_FILE_NAME_TAG).performClick().performTextReplacement(fixtureName)
+            closeSoftKeyboard()
+            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                .performScrollToNode(hasTestTag(EXPORT_SAVE_ACTION_TAG))
+            compose.onNodeWithTag(EXPORT_SAVE_ACTION_TAG).assertIsEnabled().performClick()
+            qualityStage("ui-generate-and-save-clicked")
 
-            val shareUri = FileProvider.getUriForFile(app, "${app.packageName}.files", image.file)
-            val shared = checkNotNull(resolver.openInputStream(shareUri)).use { it.readBytes() }
-            assertEquals("shared FileProvider bytes differ", originalDigest, sha256(shared))
-            val intent = buildShareIntent(app, image, shareUri)
-            assertTrue("share URI grant is missing", intent.flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
-            var shareError: UiText? = null
-            compose.activityRule.scenario.onActivity { shareError = shareImage(it, image) }
-            assertEquals("share chooser launch failed", null, shareError)
-            val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-            val deadline = SystemClock.elapsedRealtime() + 10_000
-            var chooserVisible = false
-            while (!chooserVisible && SystemClock.elapsedRealtime() < deadline) {
-                val activities = ParcelFileDescriptor.AutoCloseInputStream(
-                    automation.executeShellCommand("dumpsys activity activities"),
-                ).bufferedReader().use { it.readText() }
-                chooserVisible = activities.lineSequence().any {
-                    (it.contains("mResumedActivity") || it.contains("topResumedActivity")) &&
-                        (it.contains("Chooser", ignoreCase = true) || it.contains("Resolver", ignoreCase = true))
-                }
-                if (!chooserVisible) SystemClock.sleep(100)
+            platform.saveUsingDocumentsUi()
+            val savedStatus = compose.activity.getString(R.string.export_saved)
+            waitUntil(UI_TIMEOUT_MS) {
+                compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG).performScrollToNode(hasText(savedStatus))
+                compose.onNodeWithText(savedStatus).assertIsDisplayed()
+                true
             }
-            assertTrue("platform share chooser did not become visible", chooserVisible)
-            ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand("input keyevent 4")).use { it.readBytes() }
-            SystemClock.sleep(500)
-            Log.i("LCG_RELEASE", "platform-export savedSha256=$originalDigest shareSha256=$originalDigest chooserVisible=true sent=false")
-        } finally {
-            assertEquals("validation image cleanup failed", 1, resolver.delete(destination, null, null))
+            val saved = platform.readSavedPng()
+            assertTrue("saved document is not a PNG", saved.take(PNG_SIGNATURE.size).toByteArray().contentEquals(PNG_SIGNATURE))
+            val savedDigest = sha256(saved)
+            qualityStage("ui-save-completed")
+
+            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                .performScrollToNode(hasTestTag(EXPORT_SHARE_ACTION_TAG))
+            compose.onNodeWithTag(EXPORT_SHARE_ACTION_TAG).assertIsEnabled().performClick()
+            val shared = platform.readSharedPngFromVisibleChooser()
+            val sharedDigest = sha256(shared)
+            assertEquals("saved document and actual shared PNG differ", savedDigest, sharedDigest)
+            platform.dismissChooserWithoutSending()
+            Log.i("LCG_RELEASE", "platform-export savedSha256=$savedDigest shareSha256=$sharedDigest chooserVisible=true sent=false")
         }
     }
 
