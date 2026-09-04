@@ -5,8 +5,10 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -196,7 +198,7 @@ class AvdMatrixSmokeTest {
         val expected = stepAccessibilityLabel(step)
         waitUntil(UI_TIMEOUT_MS) {
             compose.onAllNodes(
-                androidx.compose.ui.test.hasContentDescription(expected),
+                hasContentDescription(expected) and isSelected(),
             ).fetchSemanticsNodes().isNotEmpty()
         }
         settleNavigation()
