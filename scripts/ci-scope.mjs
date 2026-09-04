@@ -14,8 +14,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (![base, head].every(sha => /^[a-f0-9]{40}$/.test(sha ?? ''))) {
       throw new Error('PR scope requires exact base and head SHAs.');
     }
-    paths = execFileSync('git', ['diff', '--name-only', '--no-renames', `${base}...${head}`],
-      { encoding: 'utf8' }).trim().split(/\r?\n/).filter(Boolean);
+    paths = execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', `${base}...${head}`],
+      { encoding: 'utf8' }).split('\0').filter(Boolean);
   }
   const needed = needsUnicodeSmoke(process.env.GITHUB_EVENT_NAME, paths);
   console.log(needed ? 'Unicode path regression is required.' : 'No Unicode build inputs changed; dedicated smoke is not required.');
