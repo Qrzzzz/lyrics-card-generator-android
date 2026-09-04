@@ -14,9 +14,9 @@
 
 这里有意采用“精确 main tip”而不是“main 上任意祖先”。这样能阻止把已经被后续提交取代的 SHA、未合并 SHA、PR 绿灯或另一个 SHA 的绿灯送入生产签名环境。若 main 在审批或构建期间前进，或 tag/Release 在期间出现，recheck 会停止旧候选；需要从新的 main tip 重新取得 exact Quality Gate 证据。
 
-`authorize-candidate` 只有 `actions: read` 与 `contents: read`，不绑定 environment，也不引用 Secrets。它通过后，`signed-candidate` 才进入现有 `production-signing` environment；签名 job 在 environment 审批后和 provenance 前再次运行同一合同。
+`authorize-candidate` 只有 `actions: read` 与 `contents: read`，不绑定 environment，也不引用 Secrets。两个 job 都先执行可信 workflow 定义内的内联检查，在任何 checkout 或仓库脚本执行前确认 candidate、workflow SHA、trigger SHA 与实时远端 main 相同；签名 job 同时核对上游授权输出。checkout 始终使用 `github.workflow_sha`，不使用 candidate 输入或上游输出选择校验代码，防止未合并候选替换自己的验证器后自行授权。授权通过后，`signed-candidate` 才进入现有 `production-signing` environment；签名 job 在 environment 审批后和 provenance 前再次运行完整合同，复核版本唯一性和 exact-SHA Quality Gate。
 
-纯逻辑位于 `scripts/ProductionReleasePolicy.psm1`，GitHub/git 取证入口为 `scripts/verify-production-candidate.ps1`。`scripts/test-production-release-contract.ps1` 提供主机可运行的正/负向合同，并由正常 `Android Quality Gate` 执行。
+纯逻辑位于 `scripts/ProductionReleasePolicy.psm1`，GitHub/git 取证入口为 `scripts/verify-production-candidate.ps1`。`scripts/test-production-release-contract.ps1` 提供主机可运行的正/负向合同，并由正常 `Android Quality Gate` 执行；它还直接运行从 workflow 提取的两个内联入口，通过本地替换验证器的候选夹具检验拒绝时未执行候选代码，以及远端 main 前进和授权输出污染均会停止流程。此夹具不调用 GitHub、不申请生产凭据，也不触发真实签名。
 
 ## Certificate continuity
 
@@ -41,6 +41,8 @@
 - production certificate SHA-256 与 trust-anchor release/APK digest。
 
 随后生成的 `SHA256SUMS` 覆盖 APK、AAB、可选 mapping 与 metadata。`signed-candidate` job 在删除临时 keystore 后，以只授予该 job 的 `id-token: write`、`attestations: write` 对 `release-assets/*` 生成 GitHub build provenance；因此 APK、AAB、mapping、metadata 与 checksums 都是 attestation subjects。普通 CI/PR 没有这些写权限或 production Secrets。
+
+同一签名 job 在原有主机测试与 APK/AAB 构建之后，用独立 Gradle 调用构建 `:app:assembleProductionReleaseAndroidTest`，并核对测试 APK 使用同一生产证书。文件 `app-production-release-androidTest.apk` 单独 attestation 后上传为 `production-device-test-<version>-<sha12>` artifact，供设备门从同一 candidate run 下载；它不进入 `release-assets`、公开 Release 或公开 checksums。设备 runner 无需生产签名材料来构建测试 APK。
 
 该 signed candidate 仍不是最终设备结论。metadata 明确写入 `PROVISIONAL / device NOT RUN / finalReady=false`；独立 `Final Device Gate` workflow 在后置阶段以 `actions: read`、`attestations: read`、`contents: read` 下载同一 candidate artifact 和受控 device-evidence artifact，重新验证每个 candidate subject 的 provenance，再将实际 APK/AAB/test APK、日志和完整设备矩阵交给 `scripts/validate-device-gate-evidence.ps1`。后置 job 不进入 `production-signing`、不读取 Secrets、不重建或重签产物。真实 evidence 缺失或任一 gate 非 PASS 时不会产生 `FINAL READY` verdict。
 
