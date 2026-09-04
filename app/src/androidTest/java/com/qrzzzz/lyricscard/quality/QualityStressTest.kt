@@ -50,6 +50,8 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.ceil
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
@@ -70,6 +72,57 @@ import org.junit.runner.RunWith
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class QualityStressTest {
     private val appContext = ApplicationProvider.getApplicationContext<Context>()
+
+    @Test
+    fun a_cancelledExportRemovesPartialAndRetryProducesValidPng() {
+        val controller = RendererController(appContext, ProjectAssetStore(appContext))
+        val scenario = ActivityScenario.launch(ComponentActivity::class.java)
+        val binding = RendererBinding(controller)
+        val fixtureTitle = "lcg-cancel-${java.util.UUID.randomUUID().toString().take(8)}"
+        val baseSpec = releaseStressSpec()
+        val spec = baseSpec.copy(song = baseSpec.song.copy(title = fixtureTitle))
+        val exportDirectory = File(appContext.cacheDir, "exports")
+        fun fixturePartials() = exportDirectory.listFiles().orEmpty().filter {
+            it.name.startsWith(".$fixtureTitle-") && (it.name.endsWith(".part") || it.name.endsWith(".tmp"))
+        }
+        try {
+            binding.attach()
+            waitForRenderer(controller)
+            val generationBefore = controller.generation.value
+            runBlocking {
+                val export = async(start = CoroutineStart.UNDISPATCHED) { controller.exportPng(spec, 2) }
+                withTimeout(20_000) {
+                    while (fixturePartials().isEmpty()) {
+                        check(!export.isCompleted) { "Export completed before a real partial file could be cancelled" }
+                        delay(5)
+                    }
+                }
+                assertTrue("real export assembly did not create a partial file", fixturePartials().isNotEmpty())
+                export.cancelAndJoin()
+                assertTrue("the in-flight renderer export was not cancelled", export.isCancelled)
+            }
+            assertTrue("cancelled export left a partial file", fixturePartials().isEmpty())
+            assertTrue("cancellation did not invalidate the renderer generation", controller.generation.value > generationBefore)
+            binding.detach()
+            binding.attach()
+            waitForRenderer(controller)
+            runOnMainThread { controller.retry() }
+            binding.detach()
+            binding.attach()
+            waitForRenderer(controller)
+            val measurement = runBlocking { controller.measure(spec) }
+            val retried = runBlocking { controller.exportPng(spec, 2) }
+            assertPng(retried, measurement.width * 2, measurement.height * 2)
+            assertEquals(RendererStatus.Phase.READY, controller.status.value.phase)
+            assertTrue("retried export left a partial file", fixturePartials().isEmpty())
+            Log.i(QUALITY_TAG, "cancel-retry-cleanup cancellationObserved=true partialCreated=true partialsAfterCancel=0 retryPngValid=true generationAdvanced=true")
+        } finally {
+            closeRendererOnMain(binding, scenario, controller)
+            exportDirectory.listFiles().orEmpty().filter {
+                it.name.startsWith("$fixtureTitle-") || it.name.startsWith(".$fixtureTitle-")
+            }.forEach { file -> assertTrue("cancel/retry fixture cleanup failed", file.delete()) }
+        }
+    }
 
     @Test
     fun a_serifOneXThenTwoXProbeUsesTheSameRendererLifecycle() {

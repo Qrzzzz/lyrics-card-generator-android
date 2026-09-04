@@ -37,16 +37,12 @@ jobs:
     environment: final-device-gate
     permissions:
       actions: read
+      attestations: read
       contents: read
 
     steps:
-      - name: Check out exact authorized main candidate
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          ref: ${{ inputs.source_commit }}
-          persist-credentials: false
-
       - name: Validate immutable capture inputs
+        id: input-policy
         shell: pwsh
         env:
           SOURCE_COMMIT: ${{ inputs.source_commit }}
@@ -57,15 +53,26 @@ jobs:
           WORKFLOW_REF: ${{ github.ref }}
           WORKFLOW_EVENT: ${{ github.event_name }}
         run: |
+          $dispatch = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+          $physicalSerial = [string]$dispatch.inputs.physical_device_serial
+          if ($physicalSerial -cnotmatch '^[A-Za-z0-9._:-]{1,128}$') { throw 'physical_device_serial has an unsupported format.' }
+          Write-Host "::add-mask::$physicalSerial"
           if ($env:SOURCE_COMMIT -cnotmatch '^[0-9a-f]{40}$') { throw 'source_commit must be a full lowercase SHA.' }
           if ($env:CANDIDATE_RUN_ID -notmatch '^[1-9][0-9]*$') { throw 'candidate_run_id must be a positive integer.' }
           if ($env:CANDIDATE_ARTIFACT_NAME -notmatch '^production-candidate-[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$') { throw 'candidate_artifact_name is invalid.' }
-          $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()
-          if ($actual -cne $env:SOURCE_COMMIT -or $env:TRIGGER_SHA -cne $env:SOURCE_COMMIT -or
+          if ($env:TRIGGER_SHA -cne $env:SOURCE_COMMIT -or
               $env:WORKFLOW_SHA -cne $env:SOURCE_COMMIT -or $env:WORKFLOW_REF -ne 'refs/heads/main' -or
               $env:WORKFLOW_EVENT -ne 'workflow_dispatch') {
             throw 'Device capture must use the exact workflow and source on refs/heads/main.'
           }
+          $testArtifactName = $env:CANDIDATE_ARTIFACT_NAME.Replace('production-candidate-', 'production-device-test-')
+          "test_artifact_name=$testArtifactName" >> $env:GITHUB_OUTPUT
+
+      - name: Check out trusted workflow source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
 
       - name: Download attested signed candidate
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -76,28 +83,33 @@ jobs:
           run-id: ${{ inputs.candidate_run_id }}
           github-token: ${{ github.token }}
 
-      - name: Set up Node.js 24
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - name: Download the same candidate run's signed test APK
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: renderer/package-lock.json
+          name: ${{ steps.input-policy.outputs.test_artifact_name }}
+          path: device-gate-input/test
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
 
-      - name: Install pinned renderer dependencies
-        working-directory: renderer
+      - name: Verify candidate and test provenance before touching devices
         shell: pwsh
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          npm.cmd ci --no-audit --no-fund
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Build production-release test APK on controlled runner
-        shell: pwsh
-        run: |
-          foreach ($key in 'LYRICS_CARD_STORE_FILE','LYRICS_CARD_STORE_PASSWORD','LYRICS_CARD_KEY_ALIAS','LYRICS_CARD_KEY_PASSWORD') {
-            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($key))) { throw "Controlled runner signing value is missing: $key" }
+          Import-Module ./scripts/DeviceGateEvidence.psm1 -Force
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:CANDIDATE_RUN_ID" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate workflow run could not be inspected.' }
+          $null = Assert-DeviceGateWorkflowRun -Run $run -ExpectedRepository $env:GITHUB_REPOSITORY -ExpectedSourceCommit $env:SOURCE_COMMIT -ExpectedPath '.github/workflows/release.yml' -ExpectedEvent 'workflow_dispatch'
+          $assets = @(Get-ChildItem device-gate-input/candidate -File)
+          $testApk = Get-Item 'device-gate-input/test/app-production-release-androidTest.apk'
+          if (@(Get-ChildItem device-gate-input/test -File).Count -ne 1) { throw 'Exactly one signed device test APK is required.' }
+          foreach ($asset in @($assets) + @($testApk)) {
+            gh attestation verify $asset.FullName --repo $env:GITHUB_REPOSITORY --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/release.yml" --source-ref refs/heads/main --source-digest $env:SOURCE_COMMIT
+            if ($LASTEXITCODE -ne 0) { throw "Candidate/test attestation failed: $($asset.Name)" }
           }
-          .\gradlew.bat :app:assembleProductionReleaseAndroidTest --no-parallel --no-daemon --stacktrace --console=plain
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Capture authorized emulator and physical-device matrix
         id: capture
@@ -115,7 +127,7 @@ jobs:
           "artifact_name=$artifactName" >> $env:GITHUB_OUTPUT
           .\scripts\capture-device-gate-evidence.ps1 `
             -CandidateRoot 'device-gate-input/candidate' `
-            -TestApkPath 'app/build/outputs/apk/androidTest/production/release/app-production-release-androidTest.apk' `
+            -TestApkPath 'device-gate-input/test/app-production-release-androidTest.apk' `
             -OutputRoot 'device-gate-output' `
             -SourceCommit $env:SOURCE_COMMIT `
             -CandidateRunId ([long]$env:CANDIDATE_RUN_ID) `
@@ -156,9 +168,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload controlled device evidence
+        if: ${{ always() && steps.capture.outcome != 'skipped' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.capture.outputs.artifact_name }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: device-gate-output/**

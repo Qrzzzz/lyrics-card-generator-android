@@ -5,13 +5,20 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import com.qrzzzz.lyricscard.LyricsCardApplication
@@ -21,6 +28,8 @@ import com.qrzzzz.lyricscard.renderer.ExportedImage
 import com.qrzzzz.lyricscard.renderer.RENDERER_PREVIEW_TAG
 import com.qrzzzz.lyricscard.renderer.RendererStatus
 import java.io.File
+import java.security.MessageDigest
+import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -40,7 +49,12 @@ class AvdMatrixSmokeTest {
     private val app = ApplicationProvider.getApplicationContext<Context>() as LyricsCardApplication
 
     @Test
-    fun productionMainActivitySixStepPreviewAndOneTwoXExportsWork() {
+    fun productionMainActivitySixStepPreviewAndOneTwoXExportsWork() = runSmoke(verifyPlatformExport = false)
+
+    @Test
+    fun productionMainActivitySavesAndSharesExportedBytes() = runSmoke(verifyPlatformExport = true)
+
+    private fun runSmoke(verifyPlatformExport: Boolean) {
         val beforeIds = projectIds()
         val exported = mutableListOf<File>()
         var returnedHome = false
@@ -97,7 +111,6 @@ class AvdMatrixSmokeTest {
             assertEquals(oneX.height * 2, twoX.height)
             assertNotEquals(oneX.file.canonicalPath, twoX.file.canonicalPath)
             assertNoPartialExports(oneX.file.parentFile)
-
             compose.onNodeWithText(
                 compose.activity.getString(R.string.editor_export_png, compose.activity.getString(R.string.file_png)),
             ).performClick()
@@ -108,6 +121,7 @@ class AvdMatrixSmokeTest {
                 ).fetchSemanticsNodes().isNotEmpty()
             }
             qualityStage("export-route")
+            if (verifyPlatformExport) verifySaveAndShare()
 
             returnToHome(navigationDepth)
             navigationDepth = 0
@@ -127,14 +141,54 @@ class AvdMatrixSmokeTest {
         } finally {
             exported.forEach { file -> if (file.exists()) assertTrue("smoke export cleanup failed", file.delete()) }
             if (returnedHome) {
-                val createdIds = projectIds() - beforeIds
-                createdIds.forEach { id -> runBlocking { app.container.projects.delete(id) } }
+                createdId?.let { id -> runBlocking { app.container.projects.delete(id) } }
                 qualityStage("cleanup-complete")
                 repeat(2) { settleNavigation() }
                 qualityStage("teardown-settled")
             }
         }
     }
+
+    private fun verifySaveAndShare() {
+        val fixtureName = "lcg-ui-validation-${UUID.randomUUID()}.png"
+        PlatformExportUiDriver(app, fixtureName, advanceAppFrames = {
+            compose.mainClock.advanceTimeBy(POLL_FRAME_MILLIS)
+            compose.waitForIdle()
+        }).use { platform ->
+            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                .performScrollToNode(hasTestTag(EXPORT_FILE_NAME_TAG))
+            compose.onNodeWithTag(EXPORT_FILE_NAME_TAG).performClick().performTextReplacement(fixtureName)
+            closeSoftKeyboard()
+            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                .performScrollToNode(hasTestTag(EXPORT_SAVE_ACTION_TAG))
+            compose.onNodeWithTag(EXPORT_SAVE_ACTION_TAG).assertIsEnabled().performClick()
+            qualityStage("ui-generate-and-save-clicked")
+
+            platform.saveUsingDocumentsUi()
+            val savedStatus = compose.activity.getString(R.string.export_saved)
+            waitUntil(UI_TIMEOUT_MS) {
+                compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG).performScrollToNode(hasText(savedStatus))
+                compose.onNodeWithText(savedStatus).assertIsDisplayed()
+                true
+            }
+            val saved = platform.readSavedPng()
+            assertTrue("saved document is not a PNG", saved.take(PNG_SIGNATURE.size).toByteArray().contentEquals(PNG_SIGNATURE))
+            val savedDigest = sha256(saved)
+            qualityStage("ui-save-completed")
+
+            compose.onNodeWithTag(EXPORT_OPTIONS_LIST_TAG)
+                .performScrollToNode(hasTestTag(EXPORT_SHARE_ACTION_TAG))
+            compose.onNodeWithTag(EXPORT_SHARE_ACTION_TAG).assertIsEnabled().performClick()
+            val shared = platform.readSharedPngFromVisibleChooser()
+            val sharedDigest = sha256(shared)
+            assertEquals("saved document and actual shared PNG differ", savedDigest, sharedDigest)
+            platform.dismissChooserWithoutSending()
+            Log.i("LCG_RELEASE", "platform-export savedSha256=$savedDigest shareSha256=$sharedDigest chooserVisible=true sent=false")
+        }
+    }
+
+    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(bytes).joinToString("") { "%02x".format(it) }
 
     private fun qualityStage(stage: String) {
         Log.i(QUALITY_TAG, "matrix-smoke stage=$stage api=${android.os.Build.VERSION.SDK_INT}")
@@ -144,7 +198,7 @@ class AvdMatrixSmokeTest {
         val expected = stepAccessibilityLabel(step)
         waitUntil(UI_TIMEOUT_MS) {
             compose.onAllNodes(
-                androidx.compose.ui.test.hasContentDescription(expected),
+                hasContentDescription(expected) and isSelected(),
             ).fetchSemanticsNodes().isNotEmpty()
         }
         settleNavigation()

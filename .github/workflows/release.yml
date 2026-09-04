@@ -31,10 +31,41 @@ jobs:
       quality_gate_run_url: ${{ steps.policy.outputs.quality_gate_run_url }}
 
     steps:
-      - name: Check out immutable candidate without signing access
+      - name: Validate trusted dispatch before checkout
+        shell: pwsh
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          API_BASE_URL: ${{ github.api_url }}
+          TRIGGER_SHA: ${{ github.sha }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidate = $env:CANDIDATE_COMMIT.ToLowerInvariant()
+          $workflow = $env:WORKFLOW_SHA.ToLowerInvariant()
+          $trigger = $env:TRIGGER_SHA.ToLowerInvariant()
+          foreach ($sha in @($candidate, $workflow, $trigger)) {
+            if ($sha -notmatch '^[0-9a-f]{40}$') { throw 'Trusted dispatch identity requires full commit SHAs.' }
+          }
+          if ($env:WORKFLOW_EVENT -ne 'workflow_dispatch' -or $env:WORKFLOW_REF -ne 'refs/heads/main') {
+            throw 'Production candidates must be dispatched from main.'
+          }
+          if ($candidate -ne $workflow -or $candidate -ne $trigger) {
+            throw 'Candidate must equal the trusted workflow and trigger SHA before checkout.'
+          }
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $main = Invoke-RestMethod -Method Get -Uri "$env:API_BASE_URL/repos/$env:REPOSITORY/git/ref/heads/main" -Headers $headers
+          if ($main.object.type -ne 'commit' -or $main.object.sha -ne $candidate) {
+            throw 'Candidate must equal fresh remote main before checkout.'
+          }
+
+      - name: Check out trusted workflow source without signing access
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ inputs.commit }}
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -74,10 +105,42 @@ jobs:
       id-token: write
 
     steps:
-      - name: Check out authorized immutable candidate
+      - name: Revalidate trusted dispatch before signing checkout
+        shell: pwsh
+        env:
+          AUTHORIZED_COMMIT: ${{ needs.authorize-candidate.outputs.source_commit }}
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          API_BASE_URL: ${{ github.api_url }}
+          TRIGGER_SHA: ${{ github.sha }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidate = $env:CANDIDATE_COMMIT.ToLowerInvariant()
+          $workflow = $env:WORKFLOW_SHA.ToLowerInvariant()
+          $trigger = $env:TRIGGER_SHA.ToLowerInvariant()
+          foreach ($sha in @($candidate, $workflow, $trigger)) {
+            if ($sha -notmatch '^[0-9a-f]{40}$') { throw 'Trusted dispatch identity requires full commit SHAs.' }
+          }
+          if ($env:WORKFLOW_EVENT -ne 'workflow_dispatch' -or $env:WORKFLOW_REF -ne 'refs/heads/main') {
+            throw 'Production candidates must be dispatched from main.'
+          }
+          if ($candidate -ne $workflow -or $candidate -ne $trigger -or $env:AUTHORIZED_COMMIT -ne $candidate) {
+            throw 'Authorized candidate must equal the trusted workflow and trigger SHA before checkout.'
+          }
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+          $main = Invoke-RestMethod -Method Get -Uri "$env:API_BASE_URL/repos/$env:REPOSITORY/git/ref/heads/main" -Headers $headers
+          if ($main.object.type -ne 'commit' -or $main.object.sha -ne $candidate) {
+            throw 'Candidate must equal fresh remote main before checkout.'
+          }
+
+      - name: Check out trusted authorized source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ needs.authorize-candidate.outputs.source_commit }}
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -203,6 +266,8 @@ jobs:
         run: |
           .\gradlew.bat :app:test :app:lintProductionRelease :app:assembleProductionRelease :app:bundleProductionRelease :app:dumpProductionReleaseBundleManifest --no-parallel --no-daemon --stacktrace --console=plain
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\gradlew.bat :app:assembleProductionReleaseAndroidTest --no-parallel --no-daemon --stacktrace --console=plain
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify build did not dirty tracked sources
         shell: pwsh
@@ -321,6 +386,18 @@ jobs:
             throw 'APK/AAB certificate continuity does not match the audited production trust anchor.'
           }
 
+          $deviceTestApk = 'app/build/outputs/apk/androidTest/production/release/app-production-release-androidTest.apk'
+          if (-not (Test-Path -LiteralPath $deviceTestApk -PathType Leaf)) {
+            throw 'The production release instrumentation APK was not built.'
+          }
+          $deviceTestVerification = (& $apkSigner verify --verbose --print-certs $deviceTestApk 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw 'Production device-test APK signature verification failed.' }
+          $deviceTestCertificate = [regex]::Match($deviceTestVerification, '(?im)^Signer #1 certificate SHA-256 digest:\s*([0-9a-f:]+)\s*$')
+          if (-not $deviceTestCertificate.Success -or
+              ($deviceTestCertificate.Groups[1].Value -replace ':', '').ToLowerInvariant() -ne $expectedCertificate) {
+            throw 'Production device-test APK must use the same production certificate.'
+          }
+
           $assetDirectory = New-Item -ItemType Directory -Path 'release-assets' -Force
           $apkName = "lyrics-card-generator-android-$versionName.apk"
           $bundleName = "lyrics-card-generator-android-$versionName.aab"
@@ -437,6 +514,12 @@ jobs:
         with:
           subject-path: release-assets/*
 
+      - name: Attest production device-test APK separately
+        if: ${{ success() }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: app/build/outputs/apk/androidTest/production/release/app-production-release-androidTest.apk
+
       - name: Upload signed production candidate
         if: ${{ success() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -445,3 +528,12 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: release-assets/*
+
+      - name: Upload production device-test APK separately
+        if: ${{ success() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: production-device-test-${{ steps.assets.outputs.version }}-${{ steps.assets.outputs.short_sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: app/build/outputs/apk/androidTest/production/release/app-production-release-androidTest.apk

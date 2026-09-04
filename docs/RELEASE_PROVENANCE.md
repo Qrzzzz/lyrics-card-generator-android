@@ -14,9 +14,9 @@
 
 这里有意采用“精确 main tip”而不是“main 上任意祖先”。这样能阻止把已经被后续提交取代的 SHA、未合并 SHA、PR 绿灯或另一个 SHA 的绿灯送入生产签名环境。若 main 在审批或构建期间前进，或 tag/Release 在期间出现，recheck 会停止旧候选；需要从新的 main tip 重新取得 exact Quality Gate 证据。
 
-`authorize-candidate` 只有 `actions: read` 与 `contents: read`，不绑定 environment，也不引用 Secrets。它通过后，`signed-candidate` 才进入现有 `production-signing` environment；签名 job 在 environment 审批后和 provenance 前再次运行同一合同。
+`authorize-candidate` 只有 `actions: read` 与 `contents: read`，不绑定 environment，也不引用 Secrets。两个 job 都先执行可信 workflow 定义内的内联检查，在任何 checkout 或仓库脚本执行前确认 candidate、workflow SHA、trigger SHA 与实时远端 main 相同；签名 job 同时核对上游授权输出。checkout 始终使用 `github.workflow_sha`，不使用 candidate 输入或上游输出选择校验代码，防止未合并候选替换自己的验证器后自行授权。授权通过后，`signed-candidate` 才进入现有 `production-signing` environment；签名 job 在 environment 审批后和 provenance 前再次运行完整合同，复核版本唯一性和 exact-SHA Quality Gate。
 
-纯逻辑位于 `scripts/ProductionReleasePolicy.psm1`，GitHub/git 取证入口为 `scripts/verify-production-candidate.ps1`。`scripts/test-production-release-contract.ps1` 提供主机可运行的正/负向合同，并由正常 `Android Quality Gate` 执行。
+纯逻辑位于 `scripts/ProductionReleasePolicy.psm1`，GitHub/git 取证入口为 `scripts/verify-production-candidate.ps1`。`scripts/test-production-release-contract.ps1` 提供主机可运行的正/负向合同，并由正常 `Android Quality Gate` 执行；它还直接运行从 workflow 提取的两个内联入口，通过本地替换验证器的候选夹具检验拒绝时未执行候选代码，以及远端 main 前进和授权输出污染均会停止流程。此夹具不调用 GitHub、不申请生产凭据，也不触发真实签名。
 
 ## Certificate continuity
 
@@ -26,7 +26,7 @@
 - APK SHA-256 `f9be5e8b4850c84b5b66fc30d18655f89eae7dd87c5eed9cb4e0dd62ab8f91dc`；
 - production certificate SHA-256 `b02a1b6c391545c2bdbcc33bda3a708741e259a4efea60bdc4958522f5bc82f5`。
 
-`lastVerifiedRelease` 另记录上一正式版 `v1.0.1` 的 source commit `5a21bb4666f2ad3e6b57709e1efb5ad9cb711481`、公开 APK SHA-256 `41e056f19913c39727da7575b06f0d48d2554bdad57585611ff9a2924e990ae0` 及从该公开 APK 复算的相同证书 SHA-256。这样既保留首次公开披露的 trust anchor，也直接绑定上一正式版本。
+`lastVerifiedRelease` 另记录上一正式版 `v1.1.0` 的 source commit `bdd93a074ba577e9f2de230515052eb69c7e13d2`、公开 APK SHA-256 `5033a45104f7642147ad5ffd79ab3573fd6dc59cdecb63cf5f463f7978672902` 及从该公开 APK 复算的相同证书 SHA-256。这样既保留首次公开披露的 trust anchor，也直接绑定上一正式版本。
 
 签名 job 从构建后的 APK 验签输出读取证书 digest，并从 AAB 的 PEM certificate 独立计算 SHA-256；两者都必须等于锚点和上一正式版记录。候选 metadata 只记录验证结果，不能反过来作为连续性证明。更换生产证书必须是单独、经审核的 trust-anchor 变更，并说明迁移/轮换依据，不能在一次候选运行中自动接受新证书。
 
@@ -42,11 +42,13 @@
 
 随后生成的 `SHA256SUMS` 覆盖 APK、AAB、可选 mapping 与 metadata。`signed-candidate` job 在删除临时 keystore 后，以只授予该 job 的 `id-token: write`、`attestations: write` 对 `release-assets/*` 生成 GitHub build provenance；因此 APK、AAB、mapping、metadata 与 checksums 都是 attestation subjects。普通 CI/PR 没有这些写权限或 production Secrets。
 
+同一签名 job 在原有主机测试与 APK/AAB 构建之后，用独立 Gradle 调用构建 `:app:assembleProductionReleaseAndroidTest`，并核对测试 APK 使用同一生产证书。文件 `app-production-release-androidTest.apk` 单独 attestation 后上传为 `production-device-test-<version>-<sha12>` artifact，供设备门从同一 candidate run 下载；它不进入 `release-assets`、公开 Release 或公开 checksums。设备 runner 无需生产签名材料来构建测试 APK。
+
 该 signed candidate 仍不是最终设备结论。metadata 明确写入 `PROVISIONAL / device NOT RUN / finalReady=false`；独立 `Final Device Gate` workflow 在后置阶段以 `actions: read`、`attestations: read`、`contents: read` 下载同一 candidate artifact 和受控 device-evidence artifact，重新验证每个 candidate subject 的 provenance，再将实际 APK/AAB/test APK、日志和完整设备矩阵交给 `scripts/validate-device-gate-evidence.ps1`。后置 job 不进入 `production-signing`、不读取 Secrets、不重建或重签产物。真实 evidence 缺失或任一 gate 非 PASS 时不会产生 `FINAL READY` verdict。
 
-`Final Device Gate` 仍是独立 consumer/validator：它通过 GitHub API 将 candidate run 锁定到本仓库、精确 source SHA、`main`、成功的 `workflow_dispatch` 与 `.github/workflows/release.yml`，并将 evidence run 同样锁定到受控 producer `.github/workflows/capture-device-gate-evidence.yml`；JSON 内的 producer run id/attempt/path/event 必须与 API 结果一致。producer 只允许带 `lcg-device-gate` 标签的 Windows 自托管 Runner，从同一候选下载 production bytes、构建 production-release test APK，并按 stop-on-first-failure 规则运行 API 26/30/33/36 与获授权实体设备矩阵。真实 producer run、test APK/logs artifact 和 `final-device-gate` environment 审批仍必须在具体发布时逐项核验。
+`Final Device Gate` 仍是独立 consumer/validator：它通过 GitHub API 将 candidate run 锁定到本仓库、精确 source SHA、`main`、成功的 `workflow_dispatch` 与 `.github/workflows/release.yml`，并将 evidence run 同样锁定到受控 producer `.github/workflows/capture-device-gate-evidence.yml`；JSON 内的 producer run id/attempt/path/event 必须与 API 结果一致。producer 只允许带 `lcg-device-gate` 标签的 Windows 自托管 Runner，从同一候选 run 下载并验证 production bytes 和带独立来源证明的 production-release test APK，并按 stop-on-first-failure 规则运行 API 26/30/33/36 与获授权实体设备矩阵。真实 producer run、test APK/logs artifact 和 `final-device-gate` environment 审批仍必须在具体发布时逐项核验。
 
-`gh attestation verify` 的证明对象仅是 #10 signed candidate 中的 APK/AAB/mapping/metadata/checksums，不把 device logs、test APK 或最终 verdict 自动升级为 GitHub build provenance。最终 verdict 的信任来自：允许的 producer workflow identity、GitHub API 的 same-repo/same-SHA/success 绑定、证据文件与真实 bytes/log hashes 的 validator、`final-device-gate` environment 人工 reviewer，以及独立发布者对 run/artifact IDs 的复核。若需要让 device evidence 或 verdict 也具备 cryptographic attestation，应作为后续独立权限设计；不得在本门中复用 signing secrets 或声称已有该属性。
+`gh attestation verify` 的证明对象是 #10 signed candidate 中的 APK/AAB/mapping/metadata/checksums，以及同一签名 job 单独构建、证明的正式 test APK，不把 device logs 或最终 verdict 自动升级为 GitHub build provenance。最终 verdict 的信任来自：允许的 producer workflow identity、GitHub API 的 same-repo/same-SHA/success 绑定、证据文件与真实 bytes/log hashes 的 validator、`final-device-gate` environment 人工 reviewer，以及独立发布者对 run/artifact IDs 的复核。若需要让 device evidence 或 verdict 也具备 cryptographic attestation，应作为后续独立权限设计；不得在本门中复用 signing secrets 或声称已有该属性。
 
 候选下载后，对每个拟发布文件执行（`<candidate>` 必须替换为冻结的完整 SHA）：
 
@@ -58,7 +60,7 @@ gh attestation verify <asset-path> `
   --source-digest <candidate>
 ```
 
-验证还必须把 `release-metadata.json` 中的 source、workflow、Quality Gate、certificate 与 artifact digests 和授权记录逐项比对。公开发布只能上传这些已验证 bytes；发布后从 Release 重新下载并对每个 asset 重跑 `SHA256SUMS` 与 `gh attestation verify`。历史 v1.0.0/v1.0.1 没有 GitHub attestation，不能追溯补造为本 workflow 的真实 provenance。
+验证还必须把 `release-metadata.json` 中的 source、workflow、Quality Gate、certificate 与 artifact digests 和授权记录逐项比对。公开发布只能上传这些已验证 bytes；发布后从 Release 重新下载并对每个 asset 重跑 `SHA256SUMS` 与 `gh attestation verify`。历史 v1.0.0/v1.0.1/v1.1.0 没有 GitHub attestation，不能追溯补造为本 workflow 的真实 provenance。
 
 ## External prerequisites and residual boundary
 

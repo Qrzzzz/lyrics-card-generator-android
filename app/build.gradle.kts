@@ -1,3 +1,4 @@
+import com.android.build.api.artifact.SingleArtifact
 import org.gradle.api.tasks.Exec
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.ByteArrayOutputStream
@@ -57,10 +58,10 @@ android {
         applicationId = "com.qrzzzz.lyricscard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10100
-        versionName = "1.1.0"
+        versionCode = 10101
+        versionName = "1.1.1"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner"
         testProguardFiles("test-proguard-rules.pro")
         vectorDrawables.useSupportLibrary = true
         buildConfigField("int", "RENDERER_SCHEMA_VERSION", "1")
@@ -133,6 +134,20 @@ android {
 
     sourceSets.named("main") {
         assets.srcDir(rendererAssetsRoot)
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        val mergedManifest = variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)
+        variant.unitTest?.configureTestTask { testTask ->
+            testTask.inputs.file(mergedManifest).withPropertyName("backupRulesMergedManifest")
+            testTask.jvmArgumentProviders.add(
+                CommandLineArgumentProvider {
+                    listOf("-Dlyricscard.mergedManifest=${mergedManifest.get().asFile.absolutePath}")
+                },
+            )
+        }
     }
 }
 
