@@ -15,6 +15,7 @@ function New-ValidPolicyCase {
         RepositoryVersion = '2.0.0'
         Repository = 'Qrzzzz/lyrics-card-generator-android'
         RemoteMainCommit = $candidate
+        CandidateOnMain = $true
         WorkflowEvent = 'workflow_dispatch'
         WorkflowRef = 'refs/heads/main'
         WorkflowSha = $candidate
@@ -66,7 +67,10 @@ function Assert-Rejected {
 $accepted = Invoke-PolicyCase -Case (New-ValidPolicyCase)
 if ($accepted.id -ne 42) { throw 'The valid contract did not select the exact Quality Gate run.' }
 
-Assert-Rejected -Name 'unmerged-or-stale-main' -Mutate { param($case) $case.RemoteMainCommit = '2222222222222222222222222222222222222222' } -MessagePattern 'not the current origin/main tip'
+Assert-Rejected -Name 'unmerged-commit' -Mutate { param($case) $case.CandidateOnMain = $false } -MessagePattern 'not an ancestor'
+$advancedMainCase = New-ValidPolicyCase
+$advancedMainCase.RemoteMainCommit = '2222222222222222222222222222222222222222'
+$null = Invoke-PolicyCase -Case $advancedMainCase
 Assert-Rejected -Name 'wrong-trigger-sha' -Mutate { param($case) $case.TriggerSha = '2222222222222222222222222222222222222222' } -MessagePattern 'same main commit'
 Assert-Rejected -Name 'wrong-workflow-sha' -Mutate { param($case) $case.WorkflowSha = '2222222222222222222222222222222222222222' } -MessagePattern 'same main commit'
 Assert-Rejected -Name 'wrong-version' -Mutate { param($case) $case.RepositoryVersion = '2.0.1' } -MessagePattern 'does not match Gradle version'
@@ -125,7 +129,8 @@ function Invoke-TrustedDispatchContract {
         [hashtable] $Overrides = @{},
         [string] $RemoteMain = '1111111111111111111111111111111111111111',
         [string] $ExpectedFailure = '',
-        [int] $ExpectedApiCalls = 1
+        [int] $ExpectedApiCalls = 2,
+        [string] $ComparisonStatus = 'ahead'
     )
 
     $values = @{
@@ -153,11 +158,17 @@ Write-Output 'source_commit=2222222222222222222222222222222222222222'
     $apiCalls = [System.Collections.Generic.List[string]]::new()
     function Invoke-RestMethod {
         param($Method, $Uri, $Headers)
-        if ($Method -ne 'Get' -or $Uri -ne 'https://api.contract.invalid/repos/Qrzzzz/lyrics-card-generator-android/git/ref/heads/main') {
+        if ($Method -ne 'Get') {
             throw 'The trusted gate requested an unexpected endpoint.'
         }
         $apiCalls.Add($Uri)
-        return [pscustomobject]@{ object = [pscustomobject]@{ type = 'commit'; sha = $RemoteMain } }
+        if ($Uri -eq 'https://api.contract.invalid/repos/Qrzzzz/lyrics-card-generator-android/git/ref/heads/main') {
+            return [pscustomobject]@{ object = [pscustomobject]@{ type = 'commit'; sha = $RemoteMain } }
+        }
+        if ($Uri -eq "https://api.contract.invalid/repos/Qrzzzz/lyrics-card-generator-android/compare/$($values.CANDIDATE_COMMIT)...$RemoteMain") {
+            return [pscustomobject]@{ status = $ComparisonStatus; merge_base_commit = @{ sha = $values.CANDIDATE_COMMIT } }
+        }
+        throw 'The trusted gate requested an unexpected endpoint.'
     }
     try {
         foreach ($key in $values.Keys) {
@@ -203,7 +214,8 @@ foreach ($gate in @($authorizeDispatch, $signedDispatch)) {
         -Overrides @{ CANDIDATE_COMMIT = '2222222222222222222222222222222222222222'; AUTHORIZED_COMMIT = '2222222222222222222222222222222222222222' } `
         -ExpectedFailure 'trusted workflow and trigger SHA before checkout' -ExpectedApiCalls 0
     Invoke-TrustedDispatchContract -Name 'main-advanced-before-checkout' -Gate $gate `
-        -RemoteMain '2222222222222222222222222222222222222222' -ExpectedFailure 'fresh remote main before checkout'
+        -RemoteMain '2222222222222222222222222222222222222222'
+    Invoke-TrustedDispatchContract -Name 'candidate-removed-from-main' -Gate $gate -RemoteMain '2222222222222222222222222222222222222222' -ComparisonStatus 'diverged' -ExpectedFailure 'no longer in remote main history'
 }
 Invoke-TrustedDispatchContract -Name 'poisoned-authorization-output' -Gate $signedDispatch `
     -Overrides @{ AUTHORIZED_COMMIT = '2222222222222222222222222222222222222222' } `
@@ -248,7 +260,8 @@ if ($verifier -notmatch 'actions/workflows/ci\.yml/runs\?branch=main&event=push&
 if ($policy.certificateSha256 -notmatch '^[0-9a-f]{64}$' -or
     $policy.trustAnchor.releaseTag -ne 'v1.0.0' -or
     $policy.trustAnchor.apkSha256 -notmatch '^[0-9a-f]{64}$' -or
-    $policy.lastVerifiedRelease.releaseTag -ne 'v1.1.0' -or
+    $policy.lastVerifiedRelease.releaseTag -notmatch '^v\d+\.\d+\.\d+$' -or
+    $policy.lastVerifiedRelease.sourceCommit -notmatch '^[0-9a-f]{40}$' -or
     $policy.lastVerifiedRelease.apkSha256 -notmatch '^[0-9a-f]{64}$' -or
     $policy.lastVerifiedRelease.certificateSha256 -ne $policy.certificateSha256) {
     throw 'The production certificate continuity policy must contain an auditable release trust anchor.'
@@ -258,35 +271,7 @@ foreach ($metadataField in @('schemaVersion = 2', 'qualityGateRunId', 'workflowR
         throw "Release metadata contract is missing field: $metadataField"
     }
 }
-foreach ($readinessLiteral in @("status = 'PROVISIONAL'", "deviceGate = 'NOT RUN'", 'finalReady = $false', "finalGateWorkflow = '.github/workflows/final-device-gate.yml'")) {
-    if ($workflow.IndexOf($readinessLiteral, [StringComparison]::Ordinal) -lt 0) {
-        throw "Signed candidate metadata must remain non-final: $readinessLiteral"
-    }
-}
-$finalGateWorkflow = Read-RepositoryText '.github/workflows/final-device-gate.yml'
-if ($finalGateWorkflow -match 'production-signing|\$\{\{\s*secrets\.' -or
-    $finalGateWorkflow -match '(?m)^\s+(id-token|attestations):\s*write\s*$') {
-    throw 'The post-signing final device gate must not access signing authority or write attestations.'
-}
-foreach ($requiredFinalGateBinding in @('candidate_run_id', 'evidence_run_id', 'gh attestation verify', 'validate-device-gate-evidence.ps1')) {
-    if ($finalGateWorkflow.IndexOf($requiredFinalGateBinding, [StringComparison]::Ordinal) -lt 0) {
-        throw "The post-signing final gate is missing binding: $requiredFinalGateBinding"
-    }
-}
-
-$workflowFiles = Get-ChildItem -LiteralPath (Join-Path $repositoryRoot '.github/workflows') -Filter '*.yml' -File
-foreach ($workflowFile in $workflowFiles) {
-    $lineNumber = 0
-    foreach ($line in [IO.File]::ReadLines($workflowFile.FullName)) {
-        $lineNumber++
-        if ($line -match '^\s*-?\s*uses:\s*(\S+)') {
-            $reference = $Matches[1]
-            if ($reference -notmatch '@[0-9a-f]{40}$') {
-                throw "Action reference is not pinned to a full commit SHA: $($workflowFile.Name):$lineNumber ($reference)"
-            }
-        }
-    }
-}
-
-Write-Output 'Production release contract PASS (1 positive, 13 negative policy cases; 2 positive, 5 negative executable dispatch cases; workflow permissions/provenance/continuity/device-test artifact checks).'
+# Shared Action pins live in dependency-security; final readiness and consumer
+# authority live in the device-evidence contract.
+Write-Output 'Production release contract PASS (frozen-main ancestry, exact-SHA gates, hostile dispatch rejection, permissions, provenance and certificate continuity).'
 exit 0

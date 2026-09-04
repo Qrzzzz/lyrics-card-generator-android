@@ -40,7 +40,7 @@ Assert-Match $dependabot '(?ms)- package-ecosystem:\s*gradle\s+directory:\s*/\s'
 Assert-Match $dependabot '(?ms)- package-ecosystem:\s*github-actions\s+directory:\s*/\s' 'Dependabot GitHub Actions coverage must target the repository root.'
 
 $package = Get-Content -LiteralPath (Join-Path $repositoryRoot 'renderer/package.json') -Raw | ConvertFrom-Json
-if ($package.scripts.'audit:security' -ne 'npm audit --audit-level=high') {
+if ($package.scripts.'audit:security' -ne 'node scripts/audit-security.mjs') {
     throw 'Renderer audit:security must fail npm audit on high or critical advisories.'
 }
 

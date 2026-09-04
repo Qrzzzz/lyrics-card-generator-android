@@ -64,9 +64,9 @@ jobs:
           if ($env:EVIDENCE_ARTIFACT_NAME -notmatch '^final-device-evidence-[A-Za-z0-9._-]+$') {
             throw 'evidence_artifact_name does not match the controlled evidence contract.'
           }
-          if ($env:TRIGGER_SHA -cne $env:SOURCE_COMMIT -or $env:WORKFLOW_SHA -cne $env:SOURCE_COMMIT -or
+          if ($env:WORKFLOW_SHA -cnotmatch '^[0-9a-f]{40}$' -or $env:TRIGGER_SHA -cne $env:WORKFLOW_SHA -or
               $env:WORKFLOW_REF -ne 'refs/heads/main' -or $env:WORKFLOW_EVENT -ne 'workflow_dispatch') {
-            throw 'Final Device Gate must run from the exact candidate workflow definition on refs/heads/main.'
+            throw 'Final Device Gate must use the trusted workflow dispatched on refs/heads/main.'
           }
 
       - name: Check out the trusted candidate validator
@@ -85,6 +85,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           API_URL: ${{ github.api_url }}
+          VALIDATOR_COMMIT: ${{ github.workflow_sha }}
         run: |
           $headers = @{
             Accept = 'application/vnd.github+json'
@@ -95,10 +96,14 @@ jobs:
             return Invoke-RestMethod -Headers $headers -Uri "$env:API_URL/repos/$env:REPOSITORY/actions/runs/$RunId"
           }
           Import-Module .\scripts\DeviceGateEvidence.psm1 -Force
+          Import-Module .\scripts\ProductionReleasePolicy.psm1 -Force
           $candidateRun = Get-Run $env:CANDIDATE_RUN_ID
           $evidenceRun = Get-Run $env:EVIDENCE_RUN_ID
           $null = Assert-DeviceGateWorkflowRun -Run $candidateRun -ExpectedRepository $env:REPOSITORY -ExpectedSourceCommit $env:SOURCE_COMMIT -ExpectedPath '.github/workflows/release.yml' -ExpectedEvent 'workflow_dispatch'
-          $null = Assert-DeviceGateWorkflowRun -Run $evidenceRun -ExpectedRepository $env:REPOSITORY -ExpectedSourceCommit $env:SOURCE_COMMIT -ExpectedPath '.github/workflows/capture-device-gate-evidence.yml' -ExpectedEvent 'workflow_dispatch'
+          Assert-CommitAncestor -AncestorCommit $env:SOURCE_COMMIT -DescendantCommit $evidenceRun.head_sha -Repository $env:REPOSITORY -GitHubToken $env:GH_TOKEN -ApiBaseUrl $env:API_URL
+          Assert-CommitAncestor -AncestorCommit $evidenceRun.head_sha -DescendantCommit $env:VALIDATOR_COMMIT -Repository $env:REPOSITORY -GitHubToken $env:GH_TOKEN -ApiBaseUrl $env:API_URL
+          $null = Assert-DeviceGateWorkflowRun -Run $evidenceRun -ExpectedRepository $env:REPOSITORY -ExpectedSourceCommit $evidenceRun.head_sha -ExpectedPath '.github/workflows/capture-device-gate-evidence.yml' -ExpectedEvent 'workflow_dispatch'
+          "evidence_workflow_sha=$($evidenceRun.head_sha)" >> $env:GITHUB_OUTPUT
           "candidate_run_attempt=$([int]$candidateRun.run_attempt)" >> $env:GITHUB_OUTPUT
           "evidence_run_attempt=$([int]$evidenceRun.run_attempt)" >> $env:GITHUB_OUTPUT
           'evidence_workflow_path=.github/workflows/capture-device-gate-evidence.yml' >> $env:GITHUB_OUTPUT
@@ -150,6 +155,8 @@ jobs:
           EVIDENCE_RUN_ATTEMPT: ${{ steps.run-policy.outputs.evidence_run_attempt }}
           EVIDENCE_WORKFLOW_PATH: ${{ steps.run-policy.outputs.evidence_workflow_path }}
           EVIDENCE_WORKFLOW_EVENT: ${{ steps.run-policy.outputs.evidence_workflow_event }}
+          EVIDENCE_WORKFLOW_SHA: ${{ steps.run-policy.outputs.evidence_workflow_sha }}
+          VALIDATOR_COMMIT: ${{ github.workflow_sha }}
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -219,6 +226,8 @@ jobs:
             candidateRunId = [long]$env:CANDIDATE_RUN_ID
             candidateArtifactName = $env:CANDIDATE_ARTIFACT_NAME
             evidenceRunId = [long]$env:EVIDENCE_RUN_ID
+            evidenceWorkflowSha = $env:EVIDENCE_WORKFLOW_SHA
+            validatorCommit = $env:VALIDATOR_COMMIT
             evidenceArtifactName = $env:EVIDENCE_ARTIFACT_NAME
             evidenceSha256 = $evidenceSha
           } | ConvertTo-Json | Set-Content -LiteralPath 'final-gate-result/final-device-gate-verdict.json' -Encoding utf8

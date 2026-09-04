@@ -360,7 +360,6 @@ function Assert-FinalConsumerRejectsUnattestedTestApk {
     }
 }
 Assert-FinalConsumerRejectsUnattestedTestApk
-$checklist = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'RELEASE_CHECKLIST.md'))
 foreach ($literal in @("status = 'PROVISIONAL'", "deviceGate = 'NOT RUN'", 'finalReady = $false', '.github/workflows/final-device-gate.yml')) {
     if ($releaseWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Release candidate metadata is missing fail-closed readiness literal: $literal" }
 }
@@ -378,8 +377,12 @@ if (-not (Test-Path -LiteralPath $captureWorkflowPath -PathType Leaf)) {
     throw 'The authorized device capture producer is missing.'
 }
 $captureWorkflow = [IO.File]::ReadAllText($captureWorkflowPath)
-foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'timeout-minutes: 150', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'name: ${{ steps.input-policy.outputs.test_artifact_name }}', 'actions/download-artifact@', 'gh attestation verify', 'actions/upload-artifact@')) {
+foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'name: ${{ steps.input-policy.outputs.test_artifact_name }}', 'actions/download-artifact@', 'gh attestation verify', 'actions/upload-artifact@')) {
     if ($captureWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Capture workflow is missing controlled producer binding: $literal" }
+}
+$captureTimeout = [regex]::Match($captureWorkflow, '(?m)^\s+timeout-minutes:\s*(\d+)\s*(?:#.*)?$')
+if (-not $captureTimeout.Success -or [int]$captureTimeout.Groups[1].Value -lt 60 -or [int]$captureTimeout.Groups[1].Value -gt 360) {
+    throw 'The device matrix requires a bounded timeout between 60 and 360 minutes.'
 }
 if ($captureWorkflow -match '(?m)^\s+pattern:\s*production-device-test-') {
     throw 'The capture producer must download the exact candidate test artifact, not a wildcard match.'
@@ -418,13 +421,7 @@ foreach ($literal in @('-keep,allowoptimization class com.qrzzzz.lyricscard.** {
         throw "The minified production APK must preserve the target-app ABI used by release instrumentation: $literal"
     }
 }
-foreach ($literal in @('Final Device Gate', 'device-gate-evidence.json', 'FINAL READY')) {
-    if ($checklist.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Release checklist is missing final device-gate enforcement: $literal" }
-}
-$provenance = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'docs\RELEASE_PROVENANCE.md'))
-foreach ($literal in @('consumer/validator', 'capture-device-gate-evidence.yml', 'final-device-gate` environment', '#10 signed candidate', 'GitHub build provenance')) {
-    if ($provenance.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Release provenance is missing the final-verdict trust boundary: $literal" }
-}
+# Documentation wording and historical issue labels are not executable security boundaries.
 
 foreach ($scriptPath in @(
     (Join-Path $PSScriptRoot 'DeviceGateEvidence.psm1'),

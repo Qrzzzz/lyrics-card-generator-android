@@ -19,6 +19,7 @@ function Assert-ProductionCandidatePolicy {
         [Parameter(Mandatory = $true)][string] $RepositoryVersion,
         [Parameter(Mandatory = $true)][string] $Repository,
         [Parameter(Mandatory = $true)][string] $RemoteMainCommit,
+        [Parameter(Mandatory = $true)][bool] $CandidateOnMain,
         [Parameter(Mandatory = $true)][string] $WorkflowEvent,
         [Parameter(Mandatory = $true)][string] $WorkflowRef,
         [Parameter(Mandatory = $true)][string] $WorkflowSha,
@@ -50,8 +51,8 @@ function Assert-ProductionCandidatePolicy {
     if ($WorkflowRef -ne 'refs/heads/main') {
         throw "Production candidates must be dispatched from refs/heads/main, not '$WorkflowRef'."
     }
-    if ($candidate -ne $remoteMain) {
-        throw "Candidate '$candidate' is not the current origin/main tip '$remoteMain'."
+    if (-not $CandidateOnMain) {
+        throw "Candidate '$candidate' is not an ancestor of current origin/main '$remoteMain'."
     }
     if ($candidate -ne $workflowCommit -or $candidate -ne $triggerCommit) {
         throw 'Candidate, workflow definition, and workflow_dispatch trigger must resolve to the same main commit.'
@@ -81,4 +82,27 @@ function Assert-ProductionCandidatePolicy {
         Select-Object -First 1
 }
 
-Export-ModuleMember -Function Assert-ProductionCandidatePolicy
+function Assert-CommitAncestor {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string] $AncestorCommit,
+        [Parameter(Mandatory = $true)][string] $DescendantCommit,
+        [Parameter(Mandatory = $true)][string] $Repository,
+        [Parameter(Mandatory = $true)][string] $GitHubToken,
+        [string] $ApiBaseUrl = 'https://api.github.com'
+    )
+    Assert-FullCommitSha $AncestorCommit 'Ancestor commit'
+    Assert-FullCommitSha $DescendantCommit 'Descendant commit'
+    $headers = @{
+        Accept = 'application/vnd.github+json'
+        Authorization = "Bearer $GitHubToken"
+        'X-GitHub-Api-Version' = '2022-11-28'
+    }
+    $comparison = Invoke-RestMethod -Headers $headers -Method Get -Uri "$ApiBaseUrl/repos/$Repository/compare/$AncestorCommit...$DescendantCommit"
+    if ($comparison.status -notin @('ahead', 'identical') -or
+        $comparison.merge_base_commit.sha -cne $AncestorCommit) {
+        throw "Commit '$AncestorCommit' is not in the approved main history ending at '$DescendantCommit'."
+    }
+}
+
+Export-ModuleMember -Function Assert-ProductionCandidatePolicy, Assert-CommitAncestor

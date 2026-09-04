@@ -4,14 +4,14 @@
 
 ## 必须闭合的发布链
 
-1. 同一主干提交的 Android Quality Gate 和 Dependency Security 成功。Renderer、四变体 JVM、lint、R8、APK/AAB 与 Windows 中文路径门均必须执行。
-2. `Production Release Candidate` 只接受可信 workflow 的精确 main SHA，并重新检查 Quality Gate 和版本唯一性。签名 job 在审批前后拒绝来源错配；候选自带脚本不能授权自身。
+1. 同一主干提交的 Android Quality Gate 和 Dependency Security 成功。主干保留 Renderer、四变体 JVM、lint、R8、APK/AAB 与 Windows 中文路径门；PR 的中文路径门按构建相关改动执行并保留稳定检查结果。已有同 SHA 主干证据可以引用，无需在本地重复全套。
+2. `Production Release Candidate` 固定可信 main dispatch 的精确 SHA，检查主干祖先关系、同 SHA Quality Gate 和版本唯一性。main 前进不自动废弃已批准候选。签名 job 在审批前后拒绝来源错配；候选自带脚本不能授权自身。
 3. 同一签名 job 生成生产 APK/AAB、metadata、mapping、checksums 以及单独的正式测试 APK，验证生产证书连续性并生成 GitHub build provenance。公开候选 metadata 固定为 `PROVISIONAL / device NOT RUN / finalReady=false`。
 4. `Capture Device Gate Evidence` 从同一候选 run 下载并验证上述产物，在获授权的 API 26/30/33/36 AVD 与实体设备执行真实测试。设备 Runner 不构建或重签 APK，也不持有生产签名凭据。
-5. `Final Device Gate` 重新核对 workflow identity、same-SHA/run/artifact、公开候选及测试 APK 的 provenance、实际字节哈希、完整设备矩阵和成功日志，产生 `FINAL READY` verdict。
+5. `Final Device Gate` 重新核对 workflow identity、冻结 source/run/artifact、source → producer → validator 的祖先链、公开候选及测试 APK 的 provenance、实际字节哈希、完整设备矩阵和成功日志，产生 `FINAL READY` verdict。验证器可位于更新的受保护主干提交。
 6. 发布者核对三个 run 的来源和产物，上传已验证的候选原字节。Release 必须列出 source、candidate/evidence/final run、证书指纹及 checksums；公开下载后的哈希与 provenance 仍须通过。
 
-任何缺失、失败、跳过、旧候选或未完成项必须保留 `NOT RUN/BLOCKED/FAIL`，不能通过修改文档、手工填写 PASS 或重复运行后抹掉失败记录来关闭门。诊断实验与正式一次性矩阵分开保存；修改产品、测试或验收脚本后重新冻结候选。
+任何缺失、失败、跳过、旧候选或未完成项必须保留 `NOT RUN/BLOCKED/FAIL`，不能通过修改文档、手工填写 PASS 或重复运行后抹掉失败记录来关闭门。诊断实验与正式一次性矩阵分开保存；修改产品或 APK 内测试后重新冻结候选。只修改 CI/采集/验证器时保留 APK 原字节，绑定新的可信 workflow SHA，并按实际变化重新采集受影响证据；已有失败记录不得删除。
 
 ## 设备验收范围
 
