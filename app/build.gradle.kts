@@ -1,3 +1,4 @@
+import com.android.build.api.artifact.SingleArtifact
 import org.gradle.api.tasks.Exec
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.io.ByteArrayOutputStream
@@ -133,6 +134,20 @@ android {
 
     sourceSets.named("main") {
         assets.srcDir(rendererAssetsRoot)
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        val mergedManifest = variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)
+        variant.unitTest?.configureTestTask { testTask ->
+            testTask.inputs.file(mergedManifest).withPropertyName("backupRulesMergedManifest")
+            testTask.jvmArgumentProviders.add(
+                CommandLineArgumentProvider {
+                    listOf("-Dlyricscard.mergedManifest=${mergedManifest.get().asFile.absolutePath}")
+                },
+            )
+        }
     }
 }
 
