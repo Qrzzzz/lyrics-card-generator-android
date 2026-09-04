@@ -33,6 +33,7 @@ Dependency Graph、Dependabot alerts/security updates 和三生态更新已启�
 
 - 2026-08-08 的 API 30 超时绑定旧 Debug 候选。后续 `c3ff32f` 候选的 API 30 serif probe、20× 和 4 GB 项已有成功诊断日志，但 API 36 测试失败；这些记录不能代替本版同一最终候选矩阵。
 - v1.1.0 发布说明明确记录设备矩阵和耐久门由 owner 豁免；其公开 APK/AAB 使用连续生产证书，但五个公开资产没有 GitHub attestation，metadata 也未满足现行来源合同。本版不得追溯伪造其 provenance，或将该豁免沿用为新版验收。
-- #13 的中文路径 wrapper 已由 PR #14 实现并复核关闭；#9–#12 的剩余修复必须分别绑定实际 PR 与对应发布/验收证据。
+- 2026-09-04 的 `d7f3b2e` 候选 [33869390382 / attempt 2](https://github.com/Qrzzzz/lyrics-card-generator-android/actions/runs/33869390382/attempts/2) 已通过签名和六个文件的来源证明；[设备运行 33872306376](https://github.com/Qrzzzz/lyrics-card-generator-android/actions/runs/33872306376) 在 API 26 系统保存测试中报 `missing DocumentsUI filename field`，该组 2 tests / 1 failure、0 个完成门。API 30/33/36 和真机均未执行；失败 artifact 保留原始日志，后续修复必须重新冻结候选。
+- #13 的中文路径 wrapper 已由 PR #14 实现并复核关闭；其他原 issue 也须分别绑定实际 PR 与其适用的验收证据。依赖机制或隐私规则的单项验收不能替代完整设备门与公开产物核验。
 
 详细执行清单见 [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md)，来源合同见 [RELEASE_PROVENANCE.md](RELEASE_PROVENANCE.md)。
