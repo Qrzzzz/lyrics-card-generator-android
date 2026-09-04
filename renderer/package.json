@@ -29,13 +29,13 @@
     "ajv": "^8.17.1",
     "html-to-image": "^1.11.13",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
     "@types/node": "^22.15.30",
     "@types/react": "^19.1.6",
-    "@types/react-dom": "^19.1.5",
+    "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^4.5.2",
     "pixelmatch": "7.2.0",
     "pngjs": "7.0.0",
