@@ -21,15 +21,6 @@ $scriptStartedAt = [datetimeoffset]::UtcNow
 $repository = 'Qrzzzz/lyrics-card-generator-android'
 $workflowPath = '.github/workflows/capture-device-gate-evidence.yml'
 $runnerName = if ($env:RUNNER_NAME) { $env:RUNNER_NAME } else { $env:COMPUTERNAME }
-$adb = Join-Path $AndroidSdkRoot 'platform-tools\adb.exe'
-$emulator = Join-Path $AndroidSdkRoot 'emulator\emulator.exe'
-$avdManager = Get-ChildItem -LiteralPath (Join-Path $AndroidSdkRoot 'cmdline-tools') -Filter 'avdmanager.bat' -Recurse -File | Select-Object -First 1
-$aapt2 = Join-Path $AndroidSdkRoot 'build-tools\36.1.0\aapt2.exe'
-$apkSigner = Join-Path $AndroidSdkRoot 'build-tools\36.1.0\apksigner.bat'
-foreach ($tool in @($adb, $emulator, $avdManager.FullName, $aapt2, $apkSigner)) {
-    if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) { throw "Required Android tool is missing: $tool" }
-}
-
 $candidateRootPath = [IO.Path]::GetFullPath($CandidateRoot)
 $outputRootPath = [IO.Path]::GetFullPath($OutputRoot)
 $avdRootPath = [IO.Path]::GetFullPath($AvdRoot)
@@ -44,9 +35,19 @@ trap {
         startedAt = $scriptStartedAt.ToString('o')
         failedAt = [datetimeoffset]::UtcNow.ToString('o')
         message = $_.Exception.Message
-        completedGateIds = if (Get-Variable gates -ErrorAction SilentlyContinue) { @($gates | ForEach-Object { $_.id }) } else { @() }
+        completedGateIds = @(if (Get-Variable gates -ErrorAction SilentlyContinue) { $gates | ForEach-Object { $_.id } })
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outputRootPath 'capture-failure.json') -Encoding utf8
     throw
+}
+Import-Module (Join-Path $PSScriptRoot 'DeviceGateEvidence.psm1') -Force
+$adb = Join-Path $AndroidSdkRoot 'platform-tools\adb.exe'
+$emulator = Join-Path $AndroidSdkRoot 'emulator\emulator.exe'
+$avdManager = Get-ChildItem -LiteralPath (Join-Path $AndroidSdkRoot 'cmdline-tools') -Filter 'avdmanager.bat' -Recurse -File | Select-Object -First 1
+if ($null -eq $avdManager) { throw 'Required Android tool avdmanager.bat was not found.' }
+$aapt2 = Join-Path $AndroidSdkRoot 'build-tools\36.1.0\aapt2.exe'
+$apkSigner = Join-Path $AndroidSdkRoot 'build-tools\36.1.0\apksigner.bat'
+foreach ($tool in @($adb, $emulator, $avdManager.FullName, $aapt2, $apkSigner)) {
+    if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) { throw "Required Android tool is missing: $tool" }
 }
 New-Item -ItemType Directory -Path $avdRootPath -Force | Out-Null
 $env:ANDROID_AVD_HOME = $avdRootPath
@@ -149,11 +150,12 @@ function Install-Candidate([string] $Serial) {
 
 function Assert-DeviceIdentity([string] $Serial, [string] $Kind, [int] $ApiLevel = 0, [string] $AvdName = '') {
     $actualApi = [int](Get-DeviceProperty $Serial 'ro.build.version.sdk')
-    $isEmulator = $Serial -match '^emulator-' -or
-        (Get-DeviceProperty $Serial 'ro.kernel.qemu') -eq '1' -or
+    $emulatorSerial = $Serial -match '^emulator-'
+    $qemuDevice = (Get-DeviceProperty $Serial 'ro.kernel.qemu') -eq '1' -or
         (Get-DeviceProperty $Serial 'ro.boot.qemu') -eq '1'
     if ($ApiLevel -gt 0 -and $actualApi -ne $ApiLevel) { throw "Device $Serial API $actualApi differs from requested API $ApiLevel." }
-    if (($Kind -eq 'AVD') -ne $isEmulator) { throw "Device $Serial does not match required device kind $Kind." }
+    if (($Kind -eq 'AVD' -and (-not $emulatorSerial -or -not $qemuDevice)) -or
+        ($Kind -eq 'PHYSICAL' -and ($emulatorSerial -or $qemuDevice))) { throw "Device $Serial does not match required device kind $Kind." }
     if ($Kind -eq 'AVD') {
         $actualName = ((Invoke-Adb $Serial @('emu', 'avd', 'name')) -split "\r?\n")[0].Trim()
         if ($actualName -cne $AvdName) { throw "Device $Serial is not the expected AVD $AvdName." }
@@ -164,7 +166,7 @@ function Get-InstalledApkSha256([string] $Serial, [string] $Package) {
     $paths = @((Invoke-Adb $Serial @('shell', 'pm', 'path', $Package)) -split "\r?\n" | Where-Object { $_ -match '^package:' })
     if ($paths.Count -ne 1) { throw "Expected one installed base APK for $Package on $Serial." }
     $path = $paths[0].Substring('package:'.Length).Trim()
-    if ($path -notmatch '^/data/app/[A-Za-z0-9_+/=.-]+/base\.apk$') { throw 'Unexpected installed APK path.' }
+    if ($path -notmatch '^/data/app/[A-Za-z0-9_+/=.~-]+/base\.apk$') { throw 'Unexpected installed APK path.' }
     $digest = Invoke-Adb $Serial @('shell', 'sha256sum', $path)
     if ($digest -notmatch '^([0-9a-f]{64})\s+') { throw "Could not hash installed APK for $Package on $Serial." }
     return $Matches[1]
@@ -296,7 +298,7 @@ function Invoke-Instrumentation(
 }
 
 function Add-Gate([string] $Id, [string] $EnvironmentId, [object] $Run, [string] $SelectorOverride = '') {
-    $gates.Add([pscustomobject][ordered]@{
+    $gate = [pscustomobject][ordered]@{
         id = $Id
         environmentId = $EnvironmentId
         status = 'PASS'
@@ -305,7 +307,9 @@ function Add-Gate([string] $Id, [string] $EnvironmentId, [object] $Run, [string]
         startedAt = $Run.startedAt
         completedAt = $Run.completedAt
         logs = $Run.logs
-    })
+    }
+    Assert-DeviceGateRunEvidence -Gate $gate -EvidenceRoot $outputRootPath
+    $gates.Add($gate)
 }
 
 function New-Avd([string] $Name, [string] $Package, [int] $RamMiB) {
