@@ -8,6 +8,8 @@ $script:RequiredGateEnvironment = [ordered]@{
     'api30-export-20x' = @{ Api = 30; Kind = 'AVD' }
     'api30-cancel-retry-temp-cleanup' = @{ Api = 30; Kind = 'AVD' }
     'api30-memory' = @{ Api = 30; Kind = 'AVD' }
+    'api30-core' = @{ Api = 30; Kind = 'AVD' }
+    'api30-recovery-atf' = @{ Api = 30; Kind = 'AVD' }
     'api33-core' = @{ Api = 33; Kind = 'AVD' }
     'api33-recovery-atf' = @{ Api = 33; Kind = 'AVD' }
     'api33-talkback' = @{ Api = 33; Kind = 'AVD' }
@@ -17,6 +19,132 @@ $script:RequiredGateEnvironment = [ordered]@{
     'four-gb-2x-memory' = @{ Api = 30; Kind = 'AVD'; RamMiB = 4096 }
     'endurance-30m' = @{ Api = 36; Kind = 'AVD' }
     'physical-core-save-share' = @{ Kind = 'PHYSICAL' }
+}
+
+$script:SmokeTest = 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest#productionMainActivitySixStepPreviewAndOneTwoXExportsWork'
+$script:SaveShareTest = 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest#productionMainActivitySavesAndSharesExportedBytes'
+$script:RecoveryTests = @(
+    'com.qrzzzz.lyricscard.ui.ArchitectureRestorationTest#editorRouteStepAndSearchDraftSurviveActivityRecreation',
+    'com.qrzzzz.lyricscard.ui.AccessibilityFrameworkTest#coreHomeEditorExportAndSettingsActionsPassAccessibilityTestFramework'
+)
+$script:RendererTests = @(
+    'com.qrzzzz.lyricscard.renderer.RendererUiLifecycleTest#homeDoesNotCreateAWebView',
+    'com.qrzzzz.lyricscard.renderer.RendererUiLifecycleTest#editorDefersCreationUntilStepThreeThenReusesThroughExport'
+)
+$script:QualityTest = 'com.qrzzzz.lyricscard.quality.QualityStressTest#'
+$script:FontTest = 'com.qrzzzz.lyricscard.ui.HomeSettingsProductionTest#compactWideLandscapeAndTwoHundredPercentFontKeepKeyTargetsReachable'
+# The connected API 36 gate covers every production test in this candidate, except
+# TalkBackReleaseTest, whose SDK filter intentionally restricts it to the API 33 gate.
+$script:ConnectedTests = @($script:SmokeTest, $script:SaveShareTest) + $script:RecoveryTests + $script:RendererTests + @(
+    'com.qrzzzz.lyricscard.renderer.RendererControllerLifecycleTest#rendererWebViewReleasesRebindsAndClosesAcrossActivityRecreation',
+    "${script:QualityTest}a_serifOneXThenTwoXProbeUsesTheSameRendererLifecycle",
+    "${script:QualityTest}a_cancelledExportRemovesPartialAndRetryProducesValidPng",
+    "${script:QualityTest}a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope",
+    "${script:QualityTest}b_thirtyMinuteEditingEndurancePreservesAutosaveRendererAndRestorationState",
+    "${script:QualityTest}c_largeCoverImportDownsamplesPreviewsAndExportsOnFourGbDevice",
+    "${script:QualityTest}d_repeatedRotationReattachRemainsBoundedAndRendererReady",
+    'com.qrzzzz.lyricscard.ui.HomeSettingsProductionTest#homeEmptyListAndExistingActionsRemainOperableWithValidatedDialogs',
+    'com.qrzzzz.lyricscard.ui.HomeSettingsProductionTest#thumbnailReplacementCancelsTheOldRequestAndMissingImageUsesFallback',
+    'com.qrzzzz.lyricscard.ui.HomeSettingsProductionTest#settingsRowsAreSingleAccessibleControlsAndKeepThemePreferences',
+    $script:FontTest,
+    'com.qrzzzz.lyricscard.ui.AppShellAccessibilityTest#fourChineseLtrScreensKeepKeyActionsReachableAtOneAndTwoXFontScale',
+    'com.qrzzzz.lyricscard.ui.AppShellAccessibilityTest#landscapeEditorAndExportKeepActionsReachableAfterImeFocus',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#exportReadinessRowsCollapseLabelStateAndDetailIntoSingleTalkBackStop',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#rendererPreviewHidesWebDomAndExposesOneNonSensitiveSummary',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#sixStepsSupportDirectSelectionBackNextAndExactTalkBackProgress',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#chooseSongShowsSearchResultEmptyErrorAndDisabledResolvingStates',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#editorDraftFieldsRejectInvalidLyricsNumbersAndColorsWhileSliderRemainsAccessible',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#rendererErrorIsUnderstandableAssertiveAndRetryable',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#exportControlsExposeOnlyOneAndTwoXAndMatchBusyFailureAndSuccessStates',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#editorAndExportRenderExplicitCompactMediumAndExpandedLayouts',
+    'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#compactBottomSheetKeepsPreviewReserveAndNextAboveImeAtTwoXFontScale'
+)
+$script:RequiredGateTests = @{
+    'api26-core' = @($script:SmokeTest, $script:SaveShareTest)
+    'api26-renderer-webview' = $script:RendererTests
+    'api26-recovery-atf' = $script:RecoveryTests
+    'api30-serif-measure-spec-1x-2x' = @("${script:QualityTest}a_serifOneXThenTwoXProbeUsesTheSameRendererLifecycle")
+    'api30-export-20x' = @("${script:QualityTest}a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope")
+    'api30-cancel-retry-temp-cleanup' = @("${script:QualityTest}a_cancelledExportRemovesPartialAndRetryProducesValidPng")
+    'api30-memory' = @("${script:QualityTest}a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope")
+    'api30-core' = @($script:SmokeTest, $script:SaveShareTest)
+    'api30-recovery-atf' = $script:RecoveryTests
+    'api33-core' = @($script:SmokeTest, $script:SaveShareTest)
+    'api33-recovery-atf' = $script:RecoveryTests
+    'api33-talkback' = @('com.qrzzzz.lyricscard.ui.TalkBackReleaseTest#activeTalkBackNavigatesHomeEditorExportAndSettings')
+    'api33-font-scale-200' = @($script:FontTest)
+    'api36-connected-production' = $script:ConnectedTests
+    'api36-export-20x' = @("${script:QualityTest}a_twentyConsecutiveTwoXExportsReturnToTheWarmedMemoryEnvelope")
+    'four-gb-2x-memory' = @("${script:QualityTest}c_largeCoverImportDownsamplesPreviewsAndExportsOnFourGbDevice")
+    'endurance-30m' = @("${script:QualityTest}b_thirtyMinuteEditingEndurancePreservesAutosaveRendererAndRestorationState")
+    'physical-core-save-share' = @($script:SaveShareTest)
+}
+
+function Assert-InstrumentationResult {
+    param([string] $Text, [string] $GateId)
+
+    # Parse AndroidJUnitRunner's raw status protocol, including ignored (-3) and
+    # assumption-failed (-4) events; neither can satisfy a required method.
+    if ($Text -match '(?m)^(FAILURES!!!|INSTRUMENTATION_FAILED:|INSTRUMENTATION_ABORTED:)') {
+        throw "gate[$GateId] instrumentation reports failure."
+    }
+    $summary = [regex]::Matches($Text, '(?m)^OK \(([0-9]+) tests?\)\s*$')
+    $finish = [regex]::Matches($Text, '(?m)^INSTRUMENTATION_CODE: (-?[0-9]+)\s*$')
+    if ($summary.Count -ne 1 -or [int]$summary[0].Groups[1].Value -le 0 -or
+        $finish.Count -ne 1 -or $finish[0].Groups[1].Value -ne '-1' -or
+        $Text.TrimEnd() -notmatch 'INSTRUMENTATION_CODE: -1$') {
+        throw "gate[$GateId] requires one completed instrumentation run with a positive test count."
+    }
+
+    $status = @{}
+    $started = [Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
+    $finished = [Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
+    $passed = [Collections.Generic.Dictionary[string, bool]]::new([StringComparer]::Ordinal)
+    $total = 0
+    $assumptions = 0
+    foreach ($line in ($Text -split '\r?\n')) {
+        if ($line -match '^INSTRUMENTATION_STATUS: ([A-Za-z0-9_]+)=(.*)$') {
+            $status[$Matches[1]] = $Matches[2]
+        } elseif ($line -match '^INSTRUMENTATION_STATUS_CODE: (-?[0-9]+)\s*$') {
+            $code = [int]$Matches[1]
+            if ($code -in @(-1, -2) -or $code -notin @(1, 0, -3, -4)) {
+                throw "gate[$GateId] instrumentation has a failed or unsupported test status $code."
+            }
+            if ($status['id'] -ne 'AndroidJUnitRunner' -or
+                [string]::IsNullOrWhiteSpace($status['class']) -or [string]::IsNullOrWhiteSpace($status['test']) -or
+                $status['numtests'] -notmatch '^[1-9][0-9]*$' -or $status['current'] -notmatch '^[1-9][0-9]*$') {
+                throw "gate[$GateId] instrumentation status lacks its runner/test identity or counts."
+            }
+            $reportedTotal = [int]$status['numtests']
+            if ($total -eq 0) { $total = $reportedTotal }
+            if ($reportedTotal -ne $total -or [int]$status['current'] -gt $total) {
+                throw "gate[$GateId] instrumentation test counts changed or exceeded the run total."
+            }
+            $key = "$($status['class'])#$($status['test'])"
+            if ($code -eq 1) {
+                if ($started.ContainsKey($key) -or $started.ContainsValue([int]$status['current'])) { throw "gate[$GateId] instrumentation repeats a test or sequence number: '$key'." }
+                $started[$key] = [int]$status['current']
+            } else {
+                if (-not $started.ContainsKey($key) -or $finished.ContainsKey($key) -or
+                    $started[$key] -ne [int]$status['current']) {
+                    throw "gate[$GateId] instrumentation completion has no matching single test start."
+                }
+                $finished[$key] = $code
+                if ($code -eq 0) { $passed[$key] = $true }
+                if ($code -eq -4) { $assumptions++ }
+            }
+            $status = @{}
+        }
+    }
+    if ($passed.Count -eq 0 -or $finished.Count -ne $total -or $started.Count -ne $finished.Count -or
+        [int]$summary[0].Groups[1].Value -ne ($passed.Count + $assumptions)) {
+        throw "gate[$GateId] instrumentation is incomplete, skipped-only, or inconsistent with its result summary."
+    }
+    foreach ($required in $script:RequiredGateTests[$GateId]) {
+        if (-not $passed.ContainsKey($required)) {
+            throw "gate[$GateId] required test '$required' did not finish with INSTRUMENTATION_STATUS_CODE: 0."
+        }
+    }
 }
 
 function Assert-Text {
@@ -135,6 +263,7 @@ function Assert-DeviceGateEvidence {
         throw 'Candidate artifact names do not match the production version/safe test APK contract.'
     }
     if ($productionApk.certificateSha256 -cne $productionAab.certificateSha256) { throw 'Production APK and AAB certificates do not match.' }
+    if ($testApk.certificateSha256 -cne $productionApk.certificateSha256) { throw 'Release-test and production APK certificates do not match.' }
     if ((Get-RequiredProperty $testApk 'package' 'candidate.testApk') -ne "$package.test") { throw 'Test APK package must be the production package plus .test.' }
     if ((Get-RequiredProperty $testApk 'targetPackage' 'candidate.testApk') -ne $package) { throw 'Test APK targetPackage must equal the production package.' }
     $null = Get-RequiredProperty $testApk 'versionName' 'candidate.testApk'
@@ -165,11 +294,24 @@ function Assert-DeviceGateEvidence {
         $kind = [string](Get-RequiredProperty $environment 'kind' "environment[$id]")
         if ($kind -notin @('AVD', 'PHYSICAL')) { throw "environment[$id].kind is invalid." }
         $apiLevel = [int](Get-RequiredProperty $environment 'apiLevel' "environment[$id]")
+        if ($apiLevel -lt 26) { throw "environment[$id].apiLevel is below the supported minimum." }
         Assert-Text (Get-RequiredProperty $environment 'androidVersion' "environment[$id]") "environment[$id].androidVersion"
         Assert-Text (Get-RequiredProperty $environment 'buildFingerprint' "environment[$id]") "environment[$id].buildFingerprint"
         Assert-Text (Get-RequiredProperty $environment 'systemImage' "environment[$id]") "environment[$id].systemImage"
         Assert-Sha256 (Get-RequiredProperty $environment 'deviceIdSha256' "environment[$id]") "environment[$id].deviceIdSha256"
         if ([int](Get-RequiredProperty $environment 'ramMiB' "environment[$id]") -lt 1024) { throw "environment[$id].ramMiB is invalid." }
+        $isEmulator = Get-RequiredProperty $environment 'isEmulator' "environment[$id]"
+        if ($isEmulator -isnot [bool] -or $isEmulator -ne ($kind -eq 'AVD')) {
+            throw "environment[$id].isEmulator does not match its AVD/physical kind."
+        }
+        $actualRam = Get-RequiredProperty $environment 'actualRamMiB' "environment[$id]"
+        if (($actualRam -isnot [int] -and $actualRam -isnot [long]) -or [long]$actualRam -lt 1024) {
+            throw "environment[$id].actualRamMiB must be a measured positive integer of at least 1024 MiB."
+        }
+        if ($kind -eq 'AVD' -and ([long]$actualRam -lt ([long]$environment.ramMiB * 0.70) -or
+            [long]$actualRam -gt ([long]$environment.ramMiB * 1.05))) {
+            throw "environment[$id].actualRamMiB is outside the configured AVD RAM range."
+        }
         if ($kind -eq 'AVD') {
             Assert-Text (Get-RequiredProperty $environment 'avdName' "environment[$id]") "environment[$id].avdName"
             if ($environment.systemImage -notmatch "(^|;)android-$apiLevel(;|$)") { throw "environment[$id].systemImage does not bind API $apiLevel." }
@@ -217,6 +359,7 @@ function Assert-DeviceGateEvidence {
         $gateStarted = Assert-UtcTimestamp (Get-RequiredProperty $gate 'startedAt' "gate[$gateId]") "gate[$gateId].startedAt"
         $gateCompleted = Assert-UtcTimestamp (Get-RequiredProperty $gate 'completedAt' "gate[$gateId]") "gate[$gateId].completedAt"
         if ($gateCompleted -lt $gateStarted) { throw "gate[$gateId].completedAt precedes startedAt." }
+        if ($gateStarted -lt $startedAt -or $gateCompleted -gt $completedAt) { throw "gate[$gateId] timestamps are outside the producer run." }
         $environmentId = [string](Get-RequiredProperty $gate 'environmentId' "gate[$gateId]")
         if (-not $environmentById.ContainsKey($environmentId)) { throw "gate[$gateId] references unknown environment '$environmentId'." }
         $expected = $script:RequiredGateEnvironment[$gateId]
@@ -231,10 +374,10 @@ function Assert-DeviceGateEvidence {
         }
 
         $logs = @(Get-RequiredProperty $gate 'logs' "gate[$gateId]")
-        if ($logs.Count -lt 2) { throw "gate[$gateId] requires instrumentation/manual and logcat evidence." }
+        if ($logs.Count -lt 2) { throw "gate[$gateId] requires instrumentation and logcat evidence." }
         $logKinds = @($logs | ForEach-Object { [string](Get-RequiredProperty $_ 'kind' "gate[$gateId].log") })
-        if ('logcat' -notin $logKinds -or @(@('instrumentation', 'manual') | Where-Object { $_ -in $logKinds }).Count -eq 0) {
-            throw "gate[$gateId] is missing instrumentation/manual or logcat evidence."
+        if ('logcat' -notin $logKinds -or @($logs | Where-Object { $_.kind -eq 'instrumentation' }).Count -ne 1) {
+            throw "gate[$gateId] requires exactly one instrumentation result plus logcat evidence."
         }
         foreach ($log in $logs) {
             $relativePath = [string](Get-RequiredProperty $log 'path' "gate[$gateId].log")
@@ -245,24 +388,32 @@ function Assert-DeviceGateEvidence {
             $actualHash = (Get-FileHash -LiteralPath $logPath -Algorithm SHA256).Hash.ToLowerInvariant()
             if ($actualHash -cne $expectedHash) { throw "gate[$gateId] log SHA-256 mismatch: $relativePath" }
         }
+        $instrumentationLog = @($logs | Where-Object { $_.kind -eq 'instrumentation' })[0]
+        Assert-InstrumentationResult -Text ([IO.File]::ReadAllText((Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $instrumentationLog.path))) -GateId $gateId
         $logcatText = (@($logs | Where-Object { $_.kind -eq 'logcat' }) | ForEach-Object {
             [IO.File]::ReadAllText((Resolve-EvidenceLogPath -EvidenceRoot $EvidenceRoot -RelativePath $_.path))
         }) -join "`n"
+        if ($gateId -eq 'api30-cancel-retry-temp-cleanup' -and
+            ($gate.testSelector -cne "${script:QualityTest}a_cancelledExportRemovesPartialAndRetryProducesValidPng" -or
+             $logcatText -notmatch '(?m)cancel-retry-cleanup cancellationObserved=true partialCreated=true partialsAfterCancel=0 retryPngValid=true generationAdvanced=true\s*$')) {
+            throw 'Cancellation gate requires a real cancelled partial export, cleanup and successful renderer retry; UI state alone is insufficient.'
+        }
         if ($gateId -eq 'api33-talkback') {
             if ($gate.testSelector -cne 'com.qrzzzz.lyricscard.ui.TalkBackReleaseTest' -or
                 $logcatText -notmatch 'talkback-service-active package=com\.google\.android\.marvin\.talkback version=\S+ touchExploration=true' -or
-                $logcatText -notmatch 'talkback-core-complete stages=home,editor,export,settings input=swipe-double-tap') {
+                $logcatText -notmatch '(?m)talkback-core-complete stages=home,editor,export,settings input=kernel-console-swipe-double-tap\s*$') {
                 throw 'TalkBack gate requires the real active service and completed gesture navigation; ATF alone is insufficient.'
             }
         }
         if ($gateId -eq 'physical-core-save-share' -and
             ($gate.testSelector -cne 'com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest#productionMainActivitySavesAndSharesExportedBytes' -or
-             $logcatText -notmatch 'platform-export savedSha256=([0-9a-f]{64}) shareSha256=\1 chooserVisible=true sent=false')) {
+             $logcatText -notmatch '(?m)platform-export savedSha256=([0-9a-f]{64}) shareSha256=\1 chooserVisible=true sent=false\s*$')) {
             throw 'Physical gate requires saved/shared byte equality and a real share chooser, not export-route readiness.'
         }
         if ($gateId -eq 'endurance-30m') {
             $duration = [regex]::Match($logcatText, 'edit-summary durationMs=(\d+)')
-            if (-not $duration.Success -or [long]$duration.Groups[1].Value -lt 1800000) {
+            if (-not $duration.Success -or [long]$duration.Groups[1].Value -lt 1800000 -or
+                ($gateCompleted - $gateStarted).TotalSeconds -lt 1800) {
                 throw 'Endurance gate requires an actual completed thirty-minute edit summary.'
             }
         }
@@ -288,6 +439,9 @@ function Assert-TestApkInspection {
     $instrumentationMatch = [regex]::Match($ManifestXmlTree, '(?ms)E: instrumentation.*?:name\([^)]*\)="([^"]+)".*?:targetPackage\([^)]*\)="([^"]+)"')
     if (-not $packageMatch.Success -or -not $instrumentationMatch.Success) {
         throw 'Could not read package/version/instrumentation target from the test APK.'
+    }
+    if ($instrumentationMatch.Groups[1].Value -cne 'com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner') {
+        throw 'Test APK must use the credential-safe release evidence runner.'
     }
     $testApk = $Evidence.candidate.testApk
     $inspectedVersionCode = if ([string]::IsNullOrEmpty($packageMatch.Groups[2].Value)) { 0 } else { [int]$packageMatch.Groups[2].Value }

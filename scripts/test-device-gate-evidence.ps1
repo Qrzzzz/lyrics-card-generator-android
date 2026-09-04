@@ -70,6 +70,33 @@ function Assert-Rejected {
     }
 }
 
+function Assert-RejectedLog {
+    param([string] $Name, [scriptblock] $Mutate, [string] $MessagePattern, [string] $Kind = 'instrumentation')
+
+    $case = Copy-Evidence (Read-Fixture)
+    $relativePath = @($case.gates[0].logs | Where-Object { $_.kind -eq $Kind })[0].path
+    $path = Join-Path $fixtureRoot $relativePath
+    $originalBytes = [IO.File]::ReadAllBytes($path)
+    try {
+        $changed = & $Mutate ([IO.File]::ReadAllText($path))
+        [IO.File]::WriteAllText($path, $changed, [Text.UTF8Encoding]::new($false))
+        $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+        foreach ($gate in $case.gates) {
+            foreach ($log in $gate.logs) {
+                if ($log.path -eq $relativePath) { $log.sha256 = $hash }
+            }
+        }
+        try {
+            $null = Invoke-EvidencePolicy -Evidence $case -AllowFixture
+            throw "Hash-consistent negative log '$Name' was accepted."
+        } catch {
+            if ($_.Exception.Message -like 'Hash-consistent negative log*' -or $_.Exception.Message -notmatch $MessagePattern) { throw }
+        }
+    } finally {
+        [IO.File]::WriteAllBytes($path, $originalBytes)
+    }
+}
+
 $schemaPath = Join-Path $repositoryRoot 'config\device-gate-evidence.schema.json'
 $schema = Get-Content -LiteralPath $schemaPath -Raw | ConvertFrom-Json
 if ($schema.title -ne 'Lyrics Card Generator Android final device gate evidence') { throw 'Device-gate JSON schema is malformed.' }
@@ -80,7 +107,7 @@ if ($testJsonCommand -and $testJsonCommand.Parameters.ContainsKey('SchemaFile'))
 }
 
 $positive = Invoke-EvidencePolicy -Evidence (Read-Fixture) -AllowFixture
-if (@($positive.gates).Count -ne 16 -or @($positive.environments).Count -ne 5) {
+if (@($positive.gates).Count -ne 18 -or @($positive.environments).Count -ne 5) {
     throw 'The positive fixture did not preserve the complete matrix.'
 }
 $null = Assert-DeviceGateArtifactBinding `
@@ -95,12 +122,12 @@ package: name='com.qrzzzz.lyricscard.test' versionCode='20000' versionName='2.0.
 $fixtureManifestXmlTree = @"
 E: manifest
   E: instrumentation
-    A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.test.runner.AndroidJUnitRunner"
+    A: http://schemas.android.com/apk/res/android:name(0x01010003)="com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner"
     A: http://schemas.android.com/apk/res/android:targetPackage(0x01010021)="com.qrzzzz.lyricscard"
     A: http://schemas.android.com/apk/res/android:functionalTest(0x01010023)=false
   E: application
 "@
-$fixtureCertificate = 'Signer #1 certificate SHA-256 digest: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+$fixtureCertificate = 'Signer #1 certificate SHA-256 digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 Assert-TestApkInspection -Evidence $positive -Badging $fixtureBadging -ManifestXmlTree $fixtureManifestXmlTree -CertificateOutput $fixtureCertificate
 
 try {
@@ -121,7 +148,15 @@ Assert-Rejected -Name 'wrong-test-apk-package' -Mutate { param($e) $e.candidate.
 Assert-Rejected -Name 'wrong-test-apk-target' -Mutate { param($e) $e.candidate.testApk.targetPackage = 'com.example' } -MessagePattern 'targetPackage'
 Assert-Rejected -Name 'missing-webview-version' -Mutate { param($e) $e.environments[1].webView.version = '' } -MessagePattern 'webView.version is required'
 Assert-Rejected -Name 'missing-build-fingerprint' -Mutate { param($e) $e.environments[1].buildFingerprint = '' } -MessagePattern 'buildFingerprint is required'
+Assert-Rejected -Name 'emulator-as-physical' -Mutate { param($e) $e.environments[4].isEmulator = $true } -MessagePattern 'isEmulator does not match'
+Assert-Rejected -Name 'physical-as-avd' -Mutate { param($e) $e.environments[1].isEmulator = $false } -MessagePattern 'isEmulator does not match'
+Assert-Rejected -Name 'non-boolean-emulator-identity' -Mutate { param($e) $e.environments[4].isEmulator = 'false' } -MessagePattern 'isEmulator does not match'
+Assert-Rejected -Name 'missing-measured-ram' -Mutate { param($e) $e.environments[1].PSObject.Properties.Remove('actualRamMiB') } -MessagePattern 'actualRamMiB is required'
+Assert-Rejected -Name 'invalid-measured-ram' -Mutate { param($e) $e.environments[1].actualRamMiB = 0 } -MessagePattern 'actualRamMiB must be'
+Assert-Rejected -Name 'inflated-measured-ram' -Mutate { param($e) $e.environments[1].actualRamMiB = 8192 } -MessagePattern 'actualRamMiB is outside'
+Assert-Rejected -Name 'too-small-measured-ram' -Mutate { param($e) $e.environments[1].actualRamMiB = 1024 } -MessagePattern 'actualRamMiB is outside'
 Assert-Rejected -Name 'atf-is-not-talkback' -Mutate { param($e) ($e.gates | Where-Object id -eq 'api33-talkback').testSelector = 'AccessibilityFrameworkTest' } -MessagePattern 'ATF alone is insufficient'
+Assert-Rejected -Name 'mock-ui-is-not-cancel-retry' -Mutate { param($e) ($e.gates | Where-Object id -eq 'api30-cancel-retry-temp-cleanup').testSelector = 'com.qrzzzz.lyricscard.ui.EditorExportProductionTest#exportControlsExposeOnlyOneAndTwoXAndMatchBusyFailureAndSuccessStates' } -MessagePattern 'UI state alone is insufficient'
 Assert-Rejected -Name 'export-route-is-not-save-share' -Mutate { param($e) ($e.gates | Where-Object id -eq 'physical-core-save-share').testSelector = 'AvdMatrixSmokeTest export route only' } -MessagePattern 'not export-route readiness'
 Assert-Rejected -Name 'wrong-system-image-api' -Mutate { param($e) $e.environments[1].systemImage = 'system-images;android-29;google_apis;x86_64' } -MessagePattern 'does not bind API 30'
 Assert-Rejected -Name 'missing-api36-environment' -Mutate { param($e) $e.environments[3].apiLevel = 35; $e.environments[3].systemImage = 'system-images;android-35;google_apis;x86_64' } -MessagePattern 'Exactly one AVD environment is required for API 36'
@@ -130,12 +165,51 @@ Assert-Rejected -Name 'not-run-gate' -Mutate { param($e) $e.gates[3].status = 'N
 Assert-Rejected -Name 'blocked-gate' -Mutate { param($e) $e.gates[4].status = 'BLOCKED' } -MessagePattern 'is not PASS'
 Assert-Rejected -Name 'retry-laundering' -Mutate { param($e) $e.gates[3].attempts = 2 } -MessagePattern 'exactly one attempt'
 Assert-Rejected -Name 'missing-required-gate' -Mutate { param($e) $e.gates = @($e.gates | Where-Object { $_.id -ne 'api30-serif-measure-spec-1x-2x' }) } -MessagePattern 'Required gate.*missing'
+Assert-Rejected -Name 'missing-api30-core' -Mutate { param($e) $e.gates = @($e.gates | Where-Object { $_.id -ne 'api30-core' }) } -MessagePattern 'Required gate.*missing'
+Assert-Rejected -Name 'missing-api30-recovery-atf' -Mutate { param($e) $e.gates = @($e.gates | Where-Object { $_.id -ne 'api30-recovery-atf' }) } -MessagePattern 'Required gate.*missing'
 Assert-Rejected -Name 'wrong-gate-environment' -Mutate { param($e) $e.gates[3].environmentId = 'api33' } -MessagePattern 'wrong environment'
 Assert-Rejected -Name 'missing-log-file' -Mutate { param($e) $e.gates[3].logs[0].path = 'logs/missing.log' } -MessagePattern 'log is missing'
 Assert-Rejected -Name 'wrong-log-sha' -Mutate { param($e) $e.gates[3].logs[0].sha256 = '2222222222222222222222222222222222222222222222222222222222222222' } -MessagePattern 'log SHA-256 mismatch'
-Assert-Rejected -Name 'missing-log-kind' -Mutate { param($e) $e.gates[3].logs = @($e.gates[3].logs | Where-Object { $_.kind -ne 'logcat' }) } -MessagePattern 'requires instrumentation/manual and logcat'
+Assert-Rejected -Name 'missing-log-kind' -Mutate { param($e) $e.gates[3].logs = @($e.gates[3].logs | Where-Object { $_.kind -ne 'logcat' }) } -MessagePattern 'requires instrumentation and logcat'
+Assert-Rejected -Name 'manual-is-not-instrumentation' -Mutate { param($e) $e.gates[0].logs[0].kind = 'manual' } -MessagePattern 'exactly one instrumentation result'
+Assert-Rejected -Name 'endurance-marker-with-short-run' -Mutate { param($e) ($e.gates | Where-Object id -eq 'endurance-30m').completedAt = '2026-08-24T00:15:00Z' } -MessagePattern 'actual completed thirty-minute'
+Assert-Rejected -Name 'gate-outside-producer-run' -Mutate { param($e) $e.gates[0].startedAt = '2026-08-23T23:59:00Z' } -MessagePattern 'timestamps are outside'
+Assert-Rejected -Name 'test-certificate-is-not-production' -Mutate { param($e) $e.candidate.testApk.certificateSha256 = ('b' * 64) } -MessagePattern 'Release-test and production APK certificates do not match'
 Assert-Rejected -Name 'wrong-device-apk-sha' -Mutate { param($e) $e.environments[1].installedArtifacts.productionApkSha256 = '2222222222222222222222222222222222222222222222222222222222222222' } -MessagePattern 'installed APK hashes do not match'
 Assert-Rejected -Name 'wrong-test-certificate' -Mutate { param($e) $e.environments[1].installedArtifacts.testCertificateSha256 = '2222222222222222222222222222222222222222222222222222222222222222' } -MessagePattern 'test certificate does not match'
+
+# Preserve READY/PASS and recompute every log hash: content failures must not be
+# accepted merely because the JSON labels and byte digests are self-consistent.
+Assert-RejectedLog -Name 'failure-with-positive-ok-summary' -Mutate { param($text) $text.Replace('INSTRUMENTATION_STATUS_CODE: 0', 'INSTRUMENTATION_STATUS_CODE: -2') } -MessagePattern 'failed or unsupported test status'
+Assert-RejectedLog -Name 'instrumentation-failed' -Mutate { param($text) "INSTRUMENTATION_FAILED: Process crashed`n$text" } -MessagePattern 'instrumentation reports failure'
+Assert-RejectedLog -Name 'zero-tests' -Mutate { param($text) "OK (0 tests)`nINSTRUMENTATION_CODE: -1`n" } -MessagePattern 'positive test count'
+Assert-RejectedLog -Name 'skipped-only' -Mutate { param($text) $text.Replace('INSTRUMENTATION_STATUS_CODE: 0', 'INSTRUMENTATION_STATUS_CODE: -3') } -MessagePattern 'skipped-only'
+Assert-RejectedLog -Name 'assumptions-only' -Mutate { param($text) $text.Replace('INSTRUMENTATION_STATUS_CODE: 0', 'INSTRUMENTATION_STATUS_CODE: -4') } -MessagePattern 'skipped-only'
+Assert-RejectedLog -Name 'summary-without-test-events' -Mutate { param($text) "OK (1 test)`nINSTRUMENTATION_CODE: -1`n" } -MessagePattern 'incomplete, skipped-only'
+Assert-RejectedLog -Name 'started-without-completion' -Mutate { param($text) $text.Replace('INSTRUMENTATION_STATUS_CODE: 0', 'INSTRUMENTATION_STATUS_CODE: 1') } -MessagePattern 'repeats a test'
+Assert-RejectedLog -Name 'wrong-successful-method' -Mutate { param($text) $text.Replace('productionMainActivitySixStepPreviewAndOneTwoXExportsWork', 'differentSuccessfulTest') } -MessagePattern 'required test.*did not finish with INSTRUMENTATION_STATUS_CODE: 0'
+Assert-RejectedLog -Name 'runner-did-not-complete' -Mutate { param($text) $text.Replace('INSTRUMENTATION_CODE: -1', 'INSTRUMENTATION_CODE: 0') } -MessagePattern 'positive test count'
+Assert-RejectedLog -Name 'old-injected-talkback-marker' -Kind 'logcat' -Mutate { param($text) $text.Replace('input=kernel-console-swipe-double-tap', 'input=swipe-double-tap') } -MessagePattern 'real active service and completed gesture'
+Assert-RejectedLog -Name 'no-real-cancellation' -Kind 'logcat' -Mutate { param($text) $text.Replace('cancellationObserved=true', 'cancellationObserved=false') } -MessagePattern 'real cancelled partial export'
+
+# AndroidJUnitRunner emits -3 for ignored tests and -4 for assumption failures.
+# A non-required API 33 test may be skipped by the full API 36 run, but a required
+# gate method must still have its own successful terminal event.
+$protocolFixture = [IO.File]::ReadAllText((Join-Path $fixtureRoot 'logs/instrumentation.log'))
+$talkbackTerminal = [regex]::new('(?m)(INSTRUMENTATION_STATUS: class=com\.qrzzzz\.lyricscard\.ui\.TalkBackReleaseTest\r?\n(?:INSTRUMENTATION_STATUS: [^\r\n]*\r?\n)*INSTRUMENTATION_STATUS_CODE: )0\r?$')
+if ($talkbackTerminal.Matches($protocolFixture).Count -ne 1) { throw 'The protocol fixture must have one TalkBack completion.' }
+$fixtureRunCount = [int][regex]::Match($protocolFixture, '(?m)^OK \(([0-9]+) tests\)').Groups[1].Value
+$ignoredTalkback = $talkbackTerminal.Replace($protocolFixture, '${1}-3').Replace("OK ($fixtureRunCount tests)", "OK ($($fixtureRunCount - 1) tests)")
+$assumedTalkback = $talkbackTerminal.Replace($protocolFixture, '${1}-4')
+foreach ($text in @($ignoredTalkback, $assumedTalkback)) {
+    & (Get-Module DeviceGateEvidence) { param($log) Assert-InstrumentationResult -Text $log -GateId 'api36-connected-production' } $text
+    try {
+        & (Get-Module DeviceGateEvidence) { param($log) Assert-InstrumentationResult -Text $log -GateId 'api33-talkback' } $text
+        throw 'A skipped required TalkBack method was accepted.'
+    } catch {
+        if ($_.Exception.Message -notmatch 'required test.*did not finish with INSTRUMENTATION_STATUS_CODE: 0') { throw }
+    }
+}
 
 try {
     $null = Assert-DeviceGateArtifactBinding `
@@ -154,6 +228,7 @@ foreach ($inspectionCase in @(
     @{ Name = 'inspected-test-package'; Badging = $fixtureBadging.Replace('com.qrzzzz.lyricscard.test', 'com.example.test'); Manifest = $fixtureManifestXmlTree; Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
     @{ Name = 'inspected-test-version'; Badging = $fixtureBadging.Replace("versionCode='20000'", "versionCode='1'"); Manifest = $fixtureManifestXmlTree; Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
     @{ Name = 'inspected-test-target'; Badging = $fixtureBadging; Manifest = $fixtureManifestXmlTree.Replace('com.qrzzzz.lyricscard"', 'com.example"'); Certificate = $fixtureCertificate; Pattern = 'package/version/targetPackage' },
+    @{ Name = 'inspected-test-unsafe-runner'; Badging = $fixtureBadging; Manifest = $fixtureManifestXmlTree.Replace('com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner', 'androidx.test.runner.AndroidJUnitRunner'); Certificate = $fixtureCertificate; Pattern = 'credential-safe release evidence runner' },
     @{ Name = 'inspected-test-certificate'; Badging = $fixtureBadging; Manifest = $fixtureManifestXmlTree; Certificate = 'Signer #1 certificate SHA-256 digest: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'; Pattern = 'certificate does not match' }
 )) {
     try {
@@ -212,6 +287,69 @@ if (Test-Path -LiteralPath $realEvidencePath) {
 
 $releaseWorkflow = [IO.File]::ReadAllText((Join-Path $repositoryRoot '.github\workflows\release.yml'))
 $finalWorkflow = [IO.File]::ReadAllText((Join-Path $repositoryRoot '.github\workflows\final-device-gate.yml'))
+
+function Assert-FinalConsumerRejectsUnattestedTestApk {
+    $step = [regex]::Match($finalWorkflow, '(?ms)^      - name: Verify candidate provenance and final device evidence\r?\n(?<step>.*?)(?=^      - name: |\z)').Groups['step'].Value
+    $code = [regex]::Match($step, '(?ms)^        run: \|\r?\n(?<code>.*)\z').Groups['code'].Value
+    if (-not $code) { throw 'The final consumer must have an executable provenance/evidence verification step.' }
+    $candidateDir = Join-Path $fixtureRoot 'final-gate-input/candidate'
+    $evidenceDir = Join-Path $fixtureRoot 'final-gate-input/evidence'
+    $null = New-Item -ItemType Directory -Path $candidateDir, $evidenceDir -Force
+    Copy-Item -LiteralPath $fixtureMetadataPath, $fixtureApkPath, $fixtureAabPath -Destination $candidateDir
+    Copy-Item -LiteralPath $fixtureEvidencePath, $fixtureTestApkPath -Destination $evidenceDir
+    $values = @{
+        SOURCE_COMMIT = $expectedCommit
+        CANDIDATE_RUN_ID = '1001'
+        CANDIDATE_RUN_ATTEMPT = '1'
+        CANDIDATE_ARTIFACT_NAME = 'production-candidate-2.0.0-111111111111'
+        REPOSITORY = $expectedRepository
+        ANDROID_HOME = (Join-Path $fixtureRoot 'sdk-not-invoked')
+    }
+    $saved = @{}
+    $verifiedNames = [Collections.Generic.List[string]]::new()
+    $originalDirectory = [Environment]::CurrentDirectory
+    $nativeExitCode = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+    $originalExitCode = if ($nativeExitCode) { $nativeExitCode.Value } else { 0 }
+    function gh {
+        if ($args[0] -ne 'attestation' -or $args[1] -ne 'verify' -or
+            $args -notcontains '--source-digest' -or $args -notcontains $expectedCommit -or
+            $args -notcontains '--signer-workflow' -or $args -notcontains "$expectedRepository/.github/workflows/release.yml") {
+            throw 'Unexpected command or missing source/workflow constraints in the final consumer.'
+        }
+        $name = [IO.Path]::GetFileName($args[2])
+        $verifiedNames.Add($name)
+        # Simulate public candidate assets having valid attestations while the
+        # self-hosted evidence contains a substituted, unattested test APK.
+        $global:LASTEXITCODE = if ($name -eq 'app-production-release-androidTest.apk') { 1 } else { 0 }
+    }
+    try {
+        foreach ($key in $values.Keys) {
+            $saved[$key] = [Environment]::GetEnvironmentVariable($key, 'Process')
+            [Environment]::SetEnvironmentVariable($key, $values[$key], 'Process')
+        }
+        Push-Location $fixtureRoot
+        [Environment]::CurrentDirectory = $fixtureRoot
+        try {
+            try {
+                & ([scriptblock]::Create(($code -replace '(?m)^          ', '')))
+                throw 'The final consumer accepted an unattested test APK.'
+            } catch {
+                if ($_.Exception.Message -notmatch 'Candidate/test attestation failed: app-production-release-androidTest.apk') { throw }
+            }
+            if ($verifiedNames.Count -ne 4 -or $verifiedNames[$verifiedNames.Count - 1] -ne 'app-production-release-androidTest.apk' -or
+                (Test-Path -LiteralPath 'final-gate-result/final-device-gate-verdict.json')) {
+                throw 'The final consumer did not reject the test APK before producing a final verdict.'
+            }
+        } finally {
+            [Environment]::CurrentDirectory = $originalDirectory
+            Pop-Location
+        }
+    } finally {
+        foreach ($key in $saved.Keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key], 'Process') }
+        $global:LASTEXITCODE = $originalExitCode
+    }
+}
+Assert-FinalConsumerRejectsUnattestedTestApk
 $checklist = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'RELEASE_CHECKLIST.md'))
 foreach ($literal in @("status = 'PROVISIONAL'", "deviceGate = 'NOT RUN'", 'finalReady = $false', '.github/workflows/final-device-gate.yml')) {
     if ($releaseWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Release candidate metadata is missing fail-closed readiness literal: $literal" }
@@ -230,8 +368,11 @@ if (-not (Test-Path -LiteralPath $captureWorkflowPath -PathType Leaf)) {
     throw 'The authorized device capture producer is missing.'
 }
 $captureWorkflow = [IO.File]::ReadAllText($captureWorkflowPath)
-foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'timeout-minutes: 150', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'production-device-test-*', 'actions/download-artifact@', 'gh attestation verify', 'actions/upload-artifact@')) {
+foreach ($literal in @('runs-on: [self-hosted, Windows, X64, lcg-device-gate]', 'timeout-minutes: 150', 'environment: final-device-gate', 'capture-device-gate-evidence.ps1', 'name: ${{ steps.input-policy.outputs.test_artifact_name }}', 'actions/download-artifact@', 'gh attestation verify', 'actions/upload-artifact@')) {
     if ($captureWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Capture workflow is missing controlled producer binding: $literal" }
+}
+if ($captureWorkflow -match '(?m)^\s+pattern:\s*production-device-test-') {
+    throw 'The capture producer must download the exact candidate test artifact, not a wildcard match.'
 }
 if ($captureWorkflow -match '\$\{\{\s*secrets\.' -or $captureWorkflow -match '(?m)^\s+(id-token|attestations):\s*write\s*$') {
     throw 'The capture producer must not read GitHub signing secrets or write attestations.'
@@ -306,6 +447,12 @@ for ($lineIndex = 0; $lineIndex -lt $workflowLines.Count; $lineIndex++) {
     if ($errors.Count -ne 0) { throw "PowerShell run block parse failed near workflow line $($lineIndex + 1): $($errors[0].Message)" }
 }
 
-Write-Output 'Device-gate evidence contract PASS (1 fixture-only positive, negative/fail-closed cases, artifact/log/API/workflow/checklist binding).'
-[IO.Directory]::Delete($fixtureRoot, $true)
+Write-Output 'Device-gate evidence contract PASS (fixture-only matrix, raw instrumentation success/skip/failure cases, measured environment fields, and executable final-consumer test provenance rejection).'
+$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+$resolvedFixtureRoot = [IO.Path]::GetFullPath($fixtureRoot)
+if (-not $resolvedFixtureRoot.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or
+    [IO.Path]::GetFileName($resolvedFixtureRoot) -notlike 'lyrics-card-device-gate-fixture-*') {
+    throw 'Refusing to remove a contract fixture outside its temporary directory.'
+}
+[IO.Directory]::Delete($resolvedFixtureRoot, $true)
 exit 0

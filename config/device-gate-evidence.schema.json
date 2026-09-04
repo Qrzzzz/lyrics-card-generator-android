@@ -104,8 +104,8 @@
     },
     "gates": {
       "type": "array",
-      "minItems": 16,
-      "maxItems": 16,
+      "minItems": 18,
+      "maxItems": 18,
       "items": { "$ref": "#/definitions/gate" }
     }
   },
@@ -139,6 +139,8 @@
         "systemImage",
         "deviceIdSha256",
         "ramMiB",
+        "actualRamMiB",
+        "isEmulator",
         "webView",
         "installedArtifacts"
       ],
@@ -151,6 +153,8 @@
         "systemImage": { "type": "string", "minLength": 1 },
         "deviceIdSha256": { "$ref": "#/definitions/sha256" },
         "ramMiB": { "type": "integer", "minimum": 1024 },
+        "actualRamMiB": { "type": "integer", "minimum": 1024 },
+        "isEmulator": { "type": "boolean" },
         "avdName": { "type": "string", "minLength": 1 },
         "manufacturer": { "type": "string", "minLength": 1 },
         "model": { "type": "string", "minLength": 1 },
@@ -196,6 +200,8 @@
             "api30-export-20x",
             "api30-cancel-retry-temp-cleanup",
             "api30-memory",
+            "api30-core",
+            "api30-recovery-atf",
             "api33-core",
             "api33-recovery-atf",
             "api33-talkback",

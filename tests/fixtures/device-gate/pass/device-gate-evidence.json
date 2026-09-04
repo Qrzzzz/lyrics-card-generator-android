@@ -31,7 +31,7 @@
       "name": "app-production-release-androidTest.apk",
       "bytes": 45,
       "sha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
-      "certificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "package": "com.qrzzzz.lyricscard.test",
       "targetPackage": "com.qrzzzz.lyricscard",
       "versionName": "2.0.0",
@@ -72,9 +72,11 @@
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        "testCertificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
-      "buildFingerprint": "fixture/api26/build"
+      "buildFingerprint": "fixture/api26/build",
+      "isEmulator": true,
+      "actualRamMiB": 3840
     },
     {
       "id": "api30",
@@ -97,9 +99,11 @@
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        "testCertificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
-      "buildFingerprint": "fixture/api30/build"
+      "buildFingerprint": "fixture/api30/build",
+      "isEmulator": true,
+      "actualRamMiB": 3840
     },
     {
       "id": "api33",
@@ -122,9 +126,11 @@
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        "testCertificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
-      "buildFingerprint": "fixture/api33/build"
+      "buildFingerprint": "fixture/api33/build",
+      "isEmulator": true,
+      "actualRamMiB": 3840
     },
     {
       "id": "api36",
@@ -147,9 +153,11 @@
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        "testCertificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
-      "buildFingerprint": "fixture/api36/build"
+      "buildFingerprint": "fixture/api36/build",
+      "isEmulator": true,
+      "actualRamMiB": 3840
     },
     {
       "id": "physical",
@@ -175,9 +183,11 @@
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
         "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "testCertificateSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        "testCertificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
-      "buildFingerprint": "fixture/physical/build"
+      "buildFingerprint": "fixture/physical/build",
+      "isEmulator": false,
+      "actualRamMiB": 8192
     }
   ],
   "gates": [
@@ -193,12 +203,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -214,12 +224,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -235,12 +245,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -256,12 +266,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -277,12 +287,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -291,19 +301,19 @@
       "environmentId": "api30",
       "status": "PASS",
       "attempts": 1,
-      "testSelector": "RendererControllerLifecycleTest",
+      "testSelector": "com.qrzzzz.lyricscard.quality.QualityStressTest#a_cancelledExportRemovesPartialAndRetryProducesValidPng",
       "startedAt": "2026-08-24T00:05:00Z",
       "completedAt": "2026-08-24T00:06:00Z",
       "logs": [
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -317,14 +327,56 @@
       "completedAt": "2026-08-24T00:07:00Z",
       "logs": [
         {
-          "kind": "manual",
+          "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
+        }
+      ]
+    },
+    {
+      "id": "api30-core",
+      "environmentId": "api30",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "com.qrzzzz.lyricscard.ui.AvdMatrixSmokeTest",
+      "startedAt": "2026-08-24T00:07:00Z",
+      "completedAt": "2026-08-24T00:08:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
+        }
+      ]
+    },
+    {
+      "id": "api30-recovery-atf",
+      "environmentId": "api30",
+      "status": "PASS",
+      "attempts": 1,
+      "testSelector": "com.qrzzzz.lyricscard.ui.ArchitectureRestorationTest,com.qrzzzz.lyricscard.ui.AccessibilityFrameworkTest",
+      "startedAt": "2026-08-24T00:08:00Z",
+      "completedAt": "2026-08-24T00:09:00Z",
+      "logs": [
+        {
+          "kind": "instrumentation",
+          "path": "logs/instrumentation.log",
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
+        },
+        {
+          "kind": "logcat",
+          "path": "logs/logcat.txt",
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -340,12 +392,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -361,12 +413,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -380,14 +432,14 @@
       "completedAt": "2026-08-24T00:10:00Z",
       "logs": [
         {
-          "kind": "manual",
+          "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -401,14 +453,14 @@
       "completedAt": "2026-08-24T00:11:00Z",
       "logs": [
         {
-          "kind": "manual",
+          "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -424,12 +476,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -445,12 +497,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -466,12 +518,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -487,12 +539,12 @@
         {
           "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     },
@@ -506,14 +558,14 @@
       "completedAt": "2026-08-24T00:45:00Z",
       "logs": [
         {
-          "kind": "manual",
+          "kind": "instrumentation",
           "path": "logs/instrumentation.log",
-          "sha256": "a4e47d200d70d10ef6fadaed55301c659e658752ba0192dc1879a8d4d0433e98"
+          "sha256": "e2dbbfc8d8ca72fe11b652032e373b5439cd1e847678d5c8f3285df740a8d6a1"
         },
         {
           "kind": "logcat",
           "path": "logs/logcat.txt",
-          "sha256": "42645ce830bc46025dc62c1a2b10a7f19a5f6b320b7f2423ebc2f3b196851973"
+          "sha256": "1f08d65fed760cdd6e50f32108db4b4120ed1f5051c5277f02aaeb156d0d1fbe"
         }
       ]
     }
