@@ -12,9 +12,9 @@ This document separates repository-controlled dependency checks from GitHub repo
 
 The Gradle version catalog pins direct versions, but this repository does not currently commit Gradle dependency lock files or dependency-verification metadata. Dependency submission records the resolved graph; it does not turn the catalog into a transitive lock or prove artifact integrity.
 
-## GitHub settings required after merge
+## GitHub activation and baseline
 
-An administrator must still enable the Dependency Graph, Dependabot alerts, and Dependabot security updates in the repository's code-security settings. The Actions policy must also allow the `submit-gradle-dependencies` job's narrowly scoped `GITHUB_TOKEN` to write dependency snapshots. These are repository settings and are not enabled by this commit.
+Dependency Graph, Dependabot alerts, and Dependabot security updates must be enabled in the repository's code-security settings. The Actions policy must also allow the `submit-gradle-dependencies` job's narrowly scoped `GITHUB_TOKEN` to write dependency snapshots. These settings are separate from the committed configuration.
 
 Dependency Review fails while Dependency Graph is disabled. An administrator must therefore complete the settings steps below **before this branch is pushed and before a pull request is opened**; merging the files first is not an activation path.
 
@@ -27,7 +27,11 @@ Activation order:
 5. Confirm the Dependabot alerts API is readable and record the initial open high/critical baseline. Zero is acceptable; every existing high/critical alert must otherwise have a remediation issue with an owner and deadline.
 6. On a dependency-changing pull request, confirm Dependency Review plus the existing Renderer/JVM/lint/R8/APK/AAB quality gates run on the same candidate.
 
-At the implementation check on 2026-08-24 (Asia/Shanghai), the alerts API returned `403 Dependabot alerts are disabled for this repository`, automated security fixes reported `enabled: false`, and the dependency-graph SBOM endpoint returned `404`. Therefore this commit must not be described as having enabled alerts or security updates.
+The initial implementation check on 2026-08-24 preceded activation and returned disabled/404 responses. A new API check on **2026-09-04** confirmed that alerts and the SBOM are readable, and automated security fixes report `enabled: true` and `paused: false`. The [default-branch submission run](https://github.com/Qrzzzz/lyrics-card-generator-android/actions/runs/32768030346) succeeded on `bdd93a074ba577e9f2de230515052eb69c7e13d2`; the queried SBOM contains 474 Maven and 167 npm packages. Dependabot also opened update PRs in all three configured ecosystems.
+
+Activation exposed an outstanding Gradle baseline, rather than a clean dependency tree. The [2026-09-04 baseline and remediation issue draft](security/dependency-baseline-2026-09-04.md) records all 58 open alerts, including the 24 high/critical Maven records, their scopes, owners, and deadlines. Its public tracking issue must be created and linked before Issue #11's baseline acceptance can be marked complete. These records are not allowlist entries: no advisory was dismissed and no gate threshold was relaxed.
+
+The same investigation found a blocked `fast-uri` security update and additional live npm `browserslist` findings. The renderer now locks `fast-uri` 3.1.6 and `browserslist` 4.28.8. Keep live npm auditing enabled even when the GitHub alerts list has not yet reported the same advisory.
 
 ## Thresholds, exceptions, and evidence
 
