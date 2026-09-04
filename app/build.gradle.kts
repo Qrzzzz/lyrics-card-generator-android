@@ -61,7 +61,7 @@ android {
         versionCode = 10101
         versionName = "1.1.1"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner"
         testProguardFiles("test-proguard-rules.pro")
         vectorDrawables.useSupportLibrary = true
         buildConfigField("int", "RENDERER_SCHEMA_VERSION", "1")
