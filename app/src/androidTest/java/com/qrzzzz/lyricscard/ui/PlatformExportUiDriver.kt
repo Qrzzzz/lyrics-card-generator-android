@@ -43,7 +43,7 @@ internal class PlatformExportUiDriver(
 
     init {
         require(fixtureName.matches(Regex("lcg-ui-validation-[a-f0-9-]{36}\\.png")))
-        assertFalse("unique validation destination already exists", shell("test -e $destination && echo exists").contains("exists"))
+        assertFalse("unique validation destination already exists", destinationExists())
         automation.serviceInfo = automation.serviceInfo.apply {
             flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                 AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -129,7 +129,7 @@ internal class PlatformExportUiDriver(
             } finally {
                 // Only this invocation's UUID-named external fixture and observed app-owned export are removed.
                 shell("rm -f $destination")
-                assertFalse("unique validation document cleanup failed", shell("test -e $destination && echo exists").contains("exists"))
+                assertFalse("unique validation document cleanup failed", destinationExists())
                 sharedUri?.let { uri ->
                     assertEquals("app-owned UI export cleanup failed", 1, context.contentResolver.delete(uri, null, null))
                 }
@@ -185,6 +185,9 @@ internal class PlatformExportUiDriver(
         }
         throw AssertionError(message)
     }
+
+    // UiAutomation launches an executable directly, so avoid shell built-ins and operators.
+    private fun destinationExists(): Boolean = shell("ls -d $destination").trim() == destination
 
     private fun shell(command: String): String = shellBytes(command).toString(Charsets.UTF_8)
     private fun shellBytes(command: String): ByteArray = ParcelFileDescriptor.AutoCloseInputStream(
