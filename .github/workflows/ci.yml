@@ -38,7 +38,7 @@ jobs:
           cache-dependency-path: renderer/package-lock.json
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3 # v4.4.2
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: Install pinned Android SDK packages
         shell: pwsh
@@ -164,7 +164,7 @@ jobs:
 
       - name: Set up Gradle
         if: steps.scope.outputs.unicode == 'true'
-        uses: gradle/actions/setup-gradle@017a9effdb900e5b5b2fddfb590a105619dca3c3 # v4.4.2
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: Install pinned Android SDK packages
         if: steps.scope.outputs.unicode == 'true'
