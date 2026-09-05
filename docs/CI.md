@@ -16,16 +16,16 @@ Dependabot 将 React、React DOM 及类型定义放在同一组，其余兼容�
 
 引用冻结 source SHA 的成功 main Quality Gate，无需在本地再跑同一套 Renderer/JVM 全量测试。签名 job 安装锁定依赖、重新审计，然后运行 productionRelease JVM/lint 与生产 APK/AAB/test APK 构建、证书和 provenance 检查；alpha/debug 测试由原 Quality Gate 证明。
 
-签名 source 与 main dispatch/工作流 SHA 相同，审批期间允许 main 正常前进，来源必须仍属于主干历史。设备 Capture/Final 可以使用更新的受保护主干验证器，分别绑定 source、producer workflow SHA 和 final validator SHA；Final 验证祖先链、run/attempt、原产物字节、attestation 和完整设备证据。新的 verdict 记录 producer 与 validator SHA。
+签名 source 与 main dispatch/工作流 SHA 相同，审批期间允许 main 正常前进，来源必须仍属于主干历史。常规发布由 Publish Verified Candidate 读取主干中已确认的人工验收记录，验证 source/发布 validator 的祖先链、run/attempt、原产物字节和 attestation，再发布五个原始附件。
 
 生产候选、测试 APK、设备证据与最终 verdict 的 Actions artifact 均保留 90 天。此设置只影响新上传的 artifact，已经过期或按旧设置上传的产物不会自动延期。
 
-产品或测试 APK 改变仍要重新冻结候选。仅修改 CI/验证流程时不需要重新签同一 APK；受影响的设备采集必须使用新 workflow 重新执行，历史失败记录保留。真机、TalkBack、导出次数、耐久时长和失败即停规则均按发布清单执行。
+产品或测试 APK 改变仍要重新冻结候选。仅修改 CI/验证流程时不需要重新签同一 APK；真机按发布清单确认核心操作，专项设备测试按风险选择，历史失败记录保留。旧 Capture/Final 工作流默认禁用，可在明确安排完整矩阵时另行启用。
 
 ## 验证脚本
 
 ```powershell
-node --test scripts/test-ci-tools.mjs
+node --test scripts/test-ci-tools.mjs scripts/test-publish-release.mjs
 pwsh -NoProfile -File scripts/test-dependency-security-contract.ps1
 pwsh -NoProfile -File scripts/test-production-release-contract.ps1
 pwsh -NoProfile -File scripts/test-frozen-source-contract.ps1

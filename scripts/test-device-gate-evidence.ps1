@@ -360,7 +360,7 @@ function Assert-FinalConsumerRejectsUnattestedTestApk {
     }
 }
 Assert-FinalConsumerRejectsUnattestedTestApk
-foreach ($literal in @("status = 'PROVISIONAL'", "deviceGate = 'NOT RUN'", 'finalReady = $false', '.github/workflows/final-device-gate.yml')) {
+foreach ($literal in @("status = 'PROVISIONAL'", "deviceGate = 'NOT RUN'", 'finalReady = $false', '.github/workflows/publish.yml')) {
     if ($releaseWorkflow.IndexOf($literal, [StringComparison]::Ordinal) -lt 0) { throw "Release candidate metadata is missing fail-closed readiness literal: $literal" }
 }
 if ($finalWorkflow -match 'production-signing|\$\{\{\s*secrets\.' -or $finalWorkflow -match '(?m)^\s+(id-token|attestations):\s*write\s*$') {

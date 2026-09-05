@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "policy": "focused-manual-v1",
+  "version": "1.1.1",
+  "sourceCommit": "2dacf491985b6e46974e9c11cb3c94745d800f82",
+  "candidateRunId": 33877855131,
+  "candidateRunAttempt": 1,
+  "candidateArtifactName": "production-candidate-1.1.1-2dacf491985b",
+  "dependencyRunId": 33876691930,
+  "device": {
+    "kind": "physical",
+    "model": "Xiaomi 2210132C",
+    "api": 36,
+    "versionName": "1.1.1",
+    "versionCode": 10101,
+    "installedApkSha256": "def34175816b0752264a39b1a967be90370d7f5c9ba6abb89a9f7574d435bb54"
+  },
+  "confirmedBy": "Qrzzzz",
+  "confirmedAt": "2026-09-05T02:08:14Z",
+  "confirmation": "用户在当前发布任务中确认：编辑歌词、预览、导出 PNG、保存后打开图片、打开分享面板，上述步骤全部正常。安装版本与设备实际 base.apk SHA-256 由 adb 独立读取并与冻结候选匹配。",
+  "checks": {
+    "open": "PASS",
+    "edit": "PASS",
+    "preview": "PASS",
+    "exportPng": "PASS",
+    "saveAndOpen": "PASS",
+    "shareSheet": "PASS"
+  },
+  "notCovered": [
+    "API 26/30/33/36 完整自动化矩阵及 API 30 专项超时复核",
+    "20 次连续导出、4 GB 内存专项和 30 分钟耐久",
+    "TalkBack 手势与 200% 字体专项",
+    "向第三方应用或联系人实际发送图片"
+  ],
+  "history": {
+    "cancelledCaptureRunId": 33881243214,
+    "cancelReason": "Owner approved replacing the mandatory self-hosted matrix with focused manual acceptance and hosted publication.",
+    "previousFailedCaptureRunId": 33872306376,
+    "previousLocalInstrumentation": "MIUI blocked background activity startup; this historical failure is not relabeled as a pass."
+  }
+}

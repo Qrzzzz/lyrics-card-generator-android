@@ -75,7 +75,7 @@ jobs:
       - name: Verify CI scope and audit failure handling
         shell: pwsh
         run: |
-          node --test scripts/test-ci-tools.mjs
+          node --test scripts/test-ci-tools.mjs scripts/test-publish-release.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify dependency-security contract
