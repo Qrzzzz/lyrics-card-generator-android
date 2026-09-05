@@ -1,4 +1,5 @@
 name: Capture Device Gate Evidence
+# Optional full-matrix diagnostics. Disabled in Actions by default; not a release prerequisite.
 
 on:
   workflow_dispatch:
