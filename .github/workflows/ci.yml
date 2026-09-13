@@ -101,7 +101,7 @@ jobs:
       - name: Run Android JVM, lint, debug, R8, APK, and AAB gates
         shell: pwsh
         run: |
-          .\gradlew.bat :app:test :app:lintProductionRelease :app:assembleAlphaDebug :app:assembleProductionDebug :app:assembleProductionRelease :app:bundleProductionRelease --no-parallel --stacktrace --console=plain
+          .\gradlew.bat :app:verifyBouncyCastleResolution :app:test :app:lintProductionRelease :app:assembleAlphaDebug :app:assembleProductionDebug :app:assembleProductionRelease :app:bundleProductionRelease --no-parallel --stacktrace --console=plain
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify generated renderer does not dirty the source tree
