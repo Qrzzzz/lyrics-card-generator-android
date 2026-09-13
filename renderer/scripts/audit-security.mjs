@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const transientCodes = new Set([
@@ -104,5 +105,10 @@ export async function auditSecurity({
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = await auditSecurity();
+  process.exitCode = await auditSecurity({ log: message => {
+    console.log(message);
+    if (process.env.AUDIT_DIAGNOSTIC_PATH) {
+      appendFileSync(process.env.AUDIT_DIAGNOSTIC_PATH, `${message}\n`);
+    }
+  } });
 }

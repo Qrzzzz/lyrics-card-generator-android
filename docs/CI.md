@@ -9,7 +9,7 @@
 | 按需专项 | API 30 probe、跨 API 矩阵、耐久、低内存、TalkBack/大字体；旧 Capture/Final 仅在安排专项时使用 | 未运行的专项，或以专项缺设备阻止无关补丁合并 |
 | 历史记录 | 绑定原 SHA/run 的旧失败、阻塞、签名 metadata 与已发布验收 | 将旧 FAIL/NOT RUN 改写成 PASS 或作为每版必须重跑的清单 |
 
-上述表说明证据用途；当前下方日常工作流仍使用整套门禁，PR 范围调度另以独立 CI 补丁实现。普通修改不追加零历史告警、全平台、完整耐久、100% 覆盖率或全仓零警告要求。
+普通修改不追加零历史告警、全平台、完整耐久、100% 覆盖率或全仓零警告要求。
 
 每次交付使用 PASS、FAIL、BLOCKED、NOT RUN、NOT APPLICABLE，并注明 commit、命令或 Actions run。区分产品缺陷、检查脚本缺陷、外部服务失败、既有基线和缺设备/权限。任务交付、可合并、可发布分别判断。
 
@@ -17,13 +17,26 @@
 
 ## 日常检查
 
-`Android Quality Gate` 在 PR、main push 和手动触发时运行。`quality-gate` 保留 Renderer 类型/单测、完整四变体 JVM、生产 lint/R8、Debug 与 Production APK/AAB 构建。Renderer 类型与测试步骤不再单独调用 Vite build，最终 assets 由 Gradle `buildRenderer` 生成。
+`Android Quality Gate` 在 PR、main push、手动触发和每周定时运行。`scope` 用精确 base/head SHA 的 Git diff 判定 PR 范围；读取失败直接失败，未知路径保守进入全量检查。main、手动和定时运行始终全量。
 
-`unicode-path-jvm-smoke` 保留 required check 名称。PR 先比较完整 base/head SHA；只有 wrapper、Gradle、构建配置、依赖和相关检查脚本等输入改变时才安装工具链并运行真实 JVM smoke。main 和手动运行始终执行。筛选失败会使检查失败，不能冒充通过；无关 PR 明确报告不需要该 smoke。使用 task 级 `--rerun` 保证测试实际执行，前置编译可复用。
+| PR 改动 | 适用检查 |
+| --- | --- |
+| 普通文档 | 范围检查、required 汇总与依赖差异检查，不安装 Android SDK |
+| 普通 Renderer 源码、样式、测试 | Node 24 类型、单测和 Vite build |
+| 普通 Android 业务、资源、单测 | productionDebug JVM、lint、APK 构建 |
+| 协议/schema/bridge、Manifest/备份、Gradle/依赖、R8、签名/发布输入、release/alpha/仪器测试源码、公共脚本、未知路径 | Renderer、完整 Android、流程合同、审计及 Unicode smoke |
+
+`renderer`、`android`、`contracts`、`audit` 独立调度，在线审计不作为产品检查的前置依赖。完整 Android 仍执行 BC 解析、四变体 JVM、productionRelease lint/R8、alpha/production debug APK、productionRelease APK/AAB、release AndroidTest APK 打包，并检查生成 assets 不修改源码。完整合同保留 CI/publish、依赖、生产来源、frozen-source 和按需设备证据校验。
+
+`quality-gate` 是始终执行的汇总 job：范围输出必须完整合法，本次应执行的子任务必须成功；失败、取消、缺结果或未授权跳过均拒绝。`unicode-path-jvm-smoke` 继续作为独立 required check，并纳入汇总。服务器分支保护已核对为 strict，要求 `quality-gate`、`unicode-path-jvm-smoke`、`dependency-review`，名称保持不变。
+
+检查失败也上传已产生的日志及测试报告；缺少报告只警告，不用“缺 APK”覆盖原始错误。PR 默认不上传多种安装包；main/手动/定时全量构建保留原非发布产物。候选仍使用独立签名流程；CI 的 test APK 打包不代表仪器测试或真机验收已运行。
+
+`unicode-path-jvm-smoke` 保留既有 Unicode checkout 与 ASCII worktree wrapper。PR 的公共构建输入及保守扩展范围会安装工具链并运行真实 JVM smoke；main、手动和定时始终执行。筛选失败会使检查失败，不能冒充通过；无关 PR 明确报告不需要该 smoke。使用 task 级 `--rerun` 保证测试实际执行，前置编译可复用。
 
 ## 依赖审计
 
-安装统一使用 `npm ci --no-audit --no-fund`，显式的 `audit:security` 单独执行。审计结果包括开发依赖；high/critical 立即失败。已识别的网络错误与 HTTP 429/500/502/503/504 最多尝试三次，每次请求超时 30 秒、进程上限 75 秒。未知错误、鉴权失败、无效报告和重试耗尽仍非零退出；不会修改 lockfile 或把审计不可用写成安全通过。
+安装统一使用 `npm ci --no-audit --no-fund`，显式的 `audit:security` 在独立 job 执行；main/定时/发布全量审计，PR 依赖和保守扩展范围执行审计。审计结果包括开发依赖；high/critical 立即失败。已识别的网络错误与 HTTP 429/500/502/503/504 最多尝试三次，每次请求超时 30 秒、进程上限 75 秒。未知错误、鉴权失败、无效报告和重试耗尽仍非零退出，记录为审计不可用（BLOCKED，退出码 2）；不会修改 lockfile 或把审计不可用写成安全通过。`AUDIT_DIAGNOSTIC_PATH` 只保存同一审计输出，不改变退出码或阈值。
 
 Dependabot 将 React、React DOM 及类型定义放在同一组，其余兼容的小版本按生态分组。大版本迁移和安全阈值仍需审查。
 
