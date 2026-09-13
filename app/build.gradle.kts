@@ -183,6 +183,9 @@ configurations.configureEach {
 dependencies {
     add(bundletoolCli.name, libs.android.bundletool)
     add(utpNettyAlignment.name, platform("io.netty:netty-bom:4.1.138.Final"))
+    constraints {
+        add(bundletoolCli.name, "org.bitbucket.b_c:jose4j:0.9.6")
+    }
 
     implementation(platform(libs.androidx.compose.bom))
     testImplementation(platform("org.bouncycastle:bc-jdk18on-bom:1.84"))
@@ -419,6 +422,89 @@ tasks.register("verifyNettyResolution") {
             buildscriptNetty,
             utpNetty,
             productNetty,
+        )
+    }
+}
+
+val minimumHostParserVersions = mapOf(
+    "org.jdom:jdom2" to "2.0.6.1",
+    "org.bitbucket.b_c:jose4j" to "0.9.6",
+)
+
+fun resolvedHostParserModules(
+    configuration: org.gradle.api.artifacts.Configuration,
+): Map<String, String> {
+    val resolution = configuration.incoming.resolutionResult
+    val unresolved = resolution.allDependencies
+        .filterIsInstance<org.gradle.api.artifacts.result.UnresolvedDependencyResult>()
+    check(unresolved.isEmpty()) {
+        "Cannot verify host parser dependencies in unresolved configuration ${configuration.name}: " +
+            unresolved.joinToString { it.attempted.displayName }
+    }
+    return resolution.allComponents
+        .mapNotNull { it.moduleVersion }
+        .map { "${it.group}:${it.name}" to it.version }
+        .filter { (coordinate, _) -> coordinate in minimumHostParserVersions }
+        .toMap()
+}
+
+fun checkPatchedHostParserModules(
+    scope: String,
+    modules: Map<String, String>,
+    requiredCoordinates: Set<String>,
+) {
+    val missing = requiredCoordinates - modules.keys
+    check(missing.isEmpty()) {
+        "$scope is missing expected host parser dependencies: $missing"
+    }
+    modules.forEach { (coordinate, version) ->
+        val minimum = minimumHostParserVersions.getValue(coordinate)
+        check(isVersionAtLeast(version, minimum)) {
+            "$scope resolved $coordinate below $minimum or to an unstable version: $version"
+        }
+    }
+}
+
+tasks.register("verifyHostParserResolution") {
+    group = "verification"
+    description = "Verifies patched host parser dependencies and product scope isolation."
+
+    doLast {
+        val buildscriptModules = resolvedHostParserModules(
+            rootProject.buildscript.configurations.getByName("classpath"),
+        )
+        checkPatchedHostParserModules(
+            "Buildscript classpath",
+            buildscriptModules,
+            minimumHostParserVersions.keys,
+        )
+
+        val bundletoolModules = resolvedHostParserModules(bundletoolCli)
+        checkPatchedHostParserModules(
+            "Bundletool CLI",
+            bundletoolModules,
+            setOf("org.bitbucket.b_c:jose4j"),
+        )
+
+        val productConfigurations = listOf(
+            "productionReleaseCompileClasspath",
+            "productionReleaseRuntimeClasspath",
+            "productionReleaseAndroidTestCompileClasspath",
+            "productionReleaseAndroidTestRuntimeClasspath",
+        )
+        val productModules = productConfigurations.associateWith { configurationName ->
+            resolvedHostParserModules(configurations.getByName(configurationName))
+        }
+        val leakedModules = productModules.filterValues { it.isNotEmpty() }
+        check(leakedModules.isEmpty()) {
+            "Host parser dependencies leaked into product configurations: $leakedModules"
+        }
+
+        logger.lifecycle(
+            "Verified host parser resolution: buildscript={}, bundletool={}, product={}",
+            buildscriptModules,
+            bundletoolModules,
+            productModules,
         )
     }
 }
