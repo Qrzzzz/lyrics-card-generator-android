@@ -201,7 +201,7 @@ jobs:
           FULL_ANDROID_GATE: ${{ needs.scope.outputs.full }}
         run: |
           $tasks = if ($env:FULL_ANDROID_GATE -eq 'true') {
-            @(':app:verifyBouncyCastleResolution', ':app:test', ':app:lintProductionRelease', ':app:assembleAlphaDebug', ':app:assembleProductionDebug', ':app:assembleProductionRelease', ':app:bundleProductionRelease', ':app:assembleProductionReleaseAndroidTest')
+            @(':app:verifyBouncyCastleResolution', ':app:verifyNettyResolution', ':app:test', ':app:lintProductionRelease', ':app:assembleAlphaDebug', ':app:assembleProductionDebug', ':app:assembleProductionRelease', ':app:bundleProductionRelease', ':app:assembleProductionReleaseAndroidTest')
           } elseif ($env:FULL_ANDROID_GATE -eq 'false') {
             @(':app:testProductionDebugUnitTest', ':app:lintProductionDebug', ':app:assembleProductionDebug')
           } else { throw 'Missing or invalid Android scope.' }
