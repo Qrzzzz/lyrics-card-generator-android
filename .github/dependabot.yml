@@ -4,13 +4,15 @@ updates:
   - package-ecosystem: npm
     directory: /renderer
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: "09:00"
       timezone: Asia/Shanghai
-    # Pause ordinary updates until the historical queue has a final disposition.
-    # Security updates remain enabled independently of this limit.
-    open-pull-requests-limit: 0
+    # Historical PRs are settled. Version-only SemVer filtering leaves security updates enabled.
+    # https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#update-types--allow--
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
     commit-message:
       prefix: "deps(renderer)"
     groups:
@@ -37,29 +39,40 @@ updates:
   - package-ecosystem: gradle
     directory: /
     schedule:
-      interval: weekly
-      day: tuesday
+      interval: monthly
       time: "09:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
     commit-message:
       prefix: "deps(gradle)"
     groups:
       android-test:
+        applies-to: version-updates
         patterns: ["androidx.test*", "androidx.test.espresso*"]
+        update-types: ["minor", "patch"]
+      gradle-compatible:
+        applies-to: version-updates
+        patterns: ["*"]
+        exclude-patterns: ["androidx.test*", "androidx.test.espresso*"]
         update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: wednesday
+      interval: monthly
       time: "09:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
     commit-message:
       prefix: "deps(actions)"
     groups:
       actions-compatible:
+        applies-to: version-updates
         patterns: ["*"]
         update-types: ["minor", "patch"]

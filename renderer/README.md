@@ -16,5 +16,7 @@ side validates request ownership, ordering, chunk and byte counts while streamin
 a temporary file, then validates the completed PNG before exposing it. A WebMessage ArrayBuffer
 fast path remains a possible future memory and throughput optimization.
 
-Run `npm run check` to type-check, test, and build. The build emits the frozen RenderSpec schema,
-renderer manifest, local Source Han fonts, hashed application bundles, and `index.html`.
+Local development and CI are verified with Node.js 24.x; other Node.js release lines are not part of
+the current support claim. Run `npm run check` to type-check, test, and build. The build emits the
+frozen RenderSpec schema, renderer manifest, local Source Han fonts, hashed application bundles, and
+`index.html`.
