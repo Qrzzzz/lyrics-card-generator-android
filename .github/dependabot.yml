@@ -8,15 +8,30 @@ updates:
       day: monday
       time: "09:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    # Pause ordinary updates until the historical queue has a final disposition.
+    # Security updates remain enabled independently of this limit.
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(renderer)"
     groups:
       react:
+        applies-to: version-updates
         patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+        update-types: ["minor", "patch"]
+      vitest:
+        applies-to: version-updates
+        patterns: ["vitest", "@vitest/*"]
+        update-types: ["minor", "patch"]
+      react-security:
+        applies-to: security-updates
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+      vitest-security:
+        applies-to: security-updates
+        patterns: ["vitest", "@vitest/*"]
       renderer-compatible:
+        applies-to: version-updates
         patterns: ["*"]
-        exclude-patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+        exclude-patterns: ["react", "react-dom", "@types/react", "@types/react-dom", "vitest", "@vitest/*"]
         update-types: ["minor", "patch"]
 
   - package-ecosystem: gradle
@@ -26,7 +41,7 @@ updates:
       day: tuesday
       time: "09:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(gradle)"
     groups:
@@ -41,7 +56,7 @@ updates:
       day: wednesday
       time: "09:00"
       timezone: Asia/Shanghai
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "deps(actions)"
     groups:
