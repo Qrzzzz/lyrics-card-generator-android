@@ -236,11 +236,19 @@ fun isVersionAtLeast(version: String, minimum: String): Boolean {
 
 fun resolvedBouncyCastleModules(
     configuration: org.gradle.api.artifacts.Configuration,
-): Map<String, String> =
-    configuration.incoming.resolutionResult.allComponents
+): Map<String, String> {
+    val resolution = configuration.incoming.resolutionResult
+    val unresolved = resolution.allDependencies
+        .filterIsInstance<org.gradle.api.artifacts.result.UnresolvedDependencyResult>()
+    check(unresolved.isEmpty()) {
+        "Cannot verify Bouncy Castle in unresolved configuration ${configuration.name}: " +
+            unresolved.joinToString { it.attempted.displayName }
+    }
+    return resolution.allComponents
         .mapNotNull { it.moduleVersion }
         .filter { it.group == "org.bouncycastle" && it.name != bouncyCastleBomModule }
         .associate { it.name to it.version }
+}
 
 tasks.register("verifyBouncyCastleResolution") {
     group = "verification"
