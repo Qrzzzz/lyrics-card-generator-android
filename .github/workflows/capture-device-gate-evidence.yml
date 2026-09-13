@@ -86,7 +86,7 @@ jobs:
           Assert-CommitAncestor -AncestorCommit $env:SOURCE_COMMIT -DescendantCommit $env:VALIDATOR_COMMIT -Repository $env:GITHUB_REPOSITORY -GitHubToken $env:GH_TOKEN
 
       - name: Download attested signed candidate
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ inputs.candidate_artifact_name }}
           path: device-gate-input/candidate
@@ -95,7 +95,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Download the same candidate run's signed test APK
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ steps.input-policy.outputs.test_artifact_name }}
           path: device-gate-input/test
