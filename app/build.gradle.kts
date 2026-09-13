@@ -321,8 +321,8 @@ val minimumNettyPatchVersion = 138
 val nettyBomModule = "netty-bom"
 val expectedNettyUtpConfigurations = setOf(
     "${unifiedTestPlatformConfigurationPrefix}core",
-    "${unifiedTestPlatformConfigurationPrefix}host-emulator-control",
-    "${unifiedTestPlatformConfigurationPrefix}result-listener-gradle",
+    "${unifiedTestPlatformConfigurationPrefix}android-test-plugin-host-emulator-control",
+    "${unifiedTestPlatformConfigurationPrefix}android-test-plugin-result-listener-gradle",
 )
 val requiredNettyHostModules = setOf(
     "netty-handler",
