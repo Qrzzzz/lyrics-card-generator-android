@@ -36,6 +36,14 @@ The same investigation found a blocked `fast-uri` security update and additional
 
 ## Thresholds, exceptions, and evidence
 
+### Bouncy Castle host dependency remediation (1.1.2)
+
+The original critical remediation/review deadline in #35 remains **2026-09-11** (overdue at the 2026-09-13 review). AGP 8.13.2 resolved the BC 1.79 family in its buildscript classpath; Robolectric 4.16.1 resolved bcprov 1.81 in host JVM tests. These are separate configurations. Updating AndroidX instrumentation dependencies does not repair either path, and absence from app runtime is not a host-tool safety exemption.
+
+The narrowly scoped candidate imports the regular `bc-jdk18on-bom:1.84` platform in the root buildscript classpath and `testImplementation`. It does not force unrelated configurations or upgrade AGP, Gradle or Robolectric. [BC's upstream notice](https://github.com/bcgit/bc-java/wiki/CVE%E2%80%902025%E2%80%9014813) identifies 1.84 as a fixed line; this family also covers the recorded BC medium findings. The [published BOM](https://repo.maven.apache.org/maven2/org/bouncycastle/bc-jdk18on-bom/1.84/bc-jdk18on-bom-1.84.pom) aligns bcprov, bcpkix and bcutil.
+
+`./gradlew.bat :app:verifyBouncyCastleResolution --no-configuration-cache --console=plain` checks selected dependency components, rather than matching dependency-report prose: fixed and aligned host families, and no BC runtime artifacts introduced into the app or instrumentation APK. JVM/lint/R8/APK/AAB and bundletool/signing-path checks provide separate compatibility evidence. The same-SHA default-branch dependency submission and subsequent alert scan determine whether GitHub's affected paths have disappeared. #35 remains open for other unresolved families; no critical/high risk is waived by this constraint or by a green build.
+
 High and critical advisories fail the npm and pull-request gates. Low and moderate npm findings remain visible in command output but do not fail the build. The gates query live advisory services, so every result must be reported with its execution time and exact commit; a result of zero is not a permanent security guarantee and does not cover an ecosystem that was not successfully analyzed.
 
 The `main` snapshot is sufficient for default-branch Gradle alerts. It is not evidence that every pull request's resolved Gradle delta was generated or reviewed: this workflow does not submit a separately resolved Gradle snapshot for each pull request. Dependency Review's PASS is limited to the dependency changes that GitHub actually exposes for that comparison. Until a pull-request snapshot path is separately implemented and directly validated, reports must preserve this limitation.

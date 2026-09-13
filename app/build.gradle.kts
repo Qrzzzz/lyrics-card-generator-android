@@ -171,6 +171,7 @@ dependencies {
     add(bundletoolCli.name, libs.android.bundletool)
 
     implementation(platform(libs.androidx.compose.bom))
+    testImplementation(platform("org.bouncycastle:bc-jdk18on-bom:1.84"))
     androidTestImplementation(platform(libs.androidx.compose.bom))
 
     implementation(libs.androidx.activity.compose)
@@ -207,6 +208,91 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.accessibility)
     androidTestCompileOnly(libs.guava.atf)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+}
+
+val minimumBouncyCastleVersion = "1.84"
+val bouncyCastleBomModule = "bc-jdk18on-bom"
+val requiredBuildscriptBouncyCastleModules =
+    setOf("bcprov-jdk18on", "bcpkix-jdk18on", "bcutil-jdk18on")
+
+fun parseStableVersion(version: String): List<Int>? {
+    if (!version.matches(Regex("\\d+(?:\\.\\d+)*"))) return null
+    return version.split('.').map(String::toInt)
+}
+
+fun isVersionAtLeast(version: String, minimum: String): Boolean {
+    val actualParts = parseStableVersion(version) ?: return false
+    val minimumParts = parseStableVersion(minimum) ?: return false
+    val componentCount = maxOf(actualParts.size, minimumParts.size)
+
+    for (index in 0 until componentCount) {
+        val actual = actualParts.getOrElse(index) { 0 }
+        val required = minimumParts.getOrElse(index) { 0 }
+        if (actual != required) return actual > required
+    }
+
+    return true
+}
+
+fun resolvedBouncyCastleModules(
+    configuration: org.gradle.api.artifacts.Configuration,
+): Map<String, String> =
+    configuration.incoming.resolutionResult.allComponents
+        .mapNotNull { it.moduleVersion }
+        .filter { it.group == "org.bouncycastle" && it.name != bouncyCastleBomModule }
+        .associate { it.name to it.version }
+
+tasks.register("verifyBouncyCastleResolution") {
+    group = "verification"
+    description = "Verifies fixed Bouncy Castle versions and scope isolation."
+
+    doLast {
+        val pluginClasspath = resolvedBouncyCastleModules(
+            rootProject.buildscript.configurations.getByName("classpath"),
+        )
+        val unitTestRuntime = resolvedBouncyCastleModules(
+            configurations.getByName("productionReleaseUnitTestRuntimeClasspath"),
+        )
+        val appRuntime = resolvedBouncyCastleModules(
+            configurations.getByName("productionReleaseRuntimeClasspath"),
+        )
+        val testApkRuntime = resolvedBouncyCastleModules(
+            configurations.getByName("productionReleaseAndroidTestRuntimeClasspath"),
+        )
+
+        fun checkFixedFamily(scope: String, modules: Map<String, String>) {
+            if (modules.isEmpty()) return
+            check(modules.values.toSet().size == 1) {
+                "$scope resolved a mixed Bouncy Castle family: $modules"
+            }
+            check(modules.values.all { isVersionAtLeast(it, minimumBouncyCastleVersion) }) {
+                "$scope resolved Bouncy Castle below $minimumBouncyCastleVersion: $modules"
+            }
+        }
+
+        check(pluginClasspath.keys.containsAll(requiredBuildscriptBouncyCastleModules)) {
+            "Buildscript classpath is missing expected Bouncy Castle modules: $pluginClasspath"
+        }
+        check("bcprov-jdk18on" in unitTestRuntime) {
+            "JVM unit-test runtime is missing bcprov-jdk18on: $unitTestRuntime"
+        }
+        checkFixedFamily("Buildscript classpath", pluginClasspath)
+        checkFixedFamily("JVM unit-test runtime", unitTestRuntime)
+        check(appRuntime.isEmpty()) {
+            "Bouncy Castle modules leaked into the app runtime: $appRuntime"
+        }
+        check(testApkRuntime.isEmpty()) {
+            "Bouncy Castle modules leaked into the instrumentation test APK: $testApkRuntime"
+        }
+
+        logger.lifecycle(
+            "Verified Bouncy Castle resolution: buildscript={}, unitTestRuntime={}, appRuntime={}, testApkRuntime={}",
+            pluginClasspath,
+            unitTestRuntime,
+            appRuntime,
+            testApkRuntime,
+        )
+    }
 }
 
 val buildRenderer by tasks.registering(Exec::class) {
