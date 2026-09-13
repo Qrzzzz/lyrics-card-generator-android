@@ -92,35 +92,108 @@ function Read-RepositoryText {
 }
 
 $workflow = Read-RepositoryText '.github/workflows/release.yml'
+$workflowJson = & node (Join-Path $repositoryRoot 'renderer/scripts/read-yaml.mjs') (Join-Path $repositoryRoot '.github/workflows/release.yml')
+if ($LASTEXITCODE -ne 0) { throw 'Production workflow YAML could not be parsed.' }
+$workflowData = ($workflowJson -join "`n") | ConvertFrom-Json -AsHashtable
+$authorizeJob = $workflowData.jobs.'authorize-candidate'
+$signedJob = $workflowData.jobs.'signed-candidate'
 $verifier = Read-RepositoryText 'scripts/verify-production-candidate.ps1'
 $policy = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config/production-signing-policy.json') -Raw | ConvertFrom-Json
 
-if ($workflow -notmatch '(?ms)^permissions:\s*\{\}\s*.*?authorize-candidate:.*?permissions:\s+actions:\s*read\s+contents:\s*read') {
+if ($workflowData.permissions -isnot [System.Collections.IDictionary] -or $workflowData.permissions.Count -ne 0 -or
+    $authorizeJob.permissions.Count -ne 2 -or $authorizeJob.permissions.actions -ne 'read' -or
+    $authorizeJob.permissions.contents -ne 'read') {
     throw 'The authorization job must have only read permissions.'
 }
-$authorizeBlock = [regex]::Match($workflow, '(?ms)^  authorize-candidate:.*?(?=^  signed-candidate:)').Value
-if ($authorizeBlock -match 'production-signing|\$\{\{\s*secrets\.') {
+if ($authorizeJob.Contains('environment') -or ($authorizeJob | ConvertTo-Json -Depth 100) -match '\$\{\{\s*secrets\.') {
     throw 'The authorization job must not access the production environment or secrets.'
 }
+$signingEnvironment = if ($signedJob.environment -is [string]) { $signedJob.environment } else { $signedJob.environment.name }
+if (@($signedJob.needs).Count -ne 1 -or @($signedJob.needs)[0] -ne 'authorize-candidate' -or
+    $signingEnvironment -ne 'production-signing' -or $authorizeJob['continue-on-error'] -or $signedJob['continue-on-error']) {
+    throw 'Signing must depend on authorization and use the protected production environment.'
+}
+function Assert-SignedPermissions([System.Collections.IDictionary] $Job) {
+    $expected = @{ actions = 'read'; contents = 'read'; attestations = 'write'; 'id-token' = 'write' }
+    if ($Job.permissions -isnot [System.Collections.IDictionary] -or $Job.permissions.Count -ne $expected.Count -or $Job.Contains('env')) {
+        throw 'Signing must use only its required permissions and no job-level environment bindings.'
+    }
+    foreach ($key in $expected.Keys) {
+        if ($Job.permissions[$key] -cne $expected[$key]) { throw "Unexpected signing permission: $key" }
+    }
+}
+Assert-SignedPermissions $signedJob
+$extraPermission = $signedJob | ConvertTo-Json -Depth 100 | ConvertFrom-Json -AsHashtable
+$extraPermission.permissions.packages = 'write'
+$rejected = $false
+try { Assert-SignedPermissions $extraPermission } catch { $rejected = $true }
+if (-not $rejected) { throw 'Extra signing write permission was accepted.' }
 $signedBlock = [regex]::Match($workflow, '(?ms)^  signed-candidate:.*\z').Value
 
 function Get-TrustedDispatchScript {
-    param([string] $Job, [string] $StepName)
+    param([System.Collections.IDictionary] $Job, [switch] $Signing)
 
-    $firstStep = [regex]::Match($Job, '(?m)^      - name: (.+)\r?$').Groups[1].Value.Trim()
-    if ($firstStep -ne $StepName) { throw 'Trusted inline identity validation must run before any checkout or repository code.' }
-    $refs = @([regex]::Matches($Job, '(?m)^          ref: (.+)\r?$') | ForEach-Object { $_.Groups[1].Value.Trim() })
-    if ($refs.Count -ne 1 -or $refs[0] -cne '${{ github.workflow_sha }}') {
+    $firstStep = @($Job.steps)[0]
+    if ($firstStep['run'] -isnot [string] -or [string]::IsNullOrWhiteSpace($firstStep['run']) -or
+        $firstStep.Contains('uses') -or $firstStep['shell'] -ne 'pwsh' -or
+        $firstStep.Contains('if') -or $firstStep['continue-on-error']) {
+        throw 'Trusted inline identity validation must run unconditionally before any checkout or repository code.'
+    }
+    $checkouts = @($Job.steps | Where-Object { $_['uses'] -like 'actions/checkout@*' })
+    if ($checkouts.Count -ne 1 -or $checkouts[0].with.ref -cne '${{ github.workflow_sha }}' -or
+        $checkouts[0].with.'persist-credentials' -ne $false) {
         throw 'Release policy code must be checked out from the trusted workflow SHA, never candidate input or a job output.'
     }
-    $step = [regex]::Match($Job, '(?ms)^      - name: ' + [regex]::Escape($StepName) + '\r?\n(?<step>.*?)(?=^      - name: |\z)').Groups['step'].Value
-    $code = [regex]::Match($step, '(?ms)^        run: \|\r?\n(?<code>.*)\z').Groups['code'].Value
-    if (-not $code) { throw 'Trusted dispatch validation must be inline in the workflow definition.' }
-    return [scriptblock]::Create(($code -replace '(?m)^          ', ''))
+    $bindings = @{
+        CANDIDATE_COMMIT = '${{ inputs.commit }}'
+        WORKFLOW_SHA = '${{ github.workflow_sha }}'
+        TRIGGER_SHA = '${{ github.sha }}'
+        WORKFLOW_EVENT = '${{ github.event_name }}'
+        WORKFLOW_REF = '${{ github.ref }}'
+        REPOSITORY = '${{ github.repository }}'
+        API_BASE_URL = '${{ github.api_url }}'
+        GH_TOKEN = '${{ github.token }}'
+    }
+    if ($Signing) { $bindings.AUTHORIZED_COMMIT = '${{ needs.authorize-candidate.outputs.source_commit }}' }
+    if ($firstStep.env.Count -ne $bindings.Count) { throw 'Trusted dispatch must not receive unexpected environment bindings or secrets.' }
+    foreach ($key in $bindings.Keys) {
+        if ($firstStep.env[$key] -cne $bindings[$key]) { throw "Trusted dispatch binding is missing or incorrect: $key" }
+    }
+    return [scriptblock]::Create($firstStep['run'])
 }
 
-$authorizeDispatch = Get-TrustedDispatchScript -Job $authorizeBlock -StepName 'Validate trusted dispatch before checkout'
-$signedDispatch = Get-TrustedDispatchScript -Job $signedBlock -StepName 'Revalidate trusted dispatch before signing checkout'
+$authorizeDispatch = Get-TrustedDispatchScript -Job $authorizeJob
+$signedDispatch = Get-TrustedDispatchScript -Job $signedJob -Signing
+$earlySignedSecret = $signedJob | ConvertTo-Json -Depth 100 | ConvertFrom-Json -AsHashtable
+$earlySignedSecret.steps[0].env.LEAK = '${{ secrets.LYRICS_CARD_KEYSTORE_BASE64 }}'
+$rejected = $false
+try { $null = Get-TrustedDispatchScript -Job $earlySignedSecret -Signing } catch { $rejected = $true }
+if (-not $rejected) { throw 'A signing secret was exposed before identity revalidation.' }
+
+# Display names and YAML field order do not authorize code. Exercise renamed
+# jobs through the same hostile dispatch cases as the actual workflow below.
+$renamedAuthorize = $authorizeJob | ConvertTo-Json -Depth 100 | ConvertFrom-Json -AsHashtable
+$renamedSigned = $signedJob | ConvertTo-Json -Depth 100 | ConvertFrom-Json -AsHashtable
+foreach ($job in @($renamedAuthorize, $renamedSigned)) {
+    for ($index = 0; $index -lt $job.steps.Count; $index++) { $job.steps[$index].name = "Stage $index" }
+}
+$renamedAuthorizeDispatch = Get-TrustedDispatchScript -Job $renamedAuthorize
+$renamedSignedDispatch = Get-TrustedDispatchScript -Job $renamedSigned -Signing
+foreach ($mutation in @('checkout-first', 'missing-code', 'skipped-guard', 'ignored-failure', 'untrusted-ref', 'wrong-binding', 'early-secret')) {
+    $job = $authorizeJob | ConvertTo-Json -Depth 100 | ConvertFrom-Json -AsHashtable
+    switch ($mutation) {
+        'checkout-first' { $job.steps[0] = $job.steps[1] }
+        'missing-code' { $null = $job.steps[0].Remove('run') }
+        'skipped-guard' { $job.steps[0]['if'] = $false }
+        'ignored-failure' { $job.steps[0]['continue-on-error'] = $true }
+        'untrusted-ref' { $job.steps[1].with.ref = '${{ inputs.commit }}' }
+        'wrong-binding' { $job.steps[0].env.WORKFLOW_SHA = '${{ inputs.commit }}' }
+        'early-secret' { $job.steps[0].env.LEAK = '${{ secrets.LYRICS_CARD_KEYSTORE_BASE64 }}' }
+    }
+    $rejected = $false
+    try { $null = Get-TrustedDispatchScript -Job $job } catch { $rejected = $true }
+    if (-not $rejected) { throw "Unsafe workflow wiring was accepted: $mutation" }
+}
 
 function Invoke-TrustedDispatchContract {
     param(
@@ -208,7 +281,7 @@ Write-Output 'source_commit=2222222222222222222222222222222222222222'
     }
 }
 
-foreach ($gate in @($authorizeDispatch, $signedDispatch)) {
+foreach ($gate in @($authorizeDispatch, $signedDispatch, $renamedAuthorizeDispatch, $renamedSignedDispatch)) {
     Invoke-TrustedDispatchContract -Name 'valid-main' -Gate $gate
     Invoke-TrustedDispatchContract -Name 'candidate-replaces-its-own-validator' -Gate $gate `
         -Overrides @{ CANDIDATE_COMMIT = '2222222222222222222222222222222222222222'; AUTHORIZED_COMMIT = '2222222222222222222222222222222222222222' } `
@@ -240,10 +313,48 @@ if ($signedBlock -match '(?m)^\s+Copy-Item[^\r\n]*deviceTest' -or
     $signedBlock -notmatch '(?m)^\s+path: release-assets/\*\s*$') {
     throw 'Device-test APKs must stay outside the public production candidate assets.'
 }
-if ($workflow.IndexOf('Remove temporary signing material') -gt $workflow.IndexOf('Attest all publishable release assets')) {
+function Assert-SigningCleanupOrder([System.Collections.IDictionary] $Job) {
+    $cleanup = @()
+    $artifacts = @()
+    $keyUse = @()
+    for ($index = 0; $index -lt $Job.steps.Count; $index++) {
+        $step = $Job.steps[$index]
+        if ($step['run'] -match '(?m)^\s*Remove-Item\s+-LiteralPath\s+\$signingDirectory\b') {
+            if ($step['if'] -notmatch '^\s*(?:\$\{\{\s*)?always\(\)(?:\s*\}\})?\s*$' -or $step['continue-on-error']) {
+                throw 'Signing cleanup must run on failure and must not ignore errors.'
+            }
+            $cleanup += $index
+        } elseif (($step['env'] | ConvertTo-Json -Depth 100) -match '\$\{\{\s*secrets\.' -or
+            $step['run'] -match '\$signingDirectory\b|LYRICS_CARD_(?:STORE|KEY)') {
+            $keyUse += $index
+        }
+        if ($step['uses'] -match '^actions/(?:attest-build-provenance|upload-artifact)@') { $artifacts += $index }
+    }
+    if ($cleanup.Count -ne 1 -or $keyUse.Count -eq 0 -or $artifacts.Count -eq 0 -or
+        $cleanup[0] -le ($keyUse | Measure-Object -Maximum).Maximum -or
+        $cleanup[0] -ge ($artifacts | Measure-Object -Minimum).Minimum) {
+        throw 'Temporary signing material must be removed after its last use and before provenance generation and upload.'
+    }
+}
+Assert-SigningCleanupOrder $signedJob
+Assert-SigningCleanupOrder $renamedSigned
+foreach ($placement in @('too-early', 'too-late')) {
+    $job = $signedJob | ConvertTo-Json -Depth 100 | ConvertFrom-Json -AsHashtable
+    $cleanupStep = @($job.steps | Where-Object { $_['run'] -match '(?m)^\s*Remove-Item\s+-LiteralPath\s+\$signingDirectory\b' })[0]
+    $otherSteps = @($job.steps | Where-Object { $_ -ne $cleanupStep })
+    $job.steps = if ($placement -eq 'too-early') { @($otherSteps[0], $cleanupStep) + $otherSteps[1..($otherSteps.Count - 1)] } else { $otherSteps + @($cleanupStep) }
+    $rejected = $false
+    try { Assert-SigningCleanupOrder $job } catch { $rejected = $true }
+    if (-not $rejected) { throw "Unsafe signing cleanup placement was accepted: $placement" }
+}
+$withoutCleanup = $signedJob | ConvertTo-Json -Depth 100 | ConvertFrom-Json -AsHashtable
+$withoutCleanup.steps = @($withoutCleanup.steps | Where-Object { $_['run'] -notmatch 'Remove-Item\s+-LiteralPath\s+\$signingDirectory\b' })
+$rejected = $false
+try { Assert-SigningCleanupOrder $withoutCleanup } catch { $rejected = $true }
+if (-not $rejected) {
     throw 'Temporary signing material must be removed before provenance generation and upload.'
 }
-if ($workflow -notmatch '(?m)^\s*npm\.cmd run audit:security\s*$') {
+if ($workflow -notmatch '(?m)^\s*npm(?:\.cmd)? run audit:security\s*$') {
     throw 'The production workflow must preserve Renderer dependency auditing.'
 }
 if (([regex]::Matches($workflow, 'verify-production-candidate\.ps1')).Count -lt 3) {
