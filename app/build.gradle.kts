@@ -167,8 +167,22 @@ val bundletoolCli by configurations.creating {
     isVisible = false
 }
 
+val unifiedTestPlatformConfigurationPrefix = "_internal-unified-test-platform-"
+val utpNettyAlignment by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = false
+    isVisible = false
+}
+
+configurations.configureEach {
+    if (name.startsWith(unifiedTestPlatformConfigurationPrefix)) {
+        extendsFrom(utpNettyAlignment)
+    }
+}
+
 dependencies {
     add(bundletoolCli.name, libs.android.bundletool)
+    add(utpNettyAlignment.name, platform("io.netty:netty-bom:4.1.138.Final"))
 
     implementation(platform(libs.androidx.compose.bom))
     testImplementation(platform("org.bouncycastle:bc-jdk18on-bom:1.84"))
@@ -299,6 +313,112 @@ tasks.register("verifyBouncyCastleResolution") {
             unitTestRuntime,
             appRuntime,
             testApkRuntime,
+        )
+    }
+}
+
+val minimumNettyPatchVersion = 138
+val nettyBomModule = "netty-bom"
+val expectedNettyUtpConfigurations = setOf(
+    "${unifiedTestPlatformConfigurationPrefix}core",
+    "${unifiedTestPlatformConfigurationPrefix}android-test-plugin-host-emulator-control",
+    "${unifiedTestPlatformConfigurationPrefix}android-test-plugin-result-listener-gradle",
+)
+val requiredNettyHostModules = setOf(
+    "netty-handler",
+    "netty-codec-http",
+    "netty-codec-http2",
+)
+
+fun resolvedNettyModules(
+    configuration: org.gradle.api.artifacts.Configuration,
+): Map<String, String> {
+    val resolution = configuration.incoming.resolutionResult
+    val unresolved = resolution.allDependencies
+        .filterIsInstance<org.gradle.api.artifacts.result.UnresolvedDependencyResult>()
+    check(unresolved.isEmpty()) {
+        "Cannot verify Netty in unresolved configuration ${configuration.name}: " +
+            unresolved.joinToString { it.attempted.displayName }
+    }
+    return resolution.allComponents
+        .mapNotNull { it.moduleVersion }
+        .filter { it.group == "io.netty" && it.name != nettyBomModule }
+        .associate { it.name to it.version }
+}
+
+fun checkSafeNettyFamily(scope: String, modules: Map<String, String>) {
+    if (modules.isEmpty()) return
+    check(modules.values.toSet().size == 1) {
+        "$scope resolved a mixed Netty family: $modules"
+    }
+    check(modules.values.all { version ->
+        Regex("4\\.1\\.(\\d+)\\.Final").matchEntire(version)
+            ?.groupValues?.get(1)?.toIntOrNull()
+            ?.let { it >= minimumNettyPatchVersion } == true
+    }) {
+        "$scope resolved Netty outside the safe 4.1.x baseline " +
+            "(minimum 4.1.$minimumNettyPatchVersion.Final): $modules"
+    }
+}
+
+tasks.register("verifyNettyResolution") {
+    group = "verification"
+    description = "Verifies fixed host-tool Netty versions and product scope isolation."
+
+    doLast {
+        val buildscriptNetty = resolvedNettyModules(
+            rootProject.buildscript.configurations.getByName("classpath"),
+        )
+        check(buildscriptNetty.isNotEmpty()) {
+            "Buildscript classpath is missing the expected Netty family."
+        }
+        check(buildscriptNetty.keys.containsAll(requiredNettyHostModules)) {
+            "Buildscript classpath is missing expected Netty modules: $buildscriptNetty"
+        }
+        checkSafeNettyFamily("Buildscript classpath", buildscriptNetty)
+
+        val utpConfigurations = configurations
+            .filter { it.name.startsWith(unifiedTestPlatformConfigurationPrefix) }
+            .sortedBy { it.name }
+        val missingExpectedConfigurations = expectedNettyUtpConfigurations -
+            utpConfigurations.mapTo(mutableSetOf()) { it.name }
+        check(missingExpectedConfigurations.isEmpty()) {
+            "Missing expected Unified Test Platform configurations: $missingExpectedConfigurations"
+        }
+        val utpNetty = utpConfigurations.associate { configuration ->
+            configuration.name to resolvedNettyModules(configuration)
+        }
+        expectedNettyUtpConfigurations.forEach { configurationName ->
+            val modules = utpNetty.getValue(configurationName)
+            check(modules.keys.containsAll(requiredNettyHostModules)) {
+                "$configurationName is missing expected Netty modules: $modules"
+            }
+        }
+        utpNetty.forEach { (configurationName, modules) ->
+            checkSafeNettyFamily("UTP configuration $configurationName", modules)
+        }
+
+        val productConfigurations = listOf(
+            "productionReleaseCompileClasspath",
+            "productionReleaseRuntimeClasspath",
+            "productionReleaseUnitTestRuntimeClasspath",
+            "productionReleaseAndroidTestCompileClasspath",
+            "productionReleaseAndroidTestRuntimeClasspath",
+            bundletoolCli.name,
+        )
+        val productNetty = productConfigurations.associateWith { configurationName ->
+            resolvedNettyModules(configurations.getByName(configurationName))
+        }
+        val leakedNetty = productNetty.filterValues { it.isNotEmpty() }
+        check(leakedNetty.isEmpty()) {
+            "Netty modules leaked outside host-tool configurations: $leakedNetty"
+        }
+
+        logger.lifecycle(
+            "Verified Netty resolution: buildscript={}, utp={}, product={}",
+            buildscriptNetty,
+            utpNetty,
+            productNetty,
         )
     }
 }

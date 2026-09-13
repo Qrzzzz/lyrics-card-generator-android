@@ -1,6 +1,7 @@
 buildscript {
     dependencies {
         classpath(platform("org.bouncycastle:bc-jdk18on-bom:1.84"))
+        classpath(platform("io.netty:netty-bom:4.1.138.Final"))
     }
 }
 
