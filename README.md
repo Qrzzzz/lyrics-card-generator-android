@@ -118,7 +118,7 @@ Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容
 ### 环境要求
 
 - JDK 17；
-- Node.js 20 或更高版本；
+- Node.js 24.x（当前唯一完成验证的开发版本）；
 - Android SDK Platform 36.1；
 - Android SDK Build Tools 36.1.0。
 

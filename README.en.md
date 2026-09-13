@@ -118,7 +118,7 @@ The renderer WebView blocks network access, external navigation, file access, an
 ### Requirements
 
 - JDK 17
-- Node.js 20 or later
+- Node.js 24.x (the only currently verified development line)
 - Android SDK Platform 36.1
 - Android SDK Build Tools 36.1.0
 
