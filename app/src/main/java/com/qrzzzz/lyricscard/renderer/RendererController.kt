@@ -36,6 +36,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -124,6 +125,21 @@ data class ExportedImage(
 internal suspend fun deleteStaleExport(file: File) {
     withContext(NonCancellable + Dispatchers.IO) {
         file.delete()
+    }
+}
+
+internal suspend fun acquireExportAssembly(
+    dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    create: () -> ExportAssembly,
+): ExportAssembly {
+    var acquired: ExportAssembly? = null
+    try {
+        return withContext(dispatcher) { create().also { acquired = it } }
+    } catch (cause: Throwable) {
+        // withContext can discard a completed IO result when its caller is cancelled.
+        // Retain ownership inside the IO block until the caller actually receives it.
+        withContext(NonCancellable + dispatcher) { acquired?.abort() }
+        throw cause
     }
 }
 
@@ -635,7 +651,7 @@ class RendererController private constructor(
         if (awaitReady() != sessionId) throw RendererException("渲染器会话已重建，请重试")
         val requestId = UUID.randomUUID().toString()
         val result = CompletableDeferred<RendererEnvelope>()
-        val assembly = withContext(Dispatchers.IO) { createExportAssembly(spec) }
+        val assembly = acquireExportAssembly { createExportAssembly(spec) }
         lateinit var queuedAssembly: QueuedExportAssembly
         queuedAssembly = QueuedExportAssembly(
             assembly = assembly,
@@ -662,11 +678,15 @@ class RendererController private constructor(
             completedNormally = true
             return image
         } finally {
-            pending.remove(requestId)
-            exportAssemblies.remove(requestId, queuedAssembly)
-            if (!result.isCompleted) sendCancel(requestId, sessionId)
-            if (!completedNormally) {
-                withContext(NonCancellable + Dispatchers.IO) { queuedAssembly.abortAndJoin() }
+            // Returning from sendCancel's Main dispatcher must not rethrow cancellation
+            // before the IO worker is joined and its partial file is removed.
+            withContext(NonCancellable) {
+                pending.remove(requestId)
+                exportAssemblies.remove(requestId, queuedAssembly)
+                if (!result.isCompleted) sendCancel(requestId, sessionId)
+                if (!completedNormally) {
+                    withContext(Dispatchers.IO) { queuedAssembly.abortAndJoin() }
+                }
             }
         }
     }
