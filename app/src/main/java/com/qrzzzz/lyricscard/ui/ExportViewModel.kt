@@ -166,6 +166,7 @@ class ExportViewModel internal constructor(
     private var exportJob: Job? = null
     private var previewJob: Job? = null
     private var previewGeneration = 0L
+    private var saveGeneration = 0L
     private var pendingPreviewAction: ExportPendingAction? = null
     private var nextEffectId = 0L
     private val retiredPreviewBitmaps = Collections.newSetFromMap(
@@ -248,6 +249,7 @@ class ExportViewModel internal constructor(
     }
 
     fun saveTo(destination: Uri?) {
+        val request = ++saveGeneration
         if (destination == null) {
             val status = UiText.resource(R.string.export_save_cancelled)
             _uiState.update { it.copy(status = status, errorMessage = null) }
@@ -255,15 +257,22 @@ class ExportViewModel internal constructor(
             return
         }
         val image = _uiState.value.exported ?: return
+        val generation = previewGeneration
+        // A completed write belongs to its original result and latest save request only.
+        // Let the file operation finish even if the user has moved on to another export.
+        fun isCurrentSave() = request == saveGeneration && generation == previewGeneration &&
+            _uiState.value.exported === image
         viewModelScope.launch {
             try {
                 exportFiles.copyTo(image, destination)
+                if (!isCurrentSave()) return@launch
                 val status = UiText.resource(R.string.export_saved)
                 _uiState.update { it.copy(status = status, errorMessage = null) }
                 persistMessages(status, null)
             } catch (cause: CancellationException) {
                 throw cause
             } catch (_: Throwable) {
+                if (!isCurrentSave()) return@launch
                 val message = UiText.resource(R.string.export_save_failed_retryable)
                 _uiState.update { it.copy(errorMessage = message) }
                 persistMessages(_uiState.value.status, message)

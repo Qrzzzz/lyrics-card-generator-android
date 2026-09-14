@@ -17,6 +17,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -117,7 +118,9 @@ class RendererControllerRecoveryTest {
 
     @Test
     fun `user cancellation rebuilds session cleans part and immediately retries`() = runTest {
-        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        // Dispatch back from sendCancel as on a device; an unconfined Main dispatcher hides
+        // prompt cancellation between sending the bridge cancellation and deleting the file.
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val context = ApplicationProvider.getApplicationContext<Context>()
         val exportDir = File(context.cacheDir, "exports")
         deletePartFiles(exportDir)
