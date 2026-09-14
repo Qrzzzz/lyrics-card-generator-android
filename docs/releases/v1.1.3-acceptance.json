@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "policy": "focused-manual-v1",
+  "version": "1.1.3",
+  "sourceCommit": "e3d6bc9e32290a228bcff9372a81526f56675fe8",
+  "candidateRunId": 34804339000,
+  "candidateRunAttempt": 1,
+  "candidateArtifactName": "production-candidate-1.1.3-e3d6bc9e3229",
+  "dependencyRunId": 34803501283,
+  "device": {
+    "kind": "physical",
+    "model": "Xiaomi 2210132C",
+    "api": 36,
+    "versionName": "1.1.3",
+    "versionCode": 10103,
+    "installedApkSha256": "3032a403b246142fcbaca5af639bed68e0b22b343851344c278b4edf2e9d95bd"
+  },
+  "confirmedBy": "Qrzzzz",
+  "confirmedAt": "2026-09-14T04:38:00.5244531Z",
+  "confirmation": "维护者 Qrzzzz 在确认手机当前已安装正式 1.1.3 / 10103、base.apk SHA-256 与本候选一致后，回复“全部通过”，确认打开、编辑歌词、预览、导出 PNG、保存后打开图片、打开分享面板六项通过。设备安装、版本和哈希由代理核实，六项人工操作由维护者确认。",
+  "checks": {
+    "open": "PASS",
+    "edit": "PASS",
+    "preview": "PASS",
+    "exportPng": "PASS",
+    "saveAndOpen": "PASS",
+    "shareSheet": "PASS"
+  },
+  "notCovered": [
+    "完整 API 26/30/33/36 矩阵；本次仅完成 API 30 serif 1×→2× 和取消清理/重试定向测试",
+    "UTP / instrumentation 依赖兼容专项",
+    "20 次连续导出、4 GB 内存专项和 30 分钟耐久",
+    "TalkBack 手势与 200% 字体专项",
+    "向第三方应用或联系人实际发送图片"
+  ]
+}
