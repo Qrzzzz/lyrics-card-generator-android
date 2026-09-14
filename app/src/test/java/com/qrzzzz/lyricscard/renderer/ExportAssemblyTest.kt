@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -97,6 +98,24 @@ class ExportAssemblyTest {
         assembly.abort()
 
         assertFalse(part.exists())
+    }
+
+    @Test
+    fun `queued invalid chunk reports failure and abort removes partial without publishing`() = runTest {
+        val part = temporaryFolder.root.resolve("queued-invalid.png.part")
+        val final = temporaryFolder.root.resolve("queued-invalid.png")
+        val assembly = ExportAssembly(part, final)
+        val failures = mutableListOf<Throwable>()
+        val queue = QueuedExportAssembly(assembly, this) { failures += it }
+        assertTrue(queue.offer(1, 2, 1, Base64.getEncoder().encodeToString(byteArrayOf(1))))
+        queue.seal()
+        val failure = runCatching { queue.awaitDrained() }.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+        assertEquals(listOf(failure), failures)
+        assertFalse(queue.offer(0, 1, 1, "AQ=="))
+        queue.abortAndJoin()
+        assertFalse(part.exists())
+        assertFalse(final.exists())
     }
 
     @Test
