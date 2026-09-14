@@ -42,6 +42,8 @@ Dependabot 将 React、React DOM 及类型定义放在同一组，其余兼容�
 
 ## 发布复用
 
+1.1.4 按维护者明确授权跳过六项人工验收，记录 NOT RUN 和版本限定的 `manualAcceptanceWaiver`，不记录虚构设备；具体例外见 RELEASE_CHECKLIST。CI、签名、来源及原始附件校验不豁免，后续版本不继承该例外。
+
 引用冻结 source SHA 的成功 main Quality Gate，无需在本地再跑同一套 Renderer/JVM 全量测试。签名 job 安装锁定依赖、重新审计，然后运行 productionRelease JVM/lint 与生产 APK/AAB/test APK 构建、证书和 provenance 检查；alpha/debug 测试由原 Quality Gate 证明。
 
 签名 source 与 main dispatch/工作流 SHA 相同，审批期间允许 main 正常前进，来源必须仍属于主干历史。常规发布由 Publish Verified Candidate 读取主干中已确认的人工验收记录，验证 source/发布 validator 的祖先链、run/attempt、原产物字节和 attestation，再发布五个原始附件。

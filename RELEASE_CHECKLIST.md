@@ -13,6 +13,8 @@
 
 ## 2. 真机核心验收
 
+**仅 1.1.4 的维护者授权例外（2026-09-14）：** 维护者明确要求“默认直接跳过 6 项人工验收，做完后直接发布”。本版沿用 focused-manual-v1 托管发布入口，在验收记录中以 `manualAcceptanceWaiver` 记录该版本限定授权；六项全部为 NOT RUN、`device` 为 null，使用 `candidate` 的版本/版本码/APK SHA-256 绑定原附件，不虚构安装或设备结果。Publish 校验器拒绝其他版本、缺失授权、混入 PASS/FAIL 或候选哈希不匹配的豁免。签名、主干同 SHA CI、来源、证书、checksums、attestation 与环境审批继续执行。后续版本仍适用以下常规要求。
+
 - [ ] 获授权手机上实际安装的版本和 base.apk SHA-256 与候选匹配。
 - [ ] 维护者实际完成：打开、编辑歌词、预览、导出 PNG、保存后打开图片、打开分享面板。无需向联系人发送。
 - [ ] 在 `docs/releases/v<version>-acceptance.json` 记录 source/run/attempt/artifact、设备型号/API/版本/安装哈希、确认人/时间、六项结果和未覆盖范围。

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version with a committed manual acceptance record (x.y.z)
+        description: Version with a committed acceptance and authorization record (x.y.z)
         required: true
         type: string
 
@@ -35,7 +35,7 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
-      - name: Validate the committed manual acceptance
+      - name: Validate the committed acceptance and authorization
         id: acceptance
         run: node scripts/publish-release.mjs prepare
       - name: Download the original signed candidate
