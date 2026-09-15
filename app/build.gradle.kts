@@ -272,8 +272,12 @@ tasks.register("verifyProtobufAndAccessibilityResolution") {
         val testScopes = listOf("productionReleaseAndroidTestCompileClasspath", "productionReleaseAndroidTestRuntimeClasspath")
         val testModules = testScopes.associateWith { modules(configurations.getByName(it)) }
         testModules.forEach { (scope, resolved) ->
-            val guavaArtifacts = configurations.getByName(scope).resolvedConfiguration.resolvedArtifacts
-                .filter { it.moduleVersion.id.group == "com.google.guava" && it.name == "guava" }
+            val guavaArtifacts = configurations.getByName(scope).incoming.artifactView {
+                componentFilter { id ->
+                    id is org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
+                        id.group == "com.google.guava" && id.module == "guava"
+                }
+            }.artifacts.artifacts
             check(guavaArtifacts.size == 1 && guavaArtifacts.single().file.name.endsWith("-android.jar")) {
                 "$scope must consume one Android Guava artifact: ${guavaArtifacts.map { it.file.name }}"
             }
