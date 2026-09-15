@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | buildscript / bundletoolCli / 十二个 UTP 配置 | Protobuf Java/Kotlin 3.25.5，只在相应宿主配置加约束 | 实际依赖解析 PASS；UTP core 与 Kotlin 路径必需存在；混合版本、旧版本或未解析路径拒绝 |
 | AndroidTest compile/runtime | Guava 33.4.8-android，替代只升级 compileOnly 的 #51 | 两侧版本和实际 Android JAR 校验 PASS，duplicate classes 与 R8 PASS |
-| ATF 3.1.2 runtime | jsoup 1.15.3 | 解析与真实 ATF instrumentation PASS；ATF 未公开的 jsoup 不强行加入 compile API |
+| ATF 3.1.2 runtime | jsoup 1.23.1 | 解析与真实 ATF instrumentation PASS；覆盖主干扫描新识别的 #64，ATF 未公开的 jsoup 不强行加入 compile API |
 | app compile/runtime | 不增加以上宿主/测试依赖 | 隔离校验 PASS |
 
 #51 在 run 34817769504 首先失败于 `verifyNettyResolution`，实际原因是 Guava 32.0.0-android 编译依赖与运行时 strictly 28.2-android 冲突。对齐 32.0.1 后，本地 test APK R8 进一步暴露缺失 `java.lang.reflect.AnnotatedType`；改为 33.4.8-android，未关闭 R8 或添加忽略规则。[Guava 33.0.0 上游说明](https://github.com/google/guava/releases/tag/v33.0.0)确认移除了这些 Android 上不可用的方法。
@@ -31,6 +31,12 @@
 | `AccessibilityFrameworkTest` | PASS，6.596 秒；home/editor/export/settings 四阶段，ATF preset 3.1，每阶段 12 checks |
 
 XML 汇总：3 tests / 0 failures / 0 errors / 0 skipped。原始 connected 日志、logcat、XML、解析日志、合同日志及 SHA256SUMS 保存在维护者机器 `C:\Users\qrzzz\Downloads\LCG_Android_1.1.5_evidence`。正式候选的 source/run/哈希另由发布记录绑定，不以诊断包替代。
+
+## 默认分支复扫后的最终 jsoup 补丁
+
+PR #63 合并为 `09fe2bd4e171cd4acae10b8d83e06553abb88aba`；Dependency Security 34968323516 成功，原告警 #1/#2/#5/#6/#10/#11 全部 fixed。扫描随后新建 medium #64（[GHSA-pmhh-3w7g-xqp8](https://github.com/jhy/jsoup/security/advisories/GHSA-pmhh-3w7g-xqp8)，>=1.14.3 且 <1.23.1），因此最终测试依赖及校验下限升级到 1.23.1。
+
+补丁 `0bcf162`，本地等价提交 `5ade299`：实际解析、test APK R8 和 API 30 全新安装的三个 connected UTP 测试再次 PASS，0 failures / 0 errors / 0 skipped。取消清理重试 15.323 秒、serif 1×/2× 15.239 秒、ATF 四阶段 5.167 秒。应用 APK 字节未变；新的诊断 test APK SHA-256 为 `1a8593214b9d296fa2c1a4c34818c47750bbdf85424a95f884ed3bf84eb76d61`。同一证据目录新增 `jsoup-1.23.1-api30-tests.xml`、`jsoup-1.23.1-api30-logcat.txt`、`lcg-115-jsoup-connected.log`，上节旧测试记录保留其原始范围。
 
 ## #9 与后续事项
 
