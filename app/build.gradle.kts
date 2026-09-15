@@ -189,7 +189,7 @@ dependencies {
             add(scope, "com.google.protobuf:protobuf-java:3.25.5")
             add(scope, "com.google.protobuf:protobuf-kotlin:3.25.5")
         }
-        androidTestImplementation("org.jsoup:jsoup:1.15.3")
+        androidTestImplementation("org.jsoup:jsoup:1.23.1")
     }
 
     implementation(platform(libs.androidx.compose.bom))
@@ -288,7 +288,7 @@ tasks.register("verifyProtobufAndAccessibilityResolution") {
             val jsoup = resolved["org.jsoup:jsoup"]
             // ATF exposes jsoup only at runtime. Do not add a compile dependency just for this guard.
             if (scope.endsWith("RuntimeClasspath")) check(jsoup != null) { "$scope missing jsoup" }
-            if (jsoup != null) check(isVersionAtLeast(jsoup, "1.15.3")) { "$scope vulnerable jsoup: $jsoup" }
+            if (jsoup != null) check(isVersionAtLeast(jsoup, "1.23.1")) { "$scope vulnerable jsoup: $jsoup" }
             check("com.google.android.apps.common.testing.accessibility.framework:accessibility-test-framework" in resolved)
             logger.lifecycle("Verified {} Guava={} jsoup={}", scope, guava, resolved["org.jsoup:jsoup"])
         }
