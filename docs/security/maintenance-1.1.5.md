@@ -40,6 +40,16 @@ PR #63 合并为 `09fe2bd4e171cd4acae10b8d83e06553abb88aba`；Dependency Securit
 
 ## #9 与后续事项
 
+### 正式签名产物复核
+
+最终主干 `f45b721abd2810f6cbda6670127b03c9c1e4010e` 的 Quality Gate 34969949352、Dependency Security 34969949272、生产候选 34971809673 / attempt 1 均 PASS。默认分支实际告警 #1/#2/#5/#6/#10/#11/#64 全部 fixed，未 dismiss；只剩 #53/#7/#8 三条 medium。
+
+正式 APK SHA-256：`84eae2d8c694aca3b847bfe218b15e1f47ad242d8c2d26f46eb498c372c70e25`；正式 test APK：`c6cb8258a180e1b87bdb02f1b476619319fe9041a5ad0972e5cb68c1eb9b434e`。两份文件均通过 GitHub attestation 的 source、main workflow 和精确 invocation `34971809673/attempts/1` 验证，以及 apksigner 生产证书连续性校验。
+
+上述 API 30 AVD 全新安装正式包，设备 `/data/app/.../base.apk` 实测 SHA-256 与各自候选相同。使用 `am instrument -w -r -e class <上述三个 selector>` 执行，实际结果 **OK (3 tests)**，42.208 秒；三个测试均正常结束，无跳过。serif 1040×1613 / 2080×3226、rendererErrors=0、partialFiles=0，真实取消后 partialsAfterCancel=0、重试 PNG 有效、generation 推进；ATF home/editor/export/settings 四阶段均 PASS。
+
+证据目录新增 `production-api30-instrumentation.txt`、`production-api30-logcat.txt`、`production-installed-hashes.json` 和 APK/test APK 的 attestation JSON。五个原始附件的哈希由发布校验器本地再次验证；下载归档 SHA-256 `eb12ab2364754e6b01b22a76349888de1b9b57be10dcd065dec97c7d345be531` 与 GitHub artifact digest 一致。网络续传没有改变候选字节，原 metadata 的 PROVISIONAL / NOT RUN / finalReady=false 保持原样。
+
 1.1.3 的正式 API 30 结果见 [v1.1.3](../releases/v1.1.3.md)。此后仅将 ExportAssembly 从 RendererController 抽出，未修改 8 秒超时、渲染协议或保存竞态修复。本轮同一旧 WebView 的 fresh-install serif 和取消重试再次 PASS，当前版本未复现原始风险；已有确定性旧回调、取消交接及保存竞态回归继续受完整 CI 保护。按此范围关闭 #9，不将历史 FAIL 改写为 PASS。
 
 Kotlin #53 / Commons Compress #7/#8 仍待 1.1.6，责任人 Qrzzzz、原 medium 期限 2026-10-02。#35/#45 保持 OPEN；本次六条告警需待默认分支 dependency submission 后核实 fixed，不能人工 dismiss 冒充修复。#56/#57 留在计划后续版本。
