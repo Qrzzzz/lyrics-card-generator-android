@@ -58,8 +58,8 @@ android {
         applicationId = "com.qrzzzz.lyricscard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10104
-        versionName = "1.1.4"
+        versionCode = 10105
+        versionName = "1.1.5"
 
         testInstrumentationRunner = "com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner"
         testProguardFiles("test-proguard-rules.pro")
@@ -185,6 +185,11 @@ dependencies {
     add(utpNettyAlignment.name, platform("io.netty:netty-bom:4.1.138.Final"))
     constraints {
         add(bundletoolCli.name, "org.bitbucket.b_c:jose4j:0.9.6")
+        for (scope in listOf(bundletoolCli.name, utpNettyAlignment.name)) {
+            add(scope, "com.google.protobuf:protobuf-java:3.25.5")
+            add(scope, "com.google.protobuf:protobuf-kotlin:3.25.5")
+        }
+        androidTestImplementation("org.jsoup:jsoup:1.15.3")
     }
 
     implementation(platform(libs.androidx.compose.bom))
@@ -223,11 +228,79 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.test.espresso.accessibility)
-    androidTestCompileOnly(libs.guava.atf)
+    androidTestImplementation(libs.guava.atf)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
 
 val minimumBouncyCastleVersion = "1.84"
+
+tasks.register("verifyProtobufAndAccessibilityResolution") {
+    group = "verification"
+    description = "Verifies patched Protobuf host paths and aligned accessibility test dependencies."
+    doLast {
+        fun modules(configuration: org.gradle.api.artifacts.Configuration): Map<String, String> {
+            val resolution = configuration.incoming.resolutionResult
+            val unresolved = resolution.allDependencies
+                .filterIsInstance<org.gradle.api.artifacts.result.UnresolvedDependencyResult>()
+            check(unresolved.isEmpty()) { "Unresolved ${configuration.name}: $unresolved" }
+            return resolution.allComponents.mapNotNull { it.moduleVersion }
+                .associate { "${it.group}:${it.name}" to it.version }
+        }
+        fun protobuf(scope: String, resolved: Map<String, String>, required: Set<String>) {
+            val family = resolved.filterKeys {
+                it in setOf("com.google.protobuf:protobuf-java", "com.google.protobuf:protobuf-kotlin")
+            }
+            check(family.keys.containsAll(required)) { "$scope missing Protobuf modules: $family" }
+            check(family.values.all { isVersionAtLeast(it, "3.25.5") }) {
+                "$scope vulnerable Protobuf: $family"
+            }
+            check(family.values.toSet().size <= 1) { "$scope mixed Protobuf family: $family" }
+            logger.lifecycle("Verified {} Protobuf: {}", scope, family)
+        }
+        val javaModule = setOf("com.google.protobuf:protobuf-java")
+        protobuf("buildscript", modules(rootProject.buildscript.configurations.getByName("classpath")), javaModule)
+        protobuf("bundletoolCli", modules(bundletoolCli), javaModule)
+        val utp = configurations.filter { it.name.startsWith(unifiedTestPlatformConfigurationPrefix) }
+        check(utp.map { it.name }.containsAll(expectedNettyUtpConfigurations)) { "Missing UTP configurations" }
+        var kotlinFound = false
+        utp.forEach {
+            val resolved = modules(it)
+            kotlinFound = kotlinFound || "com.google.protobuf:protobuf-kotlin" in resolved
+            protobuf(it.name, resolved, if (it.name.endsWith("-core")) javaModule else emptySet())
+        }
+        check(kotlinFound) { "Expected UTP protobuf-kotlin path was not inspected" }
+        val testScopes = listOf("productionReleaseAndroidTestCompileClasspath", "productionReleaseAndroidTestRuntimeClasspath")
+        val testModules = testScopes.associateWith { modules(configurations.getByName(it)) }
+        testModules.forEach { (scope, resolved) ->
+            val guavaArtifacts = configurations.getByName(scope).incoming.artifactView {
+                componentFilter { id ->
+                    id is org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
+                        id.group == "com.google.guava" && id.module == "guava"
+                }
+            }.artifacts.artifacts
+            check(guavaArtifacts.size == 1 && guavaArtifacts.single().file.name.endsWith("-android.jar")) {
+                "$scope must consume one Android Guava artifact: ${guavaArtifacts.map { it.file.name }}"
+            }
+            val guava = resolved["com.google.guava:guava"] ?: error("$scope missing Guava")
+            check(guava.endsWith("-android") && isVersionAtLeast(guava.removeSuffix("-android"), "32.0.1")) {
+                "$scope unsafe or JRE Guava: $guava"
+            }
+            val jsoup = resolved["org.jsoup:jsoup"]
+            // ATF exposes jsoup only at runtime. Do not add a compile dependency just for this guard.
+            if (scope.endsWith("RuntimeClasspath")) check(jsoup != null) { "$scope missing jsoup" }
+            if (jsoup != null) check(isVersionAtLeast(jsoup, "1.15.3")) { "$scope vulnerable jsoup: $jsoup" }
+            check("com.google.android.apps.common.testing.accessibility.framework:accessibility-test-framework" in resolved)
+            logger.lifecycle("Verified {} Guava={} jsoup={}", scope, guava, resolved["org.jsoup:jsoup"])
+        }
+        check(testModules.values.map { it["com.google.guava:guava"] }.toSet().size == 1) { "Compile/runtime Guava mismatch" }
+        for (scope in listOf("productionReleaseCompileClasspath", "productionReleaseRuntimeClasspath")) {
+            val leaked = modules(configurations.getByName(scope)).filterKeys {
+                it.startsWith("com.google.protobuf:protobuf-") || it == "com.google.guava:guava" || it == "org.jsoup:jsoup"
+            }
+            check(leaked.isEmpty()) { "Host/test dependencies leaked into $scope: $leaked" }
+        }
+    }
+}
 val bouncyCastleBomModule = "bc-jdk18on-bom"
 val requiredBuildscriptBouncyCastleModules =
     setOf("bcprov-jdk18on", "bcpkix-jdk18on", "bcutil-jdk18on")

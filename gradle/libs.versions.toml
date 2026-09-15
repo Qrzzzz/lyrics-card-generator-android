@@ -17,7 +17,7 @@ serialization-json = "1.7.3"
 androidx-test-core = "1.6.1"
 androidx-test-ext-junit = "1.2.1"
 espresso = "3.6.1"
-guava-atf = "28.2-android"
+guava-atf = "33.4.8-android"
 junit = "4.13.2"
 robolectric = "4.16.1"
 

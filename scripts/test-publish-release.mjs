@@ -54,6 +54,31 @@ test('one-release waiver requires explicit authorization and truthful untested s
   assert.match(acceptanceSummary(acceptance()), /分享面板通过/);
 });
 
+test('optional manual acceptance supports later releases while preserving evidence boundaries', () => {
+  for (const version of ['1.1.5', '1.1.6', '1.2.0', '2.0.0']) {
+    const a = waivedAcceptance();
+    a.version = a.candidate.versionName = a.manualAcceptanceWaiver.version = version;
+    a.candidateArtifactName = `production-candidate-${version}-${a.sourceCommit.slice(0, 12)}`;
+    a.manualAcceptanceWaiver.authorization = '删掉以前的强制的真机实测环节，做完后直接release';
+    validateAcceptance(a, version);
+    for (const mutate of [
+      b => { b.checks.open = 'PASS'; },
+      b => { b.device = acceptance().device; },
+      b => { b.manualAcceptanceWaiver.version = '1.1.4'; },
+      b => { b.manualAcceptanceWaiver.authorization = ''; },
+      b => { b.candidate.apkSha256 = ''; },
+      b => { b.candidateRunId = 0; },
+    ]) {
+      const invalid = structuredClone(a); mutate(invalid);
+      assert.throws(() => validateAcceptance(invalid, version));
+    }
+  }
+  const old = waivedAcceptance();
+  old.version = old.candidate.versionName = old.manualAcceptanceWaiver.version = '1.1.3';
+  old.candidateArtifactName = `production-candidate-1.1.3-${old.sourceCommit.slice(0, 12)}`;
+  assert.throws(() => validateAcceptance(old, '1.1.3'));
+});
+
 test('manual acceptance rejects incomplete, failed, wrong-version and unbound records', () => {
   validateAcceptance(acceptance(), '1.1.1');
   for (const mutate of [

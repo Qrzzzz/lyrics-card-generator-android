@@ -5,7 +5,7 @@
 | 用途 | 保留的验收 | 不应被当作本次完成证据的内容 |
 | --- | --- | --- |
 | 普通合并 | 本次涉及的产品正确性、依赖差异与流程合同；保护分支要求的检查结果 | 其他 SHA 的绿灯、缺失或被取消的应执行检查 |
-| 常规发布 | `focused-manual-v1`：主干同 SHA 全量 CI、可信签名候选、来源/证书/哈希/attestation、实际安装哈希与真机六项 | PR 的轻量检查、自动填写的人工结果、旧候选的验收 |
+| 常规发布 | `focused-manual-v1`：主干同 SHA 全量 CI、可信签名候选、来源/证书/哈希/attestation、候选哈希与可选人工验收 | PR 的轻量检查、自动填写的人工结果、旧候选的验收 |
 | 按需专项 | API 30 probe、跨 API 矩阵、耐久、低内存、TalkBack/大字体；旧 Capture/Final 仅在安排专项时使用 | 未运行的专项，或以专项缺设备阻止无关补丁合并 |
 | 历史记录 | 绑定原 SHA/run 的旧失败、阻塞、签名 metadata 与已发布验收 | 将旧 FAIL/NOT RUN 改写成 PASS 或作为每版必须重跑的清单 |
 
@@ -42,15 +42,15 @@ Dependabot 将 React、React DOM 及类型定义放在同一组，其余兼容�
 
 ## 发布复用
 
-1.1.4 按维护者明确授权跳过六项人工验收，记录 NOT RUN 和版本限定的 `manualAcceptanceWaiver`，不记录虚构设备；具体例外见 RELEASE_CHECKLIST。CI、签名、来源及原始附件校验不豁免，后续版本不继承该例外。
+自 1.1.5 起按维护者授权永久取消强制真机人工验收。未执行时六项记录 NOT RUN、device=null，并通过版本绑定的 manualAcceptanceWaiver 和 candidate 哈希记录发布授权；1.1.4 历史记录保持兼容。CI、签名、来源及原始附件校验继续执行。
 
 引用冻结 source SHA 的成功 main Quality Gate，无需在本地再跑同一套 Renderer/JVM 全量测试。签名 job 安装锁定依赖、重新审计，然后运行 productionRelease JVM/lint 与生产 APK/AAB/test APK 构建、证书和 provenance 检查；alpha/debug 测试由原 Quality Gate 证明。
 
-签名 source 与 main dispatch/工作流 SHA 相同，审批期间允许 main 正常前进，来源必须仍属于主干历史。常规发布由 Publish Verified Candidate 读取主干中已确认的人工验收记录，验证 source/发布 validator 的祖先链、run/attempt、原产物字节和 attestation，再发布五个原始附件。
+签名 source 与 main dispatch/工作流 SHA 相同，审批期间允许 main 正常前进，来源必须仍属于主干历史。常规发布由 Publish Verified Candidate 读取主干中已确认的验收与发布授权记录，验证 source/发布 validator 的祖先链、run/attempt、原产物字节和 attestation，再发布五个原始附件。
 
 生产候选、测试 APK、设备证据与最终 verdict 的 Actions artifact 均保留 90 天。此设置只影响新上传的 artifact，已经过期或按旧设置上传的产物不会自动延期。
 
-产品或测试 APK 改变仍要重新冻结候选。仅修改 CI/验证流程时不需要重新签同一 APK；真机按发布清单确认核心操作，专项设备测试按风险选择，历史失败记录保留。旧 Capture/Final 工作流默认禁用，可在明确安排完整矩阵时另行启用。
+产品或测试 APK 改变仍要重新冻结候选。仅修改 CI/验证流程时不需要重新签同一 APK；真机核心操作改为可选，专项设备测试按风险选择，历史失败记录保留。旧 Capture/Final 工作流默认禁用，可在明确安排完整矩阵时另行启用。
 
 ## 验证脚本
 

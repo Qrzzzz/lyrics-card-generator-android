@@ -11,13 +11,13 @@
 - [ ] Production Release Candidate 从受保护 main dispatch，生产签名环境保留审批、来源限制和连续证书锚点。
 - [ ] 同一签名运行生成 APK/AAB、mapping、metadata、SHA256SUMS，并通过 GitHub attestation。生产密钥不进入源码、日志或发布附件。
 
-## 2. 真机核心验收
+## 2. 可选真机验收与发布记录
 
-**仅 1.1.4 的维护者授权例外（2026-09-14）：** 维护者明确要求“默认直接跳过 6 项人工验收，做完后直接发布”。本版沿用 focused-manual-v1 托管发布入口，在验收记录中以 `manualAcceptanceWaiver` 记录该版本限定授权；六项全部为 NOT RUN、`device` 为 null，使用 `candidate` 的版本/版本码/APK SHA-256 绑定原附件，不虚构安装或设备结果。Publish 校验器拒绝其他版本、缺失授权、混入 PASS/FAIL 或候选哈希不匹配的豁免。签名、主干同 SHA CI、来源、证书、checksums、attestation 与环境审批继续执行。后续版本仍适用以下常规要求。
+**仅 1.1.4 的维护者授权例外（2026-09-14）：** 维护者明确要求“默认直接跳过 6 项人工验收，做完后直接发布”。本版沿用 focused-manual-v1 托管发布入口，在验收记录中以 `manualAcceptanceWaiver` 记录该版本限定授权；六项全部为 NOT RUN、`device` 为 null，使用 `candidate` 的版本/版本码/APK SHA-256 绑定原附件，不虚构安装或设备结果。Publish 校验器拒绝其他版本、缺失授权、混入 PASS/FAIL 或候选哈希不匹配的豁免。签名、主干同 SHA CI、来源、证书、checksums、attestation 与环境审批继续执行。该段只描述历史 1.1.4 例外；后续规则见下方。
 
-- [ ] 获授权手机上实际安装的版本和 base.apk SHA-256 与候选匹配。
-- [ ] 维护者实际完成：打开、编辑歌词、预览、导出 PNG、保存后打开图片、打开分享面板。无需向联系人发送。
-- [ ] 在 `docs/releases/v<version>-acceptance.json` 记录 source/run/attempt/artifact、设备型号/API/版本/安装哈希、确认人/时间、六项结果和未覆盖范围。
+- 自 1.1.5 起，按维护者 2026-09-15 明确授权“删掉以前的强制的真机实测环节，做完后直接release”，六项真机人工验收永久改为可选。沿用现有托管发布入口和 `focused-manual-v1` 标识。
+- [ ] 在 `docs/releases/v<version>-acceptance.json` 记录 source/run/attempt/artifact、确认人/时间和未覆盖范围。未执行人工验收时，六项全部 NOT RUN、device=null；candidate 记录版本、版本码和原 APK SHA-256，manualAcceptanceWaiver 绑定本版、维护者和上述授权。
+- 若主动进行真机验收，才记录实际手机、安装版本和 base.apk 哈希，以及打开、编辑歌词、预览、导出 PNG、保存后打开图片、分享面板的真实结果。
 - [ ] 失败或未执行保持 FAIL/NOT RUN，不能填写 PASS；修复影响 APK 时重新冻结候选并验证受影响操作。
 
 API 30 专项复核、多版本完整矩阵、20 次导出、4 GB 内存、30 分钟耐久、TalkBack 与大字体测试按实际风险单独安排。它们不再是每版发布前提；未执行时在 Release 明确列出，不能声称专项通过。
@@ -26,7 +26,7 @@ API 30 专项复核、多版本完整矩阵、20 次导出、4 GB 内存、30 �
 
 - [ ] 提交验收记录、版本说明和流程改动；通过主干保护要求的 PR 检查。
 - [ ] 从 main dispatch `Publish Verified Candidate`，仅输入版本。已有发布授权持续有效；通过 GitHub 正常环境审批继续，不反复要求聊天确认。
-- [ ] 托管 runner 从记录指定的原 candidate run 下载五个附件，检查 source/run/attempt、同 SHA CI、主干祖先关系、生产证书、安装哈希、metadata/checksums 和所有附件的 attestation。
+- [ ] 托管 runner 从记录指定的原 candidate run 下载五个附件，检查 source/run/attempt、同 SHA CI、主干祖先关系、生产证书、候选哈希（实际真机验收时为安装哈希）、metadata/checksums 和所有附件的 attestation。
 - [ ] 在冻结 source 创建 annotated tag；先创建草稿、上传原始五附件，核对 GitHub asset digest 后公开。冲突标签或不同附件必须停止，不能强制覆盖。
 - [ ] 原始 metadata 保留构建时 PROVISIONAL/NOT RUN/finalReady=false；当前验收由 main 上的人工记录和 publication receipt 表达，不伪造旧 FINAL READY。
 - [ ] 公开核验 Release、tag/source、五个附件名称和 GitHub SHA-256 digest。正常成功后不重复下载数百 MB 文件。
