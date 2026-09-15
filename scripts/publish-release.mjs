@@ -16,7 +16,7 @@ const candidateApkHash = a => hasManualWaiver(a) ? a.candidate.apkSha256 : a.dev
 
 export function acceptanceSummary(a) {
   return hasManualWaiver(a)
-    ? '六项人工验收：NOT RUN，维护者明确授权仅 1.1.4 跳过；本次未执行实体设备安装验证，不声称人工操作通过。'
+    ? `六项人工验收：NOT RUN，维护者授权 ${a.version} 按可选人工验收规则发布；本次未执行实体设备安装验证，不声称人工操作通过。`
     : `设备：${a.device.model} / API ${a.device.api}；打开、编辑、预览、PNG 导出、保存后打开和分享面板通过。`;
 }
 export async function hashFile(path) {
@@ -34,12 +34,15 @@ export function validateAcceptance(a, version) {
   assert.ok(positive(a.candidateRunId) && positive(a.candidateRunAttempt) && positive(a.dependencyRunId));
   assert.equal(a.candidateArtifactName, `production-candidate-${version}-${a.sourceCommit.slice(0, 12)}`);
   if (hasManualWaiver(a)) {
-    // Maintainer's explicit one-release exception, committed through protected main.
-    // It does not waive candidate identity, signing, CI, ancestry or asset validation.
-    assert.equal(version, '1.1.4', 'Manual waiver is restricted to 1.1.4');
+    // From 1.1.5 manual device checks are optional; preserve the historical 1.1.4 record.
+    // Candidate identity, signing, CI, ancestry and original bytes remain mandatory.
+    const [major, minor, patch] = version.split('.').map(Number);
+    assert.ok(major > 1 || (major === 1 && (minor > 1 || (minor === 1 && patch >= 4))),
+      'Optional manual acceptance starts at 1.1.5, with the historical 1.1.4 exception');
     assert.deepEqual(a.manualAcceptanceWaiver, {
-      version: '1.1.4', scope: 'six-manual-checks', authorizedBy: 'Qrzzzz',
-      authorization: '默认直接跳过 6 项人工验收，做完后直接发布',
+      version, scope: 'six-manual-checks', authorizedBy: 'Qrzzzz',
+      authorization: version === '1.1.4' ? '默认直接跳过 6 项人工验收，做完后直接发布'
+        : '删掉以前的强制的真机实测环节，做完后直接release',
     });
     assert.equal(a.confirmedBy, a.manualAcceptanceWaiver.authorizedBy);
     assert.equal(a.device, null, 'Do not invent device evidence for an untested release');
