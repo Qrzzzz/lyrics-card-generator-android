@@ -276,7 +276,10 @@ tasks.register("verifyProtobufAndAccessibilityResolution") {
             check(guava.endsWith("-android") && isVersionAtLeast(guava.removeSuffix("-android"), "32.0.1")) {
                 "$scope unsafe or JRE Guava: $guava"
             }
-            check(isVersionAtLeast(resolved["org.jsoup:jsoup"] ?: error("$scope missing jsoup"), "1.15.3"))
+            val jsoup = resolved["org.jsoup:jsoup"]
+            // ATF exposes jsoup only at runtime. Do not add a compile dependency just for this guard.
+            if (scope.endsWith("RuntimeClasspath")) check(jsoup != null) { "$scope missing jsoup" }
+            if (jsoup != null) check(isVersionAtLeast(jsoup, "1.15.3")) { "$scope vulnerable jsoup: $jsoup" }
             check("com.google.android.apps.common.testing.accessibility.framework:accessibility-test-framework" in resolved)
             logger.lifecycle("Verified {} Guava={} jsoup={}", scope, guava, resolved["org.jsoup:jsoup"])
         }
