@@ -562,6 +562,11 @@ tasks.register("verifyHostParserResolution") {
             }
             logger.lifecycle("Verified build tool {}:{}", coordinate, selected)
         }
+        val loadedR8 = com.android.tools.r8.Version.getVersionString()
+        check(isVersionAtLeast(loadedR8.substringBefore(" "), "9.1.29")) {
+            "AGP loaded an incompatible R8 implementation: $loadedR8"
+        }
+        logger.lifecycle("Verified loaded R8 implementation: {}", loadedR8)
         checkPatchedHostParserModules(
             "Buildscript classpath",
             buildscriptModules,
