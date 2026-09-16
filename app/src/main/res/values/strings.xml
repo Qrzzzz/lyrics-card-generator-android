@@ -320,5 +320,17 @@
     <string name="error_lyric_line_limit">%1$s最多可包含 %2$d 行，当前为 %3$d 行。内容未被更改。</string>
     <string name="error_imported_lyric_line_limit">导入的歌词共有 %2$d 行，超过 %1$d 行上限。当前项目未被更改。</string>
     <string name="error_loaded_lyric_line_limit">项目中的%1$s共有 %3$d 行，超过 %2$d 行上限。项目已保留且未修改。</string>
+    <string name="v2_auto_lyrics_width">自动歌词宽度</string>
+    <string name="v2_lyrics_width">歌词宽度</string>
+    <string name="v2_requested_height">期望高度（内容过长时自动扩展）</string>
+    <string name="v2_auto_width">自动宽度</string>
+    <string name="v2_font_imported">字体已导入</string>
+    <string name="v2_font_failed">字体导入失败</string>
+    <string name="v2_font_importing">正在导入…</string>
+    <string name="v2_font_import">导入自定义字体</string>
+    <string name="v2_font_use">使用导入字体</string>
+    <string name="v2_latin_font">西文字体（本机可用字体名称）</string>
+    <string name="v2_font_weight">字重</string>
+    <string name="v2_font_italic">斜体</string>
 </resources>
 

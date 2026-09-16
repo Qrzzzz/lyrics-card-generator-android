@@ -75,7 +75,7 @@ data class TypographySpec(
     val alignment: TextAlignment = TextAlignment.LEFT,
     val translationScale: Double = 0.75,
     val twoLineTitle: Boolean = false,
-    val textColorMode: TextColorMode = TextColorMode.AUTO,
+    val textColorMode: TextColorMode = TextColorMode.PRESET,
     val textColorPreset: TextColorPreset = TextColorPreset.WHITE,
     val customTextColor: String? = null,
     val latinFontFamily: String = "Source Han Sans SC",
@@ -100,6 +100,7 @@ data class PaletteSpec(
     val dominant: String = "#7C3AED",
     val secondary: String = "#2563EB",
     val accent: String = "#F97316",
+    val extracted: kotlinx.serialization.json.JsonObject? = null,
 )
 
 @Serializable

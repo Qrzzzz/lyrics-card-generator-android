@@ -561,6 +561,7 @@ class RendererController private constructor(
             dominant = payload["dominant"]?.jsonPrimitive?.contentOrNull ?: error("缺少主色"),
             secondary = payload["secondary"]?.jsonPrimitive?.contentOrNull ?: error("缺少辅色"),
             accent = payload["accent"]?.jsonPrimitive?.contentOrNull ?: error("缺少强调色"),
+            extracted = payload["extracted"] as? kotlinx.serialization.json.JsonObject,
         )
     }
 

@@ -69,7 +69,7 @@ internal fun StylePanel(
             modifier = Modifier.testTag(EDITOR_DOMINANT_COLOR_TAG),
         ) {
             onSpecChange(
-                spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(dominant = it))),
+                spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(dominant = it, extracted = null))),
             )
         }
         ColorField(
@@ -78,7 +78,7 @@ internal fun StylePanel(
             modifier = Modifier.testTag(EDITOR_SECONDARY_COLOR_TAG),
         ) {
             onSpecChange(
-                spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(secondary = it))),
+                spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(secondary = it, extracted = null))),
             )
         }
         ColorField(
@@ -87,7 +87,7 @@ internal fun StylePanel(
             modifier = Modifier.testTag(EDITOR_ACCENT_COLOR_TAG),
         ) {
             onSpecChange(
-                spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(accent = it))),
+                spec.copy(visual = spec.visual.copy(palette = spec.visual.palette.copy(accent = it, extracted = null))),
             )
         }
 

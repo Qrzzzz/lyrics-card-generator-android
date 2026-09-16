@@ -70,6 +70,7 @@ export interface RenderSpec {
       dominant: string;
       secondary: string;
       accent: string;
+      extracted?: import("./desktop/types").ExtractedPalette | null;
     };
     gridEnabled: boolean;
     gridDensity: GridDensity;

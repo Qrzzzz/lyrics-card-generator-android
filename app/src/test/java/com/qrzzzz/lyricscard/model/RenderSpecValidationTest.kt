@@ -19,7 +19,7 @@ class RenderSpecValidationTest {
                 layoutMode = LayoutMode.LANDSCAPE,
                 ratio = CanvasRatio.PORTRAIT_4_5,
                 width = 400,
-                height = 4_000,
+                height = 7_000,
                 autoHeight = true,
                 pixelRatio = 3,
             ),

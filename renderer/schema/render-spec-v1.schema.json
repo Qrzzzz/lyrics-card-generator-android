@@ -441,6 +441,85 @@
             },
             "accent": {
               "$ref": "#/$defs/color"
+            },
+            "extracted": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "colors",
+                    "primary",
+                    "dark",
+                    "light",
+                    "muted",
+                    "averageLuminance",
+                    "averageSaturation",
+                    "hueVariance",
+                    "isLightCover",
+                    "kind"
+                  ],
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "pattern": "^#[0-9A-Fa-f]{6}$",
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "primary": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "secondary": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "accent": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "dark": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "light": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "muted": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "averageLuminance": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "averageSaturation": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "hueVariance": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "isLightCover": {
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "enum": [
+                        "colorful",
+                        "monochrome",
+                        "neutral",
+                        "low-variance"
+                      ]
+                    }
+                  }
+                }
+              ]
             }
           }
         },

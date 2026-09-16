@@ -1,5 +1,8 @@
 package com.qrzzzz.lyricscard.ui
 
+import com.qrzzzz.lyricscard.R
+import androidx.compose.ui.res.stringResource
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.*
@@ -25,22 +28,22 @@ internal fun CustomFontControls(spec: RenderSpec, onSpecChange: (RenderSpec) -> 
             try {
                 val asset = withContext(Dispatchers.IO) { CustomFontStore.import(context, uri) }
                 change(current.copy(typography = current.typography.copy(customFontAsset = asset, customFontEnabled = true)))
-                message = "字体已导入"
+                message = context.getString(R.string.v2_font_imported)
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
-            } catch (error: Exception) { message = error.message ?: "字体导入失败"
+            } catch (error: Exception) { message = error.message ?: context.getString(R.string.v2_font_failed)
             } finally { importing = false }
         }
     }
-    Button(onClick = { picker.launch(arrayOf("font/*", "application/octet-stream")) }, enabled = !importing) { Text(if (importing) "正在导入…" else "导入自定义字体") }
-    if (spec.typography.customFontAsset != null) SettingSwitch("使用导入字体", spec.typography.customFontEnabled) {
+    Button(onClick = { picker.launch(arrayOf("font/*", "application/octet-stream")) }, enabled = !importing) { Text(if (importing) stringResource(R.string.v2_font_importing) else stringResource(R.string.v2_font_import)) }
+    if (spec.typography.customFontAsset != null) SettingSwitch(stringResource(R.string.v2_font_use), spec.typography.customFontEnabled) {
         onSpecChange(spec.copy(typography = spec.typography.copy(customFontEnabled = it)))
     }
     OutlinedTextField(value = spec.typography.latinFontFamily, onValueChange = {
         if (it.isNotBlank() && it.length <= 200) onSpecChange(spec.copy(typography = spec.typography.copy(latinFontFamily = it)))
-    }, label = { Text("西文字体（本机可用字体名称）") }, singleLine = true)
-    LabeledSlider("字重", spec.typography.fontWeight.toFloat(), 100f..900f, "${spec.typography.fontWeight}") {
+    }, label = { Text(stringResource(R.string.v2_latin_font)) }, singleLine = true)
+    LabeledSlider(stringResource(R.string.v2_font_weight), spec.typography.fontWeight.toFloat(), 100f..900f, "${spec.typography.fontWeight}") {
         onSpecChange(spec.copy(typography = spec.typography.copy(fontWeight = it.toInt())))
     }
-    SettingSwitch("斜体", spec.typography.fontItalic) { onSpecChange(spec.copy(typography = spec.typography.copy(fontItalic = it))) }
+    SettingSwitch(stringResource(R.string.v2_font_italic), spec.typography.fontItalic) { onSpecChange(spec.copy(typography = spec.typography.copy(fontItalic = it))) }
     message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }

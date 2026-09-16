@@ -63,6 +63,7 @@ export function normalizeRenderSpec(spec: RenderSpec): RenderSpec {
     visual: {
       ...spec.visual,
       palette: {
+        ...spec.visual.palette,
         dominant: normalizeHex(spec.visual.palette.dominant),
         secondary: normalizeHex(spec.visual.palette.secondary),
         accent: normalizeHex(spec.visual.palette.accent)

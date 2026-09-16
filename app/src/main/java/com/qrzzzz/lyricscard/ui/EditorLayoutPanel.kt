@@ -84,21 +84,21 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
             )
             if (spec.canvas.layoutMode == LayoutMode.LANDSCAPE) {
                 val settings = spec.canvas.landscape
-                SettingSwitch("自动歌词宽度", settings.autoLyricsWidth) {
+                SettingSwitch(stringResource(R.string.v2_auto_lyrics_width), settings.autoLyricsWidth) {
                     onSpecChange(spec.copy(canvas = spec.canvas.copy(landscape = settings.copy(autoLyricsWidth = it))))
                 }
-                if (!settings.autoLyricsWidth) NumberField("歌词宽度", settings.lyricsWidth, 520..1280) {
+                if (!settings.autoLyricsWidth) NumberField(stringResource(R.string.v2_lyrics_width), settings.lyricsWidth, 520..1280) {
                     onSpecChange(spec.copy(canvas = spec.canvas.copy(landscape = settings.copy(lyricsWidth = it))))
                 }
-                SettingSwitch("自动高度", settings.autoHeight) {
+                SettingSwitch(stringResource(R.string.editor_auto_height), settings.autoHeight) {
                     onSpecChange(spec.copy(canvas = spec.canvas.copy(landscape = settings.copy(autoHeight = it))))
                 }
-                if (!settings.autoHeight) NumberField("期望高度（内容过长时自动扩展）", settings.requestedHeight, 720..3600) {
+                if (!settings.autoHeight) NumberField(stringResource(R.string.v2_requested_height), settings.requestedHeight, 720..3600) {
                     onSpecChange(spec.copy(canvas = spec.canvas.copy(landscape = settings.copy(requestedHeight = it))))
                 }
             }
             if (spec.canvas.ratio == CanvasRatio.CUSTOM && spec.canvas.layoutMode == LayoutMode.PORTRAIT) {
-                SettingSwitch("自动宽度", spec.canvas.autoWidth) {
+                SettingSwitch(stringResource(R.string.v2_auto_width), spec.canvas.autoWidth) {
                     onSpecChange(spec.copy(canvas = spec.canvas.copy(autoWidth = it)))
                 }
                 val widthRange = if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) {
