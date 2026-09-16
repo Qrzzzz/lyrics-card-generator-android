@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="v2_separator">歌词分隔符</string>
+    <string name="v2_separator_dot">圆点</string>
+    <string name="v2_separator_line">横线</string>
     <string name="editor_error_incompatible_project">2.0 不兼容 1.x 旧项目，且不会自动迁移。旧数据仍保留，请新建项目。</string>
     <string name="app_name" translatable="false">Lyric Card Generator</string>
 
@@ -334,5 +337,6 @@
     <string name="v2_font_italic">斜体</string>
     <string name="v2_export_format">导出格式</string>
     <string name="v2_file_extension" translatable="false">.%1$s</string>
+    <string name="v2_cjk_font">中文字体族</string>
 </resources>
 

@@ -32,18 +32,6 @@ internal fun StylePanel(
 ) {
     PanelColumn {
         SectionTitle(stringResource(R.string.editor_background))
-        ChoiceChips(
-            values = BackgroundMode.entries,
-            selected = spec.visual.backgroundMode,
-            label = {
-                stringResource(
-                    if (it == BackgroundMode.PALETTE) R.string.editor_palette else R.string.editor_gradient,
-                )
-            },
-            onSelect = {
-                onSpecChange(spec.copy(visual = spec.visual.copy(backgroundMode = it)))
-            },
-        )
         Button(
             onClick = onExtractPalette,
             enabled = spec.song.coverAssetId != null && !isExtractingPalette,
@@ -112,15 +100,14 @@ internal fun StylePanel(
                     onSpecChange(spec.copy(visual = spec.visual.copy(gridDensity = it)))
                 },
             )
-            LabeledSlider(
-                label = stringResource(R.string.editor_grid_opacity),
-                value = spec.visual.gridOpacity.toFloat(),
-                range = 0f..0.5f,
-                displayValue = "${(spec.visual.gridOpacity * 100).roundToInt()}%",
-            ) {
-                onSpecChange(spec.copy(visual = spec.visual.copy(gridOpacity = it.toDouble())))
-            }
         }
+        SettingSwitch(stringResource(R.string.editor_explicit_marker), spec.song.explicit) {
+            onSpecChange(spec.copy(song = spec.song.copy(explicit = it)))
+        }
+        SectionTitle(stringResource(R.string.v2_separator))
+        ChoiceChips(values = listOf("dot", "line"), selected = spec.typography.separatorStyle,
+            label = { stringResource(if (it == "dot") R.string.v2_separator_dot else R.string.v2_separator_line) },
+            onSelect = { onSpecChange(spec.copy(typography = spec.typography.copy(separatorStyle = it))) })
     }
 }
 

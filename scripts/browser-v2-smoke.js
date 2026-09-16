@@ -2,7 +2,7 @@ async (page) => {
   const result = await page.evaluate(async () => {
     const {DEFAULT_RENDER_SPEC} = await import('/src/defaultSpec.ts');
     window.__v2Messages=[];
-    window.LyricsCardNative={postMessage: text => { const e=JSON.parse(text); if(e.type!=='exportChunk') window.__v2Messages.push(e); }};
+    window.LyricsCardNative={postMessage: text => { window.__v2Messages.push(JSON.parse(text)); }};
     const request=async(type,payload) => {
       const requestId=`qa-${type}-${Date.now()}`;
       window.LyricsCardRenderer.receive({protocolVersion:1,requestId,type,payload});
@@ -27,14 +27,21 @@ async (page) => {
       for(const format of ['png','webp','jpg']) {
         const scale=format==='png'?1:format==='webp'?1.4:2;
         spec.canvas.exportFormat=format;
+        const before=window.__v2Messages.length;
         const exported=await request('exportPng',{spec,pixelRatio:scale});
         if(exported.width!==Math.floor(measured.width*scale) || exported.height!==Math.floor(measured.height*scale)) throw new Error('Export geometry mismatch');
         if(exported.mimeType!==({png:'image/png',webp:'image/webp',jpg:'image/jpeg'})[format]) throw new Error('Wrong MIME');
+        const chunks=window.__v2Messages.slice(before).filter(m=>m.type==='exportChunk').sort((a,b)=>a.payload.index-b.payload.index);
+        const bytes=chunks.map(m=>Uint8Array.from(atob(m.payload.base64),c=>c.charCodeAt(0)));
+        const decoded=await createImageBitmap(new Blob(bytes,{type:exported.mimeType}));
+        if(decoded.width!==exported.width || decoded.height!==exported.height) throw new Error('Encoded image does not match declared dimensions');
+        decoded.close();
         results.push({mode,format,scale,...exported});
       }
     }
     return results;
   });
-  console.log(JSON.stringify(result));
+  await page.evaluate(result=>{window.__qaResult=result;},result);
   await page.screenshot({path:'output/playwright/android-v2-landscape.png'});
+  return result;
 }

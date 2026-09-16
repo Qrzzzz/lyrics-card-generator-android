@@ -11,8 +11,8 @@ function New-ValidPolicyCase {
     $candidate = '1111111111111111111111111111111111111111'
     return @{
         CandidateCommit = $candidate
-        ExpectedVersion = '2.0.0'
-        RepositoryVersion = '2.0.0'
+        ExpectedVersion = '2.0'
+        RepositoryVersion = '2.0'
         Repository = 'Qrzzzz/lyrics-card-generator-android'
         RemoteMainCommit = $candidate
         CandidateOnMain = $true
@@ -73,7 +73,7 @@ $advancedMainCase.RemoteMainCommit = '2222222222222222222222222222222222222222'
 $null = Invoke-PolicyCase -Case $advancedMainCase
 Assert-Rejected -Name 'wrong-trigger-sha' -Mutate { param($case) $case.TriggerSha = '2222222222222222222222222222222222222222' } -MessagePattern 'same main commit'
 Assert-Rejected -Name 'wrong-workflow-sha' -Mutate { param($case) $case.WorkflowSha = '2222222222222222222222222222222222222222' } -MessagePattern 'same main commit'
-Assert-Rejected -Name 'wrong-version' -Mutate { param($case) $case.RepositoryVersion = '2.0.1' } -MessagePattern 'does not match Gradle version'
+Assert-Rejected -Name 'wrong-version' -Mutate { param($case) $case.RepositoryVersion = '2.1' } -MessagePattern 'does not match Gradle version'
 Assert-Rejected -Name 'duplicate-tag' -Mutate { param($case) $case.TagExists = $true } -MessagePattern 'already exists'
 Assert-Rejected -Name 'duplicate-release' -Mutate { param($case) $case.ReleaseExists = $true } -MessagePattern 'already exists'
 Assert-Rejected -Name 'wrong-dispatch-ref' -Mutate { param($case) $case.WorkflowRef = 'refs/heads/feature' } -MessagePattern 'refs/heads/main'

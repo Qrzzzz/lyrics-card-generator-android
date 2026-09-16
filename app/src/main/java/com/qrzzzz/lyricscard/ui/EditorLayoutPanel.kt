@@ -32,13 +32,15 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                     )
                 },
                 onSelect = { mode ->
+                    if (mode == spec.canvas.layoutMode) return@ChoiceChips
                     val canvas = if (mode == LayoutMode.PORTRAIT) {
                         spec.canvas.copy(
                             layoutMode = mode,
-                            ratio = CanvasRatio.CUSTOM,
-                            width = 1040,
-                            height = 1080,
-                            autoHeight = true,
+                            ratio = spec.canvas.portrait.ratio,
+                            width = spec.canvas.portrait.width,
+                            height = spec.canvas.portrait.height,
+                            autoHeight = spec.canvas.portrait.autoHeight,
+                            autoWidth = spec.canvas.portrait.autoWidth,
                         )
                     } else {
                         spec.canvas.copy(
@@ -47,6 +49,7 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                             width = 1920,
                             height = 1080,
                             autoHeight = true,
+                            portrait = com.qrzzzz.lyricscard.model.PortraitSettings(spec.canvas.ratio, spec.canvas.width, spec.canvas.height, spec.canvas.autoWidth, spec.canvas.autoHeight),
                         )
                     }
                     onSpecChange(spec.copy(canvas = canvas))
@@ -77,6 +80,7 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                                 width = width,
                                 height = height,
                                 autoHeight = false,
+                                autoWidth = false,
                             ),
                         ),
                     )
@@ -160,14 +164,6 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
         }
         SettingSwitch(stringResource(R.string.editor_show_album), spec.visibility.showAlbum) {
             onSpecChange(spec.copy(visibility = spec.visibility.copy(showAlbum = it)))
-        }
-        LabeledSlider(
-            label = stringResource(R.string.editor_cover_crop_scale),
-            value = spec.media.coverCropScale.toFloat(),
-            range = 1f..2f,
-            displayValue = "%.2f".format(spec.media.coverCropScale),
-        ) {
-            onSpecChange(spec.copy(media = spec.media.copy(coverCropScale = it.toDouble())))
         }
     }
 }

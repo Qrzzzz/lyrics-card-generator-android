@@ -62,7 +62,12 @@ data class CanvasSpec(
     val landscape: LandscapeSettings = LandscapeSettings(),
     val exportFormat: String = "png",
     val exportScale: Double = 2.0,
+    val portrait: PortraitSettings = PortraitSettings(),
 )
+
+@Serializable
+data class PortraitSettings(val ratio: CanvasRatio = CanvasRatio.CUSTOM, val width: Int = 1040,
+    val height: Int = 1080, val autoWidth: Boolean = true, val autoHeight: Boolean = true)
 
 @Serializable
 data class LandscapeSettings(val autoLyricsWidth: Boolean = true, val lyricsWidth: Int = 880,

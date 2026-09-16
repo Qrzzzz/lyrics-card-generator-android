@@ -6,6 +6,7 @@ import type { RenderSpec, SongSource, TextAlignment } from "./types";
 import { getLyricDocumentRows } from "./desktop/lyrics-document-v2";
 import { SpatialBackground } from "./SpatialBackground";
 import { resolveCardContentTextShadow } from "./desktop/card-content-depth";
+import { portraitLayout } from "./layout";
 
 type CardCssProperties = CSSProperties & Record<`--${string}`, string | number>;
 
@@ -33,7 +34,9 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     (spec.visibility.showPlatformBadge && source !== "unknown") ||
     (spec.visibility.showSharedBy && spec.branding.sharedByName.trim().length > 0) ||
     spec.visibility.showGeneratedWatermark;
-  const lyricSize = spec.typography.lyricSize;
+  const rows = getLyricDocumentRows(spec.content.lyricDocument);
+  const visualRows = rows.reduce((count, row, index) => count + (row.isSeparator ? 0 : 1 + (rows[index - 1]?.isSeparator ? 0 : Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0))), 0);
+  const lyricSize = Math.max(34, Math.min(spec.typography.lyricSize, visualRows > 10 ? spec.typography.lyricSize - 6 : spec.typography.lyricSize));
   const serif =
     spec.typography.fontScheme === "serif-heavy" ||
     spec.typography.fontScheme === "system-serif" ||
@@ -48,8 +51,8 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     color: textColor,
     textShadow: resolveCardContentTextShadow(textColor),
     fontFamily: spec.typography.customFontEnabled && spec.typography.customFontAsset
-      ? '"Imported Lyric Font", sans-serif'
-      : `${JSON.stringify(spec.typography.latinFontFamily || spec.typography.fontFamily)}, ${JSON.stringify(spec.typography.fontFamily)}, ${serif ? "serif" : "sans-serif"}`,
+      ? `${fontFamilyCss(spec.typography.latinFontFamily || "Imported Lyric Font")}, "Imported Lyric Font", sans-serif`
+      : `${fontFamilyCss(spec.typography.latinFontFamily || spec.typography.fontFamily)}, ${fontFamilyCss(spec.typography.fontFamily)}, ${serif ? "serif" : "sans-serif"}`,
     fontWeight: spec.typography.fontWeight ?? 900,
     fontStyle: spec.typography.fontItalic ? "italic" : "normal",
     "--card-width": `${spec.canvas.width}px`,
@@ -65,7 +68,8 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     "--grid-size": `${GRID_SIZES[spec.visual.gridDensity]}px`,
     "--grid-opacity": String(spec.visual.gridOpacity),
     "--lyric-size": `${lyricSize}px`,
-    "--translation-size": `${Math.max(19, Math.round(lyricSize * spec.typography.translationScale))}px`,
+    "--translation-size": `${Math.round(lyricSize * spec.typography.translationScale)}px`,
+    "--pair-margin": `${lyricSize * (spec.content.translationEnabled ? .42 : .18)}px`,
     "--lyric-line-height": String(spec.typography.lineHeight),
     "--cover-scale": String(spec.media.coverCropScale)
   };
@@ -129,16 +133,17 @@ function PortraitContent({
   showFooter
 }: CardContentProps) {
   const showHeader = spec.content.mode === "lyrics" && (spec.visibility.showCover || spec.visibility.showSongInfo);
+  const layout = portraitLayout(spec);
 
   return (
-    <div className="portrait-content" data-card-content="true">
+    <div className="portrait-content" data-card-content="true" style={{position:"absolute",left:layout.safeRect.x,top:layout.safeRect.y,width:layout.safeRect.width,height:layout.safeRect.height,padding:"18px 18px 8px"}}>
       {showHeader ? (
-        <header className="portrait-header" data-card-header="true">
+        <header className="portrait-header" data-card-header="true" style={{minHeight:layout.headerRect?.height,gap:40}}>
           {spec.visibility.showCover ? <CoverArtwork spec={spec} /> : null}
           {spec.visibility.showSongInfo ? <SongInfo spec={spec} textColor={textColor} /> : null}
         </header>
       ) : null}
-      <main className={`portrait-main mode--${spec.content.mode}`} data-card-lyrics-viewport="true">
+      <main className={`portrait-main mode--${spec.content.mode}`} data-card-lyrics-viewport="true" style={{width:layout.lyricsRect.width,marginLeft:spec.typography.alignment==="center"?"auto":0,marginRight:spec.typography.alignment==="center"?"auto":undefined,padding:spec.content.mode==="lyrics"?"32px 0 16px":0}}>
         {spec.content.mode === "instrumental" ? (
           <InstrumentalBlock spec={spec} />
         ) : (
@@ -252,19 +257,24 @@ function LyricsBlock({ spec, lines, translations }: { spec: RenderSpec; lines: s
   return (
     <div className={`lyrics-stack ${alignment}`} data-card-lyrics="true">
       {rows.length === 0 ? <p className="lyric-line">{localeFallback(spec.locale, "lyrics")}</p> : null}
-      {rows.map((row) => {
+      {rows.map((row, index) => {
+        const dot = spec.typography.separatorStyle !== "line";
         return (
           <div className="lyric-pair" key={row.unitId} data-unit-id={row.unitId}
-            style={{ paddingTop: `${Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0)}em` }}>
-            {row.isSeparator ? <div className="lyric-separator" aria-hidden="true">{spec.typography.separatorStyle === "line" ? "——" : "·"}</div> : <>
-              {row.source.map((line, i) => <p className="lyric-line" key={i}>{line || "\u00A0"}</p>)}
-              {spec.content.translationEnabled ? row.translation.map((line, i) => <p className="translation-line" key={i}>{line || "\u00A0"}</p>) : null}
+            style={{ marginTop: index > 0 && !rows[index - 1]?.isSeparator ? `calc(${Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0)} * (var(--lyric-size) * var(--lyric-line-height) + var(--pair-margin) * 2))` : 0, marginBottom: row.isSeparator || index === rows.length - 1 ? 0 : "var(--pair-margin)" }}>
+            {row.isSeparator ? <div className="lyric-separator" aria-hidden="true" style={{height:"calc(var(--lyric-size) * .65)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{background:"currentColor",opacity:dot ? .48 : .36,width:`calc(var(--lyric-size) * ${dot ? .105 : 1.65})`,height:dot?"calc(var(--lyric-size) * .105)":"max(1px, calc(var(--lyric-size) * .022))",borderRadius:dot?"50%":0}}/></div> : <>
+              {row.source.length ? <p className="lyric-line">{row.source.join("\n") || "\u00A0"}</p> : null}
+              {spec.content.translationEnabled && row.translation.length ? <p className="translation-line">{row.translation.join("\n")}</p> : null}
             </>}
           </div>
         );
       })}
     </div>
   );
+}
+
+function fontFamilyCss(family: string) {
+  return ["serif", "sans-serif", "system-ui", "monospace", "cursive"].includes(family) ? family : JSON.stringify(family);
 }
 
 function InstrumentalBlock({ spec }: { spec: RenderSpec }) {

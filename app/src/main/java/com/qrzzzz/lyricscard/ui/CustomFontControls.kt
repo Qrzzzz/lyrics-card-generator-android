@@ -27,7 +27,7 @@ internal fun CustomFontControls(spec: RenderSpec, onSpecChange: (RenderSpec) -> 
             importing = true
             try {
                 val asset = withContext(Dispatchers.IO) { CustomFontStore.import(context, uri) }
-                change(current.copy(typography = current.typography.copy(customFontAsset = asset, customFontEnabled = true)))
+                change(current.copy(typography = current.typography.copy(customFontAsset = asset, customFontEnabled = true, latinFontFamily = "Imported Lyric Font")))
                 message = context.getString(R.string.v2_font_imported)
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled
             } catch (error: Exception) { message = error.message ?: context.getString(R.string.v2_font_failed)
@@ -38,6 +38,9 @@ internal fun CustomFontControls(spec: RenderSpec, onSpecChange: (RenderSpec) -> 
     if (spec.typography.customFontAsset != null) SettingSwitch(stringResource(R.string.v2_font_use), spec.typography.customFontEnabled) {
         onSpecChange(spec.copy(typography = spec.typography.copy(customFontEnabled = it)))
     }
+    if (!spec.typography.customFontEnabled) OutlinedTextField(value = spec.typography.fontFamily, onValueChange = {
+        if (it.isNotBlank() && it.length <= 200) onSpecChange(spec.copy(typography = spec.typography.copy(fontFamily = it)))
+    }, label = { Text(stringResource(R.string.v2_cjk_font)) }, singleLine = true)
     OutlinedTextField(value = spec.typography.latinFontFamily, onValueChange = {
         if (it.isNotBlank() && it.length <= 200) onSpecChange(spec.copy(typography = spec.typography.copy(latinFontFamily = it)))
     }, label = { Text(stringResource(R.string.v2_latin_font)) }, singleLine = true)

@@ -652,3 +652,20 @@ h1 {
 .portrait-main { padding: 36px 0; }
 .landscape-content .cover-art { width: 100%; height: 100%; aspect-ratio: auto; }
 .landscape-content .card-footer { position: static; padding: 0; }
+.lyrics-stack { white-space: pre-wrap; overflow-wrap: anywhere; }
+.lyric-line { opacity: .96; }
+.translation-line { font-weight: 500; }
+.shared-by { font-size: 24px; line-height: 1.4; font-weight: 400; opacity: .82; letter-spacing: normal; }
+.generated-watermark { display: block; font-size: 26px; line-height: 1.4; font-weight: 400; opacity: .64; letter-spacing: normal; text-align: left; }
+.card-footer--landscape .shared-by { font-size: 20px; }
+.card-footer--landscape .generated-watermark { font-size: 30px; }
+/* Canvas pixels match the desktop portrait component, independent of WebView viewport. */
+.portrait-header > .cover-art { width:196px; height:196px; border-radius:24px; }
+.portrait-header .song-info { min-height:196px; display:flex; flex-direction:column; justify-content:center; }
+.portrait-header .song-info h1 { font-size:51px; line-height:1.48; }
+.portrait-header .song-artist { margin-top:16px; font-size:35px; font-weight:600; line-height:1.5; }
+.portrait-header .song-album { margin-top:12px; font-size:27px; font-weight:500; line-height:1.42; }
+.cover-placeholder { background:rgba(0,0,0,.1); }
+.cover-placeholder > *, .cover-placeholder::after { display:none; }
+.portrait-header > .cover-art { border-radius:44px; }
+.song-info, .lyrics-stack { text-shadow:inherit; }

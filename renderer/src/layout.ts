@@ -2,6 +2,18 @@ import { chooseAutoWidth, getAutoWidthCandidates } from './desktop/auto-width';
 import { measureAutoWidthLine } from './desktop/auto-width-dom';
 import { createLandscapeLayoutPlan, DEFAULT_LANDSCAPE_LAYOUT_SETTINGS, getLandscapeLyricsWidthCandidates } from './desktop/landscape-plan';
 import type { RenderSpec } from './types';
+import { getPortraitLayout } from './desktop/card-layout-engine';
+import type { CardStyle } from './desktop/types';
+
+export function portraitLayout(spec: RenderSpec, width = spec.canvas.width) {
+  // Only these CardStyle fields are read by the shared portrait geometry engine.
+  return getPortraitLayout({width, height:spec.canvas.height}, {
+    contentMode:spec.content.mode, showCover:spec.visibility.showCover,
+    showSongInfo:spec.visibility.showSongInfo, showAlbumName:spec.visibility.showAlbum,
+    showSharedBy:spec.visibility.showSharedBy, sharedByText:spec.branding.sharedByName,
+    showGeneratedWatermark:spec.visibility.showGeneratedWatermark, align:spec.typography.alignment
+  } as CardStyle, {source:spec.song.source, album:spec.song.album});
+}
 
 /** Measure the same loaded-font lyric tree used by preview and export. */
 export function measureLayout(node: HTMLElement, spec: RenderSpec): RenderSpec {
@@ -20,7 +32,7 @@ export function measureLayout(node: HTMLElement, spec: RenderSpec): RenderSpec {
   try {
     if (spec.canvas.layoutMode === 'portrait' && spec.canvas.autoWidth) {
       const samples = getAutoWidthCandidates().map(canvasWidth => {
-        host.style.width=`${canvasWidth}px`; clone.style.width=`${canvasWidth - 144}px`;
+        host.style.width=`${canvasWidth}px`; clone.style.width=`${portraitLayout(spec,canvasWidth).lyricsRect.width}px`;
         return {canvasWidth, lines:metrics()};
       });
       const decision=chooseAutoWidth(samples, spec.canvas.width);

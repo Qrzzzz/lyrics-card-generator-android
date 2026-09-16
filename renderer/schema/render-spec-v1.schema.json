@@ -296,6 +296,43 @@
             1.4,
             2
           ]
+        },
+        "portrait": {
+          "required": [
+            "ratio",
+            "width",
+            "height",
+            "autoWidth",
+            "autoHeight"
+          ],
+          "properties": {
+            "ratio": {
+              "enum": [
+                "custom",
+                "1:1",
+                "4:5",
+                "9:16"
+              ]
+            },
+            "autoHeight": {
+              "type": "boolean"
+            },
+            "autoWidth": {
+              "type": "boolean"
+            },
+            "height": {
+              "maximum": 6400,
+              "type": "integer",
+              "minimum": 640
+            },
+            "width": {
+              "maximum": 1440,
+              "type": "integer",
+              "minimum": 720
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
         }
       }
     },

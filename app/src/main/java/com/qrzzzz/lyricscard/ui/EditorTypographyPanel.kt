@@ -87,7 +87,7 @@ internal fun TypographyPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Uni
 
         SectionTitle(stringResource(R.string.editor_text_color))
         ChoiceChips(
-            values = TextColorMode.entries,
+            values = listOf(TextColorMode.PRESET, TextColorMode.CUSTOM),
             selected = spec.typography.textColorMode,
             label = {
                 stringResource(
@@ -118,9 +118,6 @@ internal fun TypographyPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Uni
             TextColorMode.PRESET -> ChoiceChips(
                 values = listOf(
                     TextColorPreset.WHITE,
-                    TextColorPreset.BLACK,
-                    TextColorPreset.WARM_WHITE,
-                    TextColorPreset.CREAM,
                 ),
                 selected = spec.typography.textColorPreset,
                 label = ::textColorPresetLabel,

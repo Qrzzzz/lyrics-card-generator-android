@@ -14,7 +14,7 @@ import {
 import { installRendererController } from "./runtime";
 import type { RenderSpec } from "./types";
 import { prepareCustomFont } from "./fonts";
-import { measureLayout } from "./layout";
+import { measureLayout, portraitLayout } from "./layout";
 
 export function App() {
   const [spec, setSpec] = useState(DEFAULT_RENDER_SPEC);
@@ -37,6 +37,7 @@ export function App() {
       const key = createRendererDomKey(nextSpec);
       if (key !== settledKey) {
         await prepareCustomFont(nextSpec);
+        fontEmbedCssCache.clear();
         flushSync(() => setSpec(nextSpec));
         await waitForStableRender();
         settledSpec = measureLayout(requireCardNode(cardRef.current), nextSpec);
@@ -165,8 +166,7 @@ function measureCardHeight(node: HTMLElement, spec: RenderSpec) {
   const headerHeight = header?.scrollHeight ?? 0;
   const lyricsHeight = lyrics.scrollHeight;
   const footerHeight = footer?.scrollHeight ?? 0;
-  const gaps = (header ? 30 : 0) + (footer ? 24 : 0);
-  const measured = Math.ceil(padding + mainPadding + headerHeight + lyricsHeight + footerHeight + gaps);
+  const measured = Math.ceil(2 * portraitLayout(spec).safeRect.y + padding + mainPadding + headerHeight + lyricsHeight + footerHeight);
   if (measured > 6400) throw new Error("Content exceeds automatic canvas height");
   return Math.max(640, measured);
 }

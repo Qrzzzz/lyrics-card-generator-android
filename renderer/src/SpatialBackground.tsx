@@ -7,7 +7,8 @@ import type { RenderSpec } from './types';
 export function SpatialBackground({spec}:{spec:RenderSpec}) {
   const palette=spec.visual.palette;
   const {plan,mesh}=useMemo(() => {
-    const full=palette.extracted ?? {...DEFAULT_PALETTE,primary:palette.dominant,secondary:palette.secondary,accent:palette.accent,colors:[palette.dominant,palette.secondary,palette.accent]};
+    const isDefault=palette.dominant.toUpperCase()===DEFAULT_PALETTE.primary && palette.secondary.toUpperCase()===DEFAULT_PALETTE.secondary && palette.accent.toUpperCase()===DEFAULT_PALETTE.accent;
+    const full=palette.extracted ?? (isDefault ? DEFAULT_PALETTE : {...DEFAULT_PALETTE,primary:palette.dominant,secondary:palette.secondary,accent:palette.accent,colors:[palette.dominant,palette.secondary,palette.accent]});
     const plan=createColorFieldPlan({width:spec.canvas.width,height:spec.canvas.height,palette:full});
     return {plan,mesh:createColorFieldMesh(plan)};
   },[palette,spec.canvas.width,spec.canvas.height]);
