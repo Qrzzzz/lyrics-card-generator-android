@@ -3,6 +3,7 @@ import { isDarkColor, mixColors, resolveTextColor, withAlpha } from "./color";
 import { assertLyricLineLimit, type LyricTextPath } from "./renderLimits";
 import { resolveCoverAssetUrl } from "./spec";
 import type { RenderSpec, SongSource, TextAlignment } from "./types";
+import { getLyricDocumentRows } from "./desktop/lyrics-document-v2";
 
 type CardCssProperties = CSSProperties & Record<`--${string}`, string | number>;
 
@@ -238,18 +239,20 @@ function ExplicitBadge({ color }: { color: string }) {
 }
 
 function LyricsBlock({ spec, lines, translations }: { spec: RenderSpec; lines: string[]; translations: string[] }) {
-  const activeLines = lines.length > 0 ? lines : [localeFallback(spec.locale, "lyrics")];
-  const hasTranslations = spec.content.translationEnabled && translations.length > 0;
+  const rows = getLyricDocumentRows(spec.content.lyricDocument);
   const alignment = alignmentClass(spec.typography.alignment);
 
   return (
     <div className={`lyrics-stack ${alignment}`} data-card-lyrics="true">
-      {activeLines.map((line, index) => {
-        const translation = hasTranslations ? translations[index] : "";
+      {rows.length === 0 ? <p className="lyric-line">{localeFallback(spec.locale, "lyrics")}</p> : null}
+      {rows.map((row) => {
         return (
-          <div className="lyric-pair" key={`${index}-${line}`}>
-            <p className="lyric-line">{line || "\u00A0"}</p>
-            {translation ? <p className="translation-line">{translation}</p> : null}
+          <div className="lyric-pair" key={row.unitId} data-unit-id={row.unitId}
+            style={{ paddingTop: `${Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0)}em` }}>
+            {row.isSeparator ? <div className="lyric-separator" aria-hidden="true">·</div> : <>
+              {row.source.map((line, i) => <p className="lyric-line" key={i}>{line || "\u00A0"}</p>)}
+              {spec.content.translationEnabled ? row.translation.map((line, i) => <p className="translation-line" key={i}>{line || "\u00A0"}</p>) : null}
+            </>}
           </div>
         );
       })}

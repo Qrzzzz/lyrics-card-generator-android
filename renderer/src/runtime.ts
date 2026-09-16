@@ -204,7 +204,7 @@ async function sendReady(requestId: string) {
   if (!controller) return;
   send(requestId, "ready", {
     rendererVersion: RENDERER_VERSION,
-    schemaVersion: 1,
+    schemaVersion: 2,
     protocolVersion: 1,
     sourceCommit: manifest.sourceCommit,
     fontManifestHash: manifest.fontManifestHash,

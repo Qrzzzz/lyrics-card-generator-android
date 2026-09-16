@@ -16,7 +16,7 @@ class RenderSpecSerializationTest {
         val encoded = RenderSpecJson.encode(expected)
         val root = RenderSpecJson.format.parseToJsonElement(encoded).jsonObject
 
-        assertEquals(1, root.getValue("schemaVersion").jsonPrimitive.content.toInt())
+        assertEquals(2, root.getValue("schemaVersion").jsonPrimitive.content.toInt())
         assertEquals("android-alpha-renderer-1", root.getValue("rendererVersion").jsonPrimitive.content)
         assertEquals("zh", root.getValue("locale").jsonPrimitive.content)
         assertTrue(root.keys.containsAll(REQUIRED_ROOT_KEYS))
@@ -53,33 +53,11 @@ class RenderSpecSerializationTest {
     }
 
     @Test
-    fun `missing fields receive v1 defaults and unknown fields are ignored`() {
-        val decoded = RenderSpecJson.decode(
-            """
-            {
-              "schemaVersion": 1,
-              "song": { "title": "Only a title", "futureSongField": true },
-              "futureRootField": { "enabled": true }
-            }
-            """.trimIndent(),
-        )
-
-        assertEquals("Only a title", decoded.song.title)
-        assertEquals(SongSource.UNKNOWN, decoded.song.source)
-        assertEquals(CanvasRatio.CUSTOM, decoded.canvas.ratio)
-        assertEquals(2, decoded.canvas.pixelRatio)
+    fun `old sparse projects are rejected without migration`() {
+        listOf("{}", """{"schemaVersion":1,"song":{"title":"旧项目"}}""", """{"schemaVersion":2,"content":{"lyrics":"旧项目"}}""").forEach {
+            assertThrows(SerializationException::class.java) { RenderSpecJson.decode(it) }
+        }
     }
-
-    @Test
-    fun `legacy sparse project can be edited saved and reopened with stable defaults`() {
-        val legacy = RenderSpecJson.decode("""{"schemaVersion":1,"rendererVersion":"android-alpha-renderer-1","song":{"title":"旧项目","future":42},"future":{"nested":[1,2]}}""")
-        val edited = legacy.copy(song = legacy.song.copy(title = "修改后 🎵"))
-        val reopened = RenderSpecJson.decode(RenderSpecJson.encode(edited))
-        assertEquals(edited, reopened)
-        assertEquals("android-alpha-renderer-1", reopened.rendererVersion)
-        assertEquals(2, reopened.canvas.pixelRatio)
-    }
-
     @Test
     fun `invalid JSON types and enum values are rejected instead of silently defaulted`() {
         listOf(

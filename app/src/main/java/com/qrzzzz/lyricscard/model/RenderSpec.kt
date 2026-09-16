@@ -25,7 +25,7 @@ data class RenderSpec(
     val media: MediaSpec = MediaSpec(),
 ) {
     companion object {
-        const val SCHEMA_VERSION: Int = 1
+        const val SCHEMA_VERSION: Int = 2
         const val DEFAULT_RENDERER_VERSION: String = "android-alpha-renderer-1"
     }
 }
@@ -47,6 +47,7 @@ data class ContentSpec(
     val translationEnabled: Boolean = false,
     val translation: String = "",
     val instrumentalText: String = "纯音乐",
+    val lyricDocument: LyricDocumentV2 = LyricDocumentV2.create(lyrics, translation),
 )
 
 @Serializable
@@ -290,6 +291,13 @@ object RenderSpecJson {
     fun encode(spec: RenderSpec): String =
         format.encodeToString(RenderSpec.serializer(), spec.requireValid())
 
-    fun decode(value: String): RenderSpec =
-        format.decodeFromString(RenderSpec.serializer(), value).requireValid()
+    fun decode(value: String): RenderSpec {
+        val root = format.parseToJsonElement(value) as? kotlinx.serialization.json.JsonObject
+            ?: throw kotlinx.serialization.SerializationException("Expected project object")
+        if (root["schemaVersion"]?.toString() != "2" ||
+            (root["content"] as? kotlinx.serialization.json.JsonObject)?.containsKey("lyricDocument") != true) {
+            throw kotlinx.serialization.SerializationException("Incompatible project: Android 2.0 requires a V2 document; no migration")
+        }
+        return format.decodeFromString(RenderSpec.serializer(), value).requireValid()
+    }
 }

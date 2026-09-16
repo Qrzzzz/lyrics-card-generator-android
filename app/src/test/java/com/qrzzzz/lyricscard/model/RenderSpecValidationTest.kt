@@ -14,7 +14,7 @@ class RenderSpecValidationTest {
     @Test
     fun `validation reports all invalid paths`() {
         val invalid = RenderSpec(
-            schemaVersion = 2,
+            schemaVersion = 1,
             canvas = CanvasSpec(
                 layoutMode = LayoutMode.LANDSCAPE,
                 ratio = CanvasRatio.PORTRAIT_4_5,

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="editor_error_incompatible_project">2.0 不兼容 1.x 旧项目，且不会自动迁移。旧数据仍保留，请新建项目。</string>
     <string name="app_name" translatable="false">Lyric Card Generator</string>
 
     <string name="common_back">返回</string>

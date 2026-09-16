@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseRenderSpec } from "../src/spec";
 import type { RenderSpec } from "../src/types";
+import { createLyricDocumentV2 } from "../src/desktop/lyrics-document-v2";
 
 const rendererRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureDirectory = resolve(rendererRoot, "fixtures");
@@ -15,7 +16,7 @@ const goldenBase = JSON.parse(
 ) as RenderSpec;
 const goldenCases = goldenMatrix.cases.map((entry) => ({
   ...entry,
-  spec: deepMerge(goldenBase, entry.overrides),
+  spec: withDocument(deepMerge(goldenBase, entry.overrides)),
 }));
 
 describe("RenderSpec fixtures", () => {
@@ -28,7 +29,7 @@ describe("RenderSpec fixtures", () => {
   it.each(fixtureNames)("validates %s against RenderSpec v1", (fixtureName) => {
     const raw = JSON.parse(readFileSync(resolve(fixtureDirectory, fixtureName), "utf8")) as unknown;
     const spec = parseRenderSpec(raw);
-    expect(spec.schemaVersion).toBe(1);
+    expect(spec.schemaVersion).toBe(2);
     expect(spec.rendererVersion).toBe("android-alpha-renderer-1");
   });
 
@@ -95,3 +96,5 @@ function deepMerge<T>(base: T, override: unknown): T {
   }
   return result as T;
 }
+
+function withDocument(spec: RenderSpec): RenderSpec { return { ...spec, content: { ...spec.content, lyricDocument: createLyricDocumentV2(spec.content.lyrics, spec.content.translation) } }; }

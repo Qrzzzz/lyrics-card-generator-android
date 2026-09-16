@@ -1,3 +1,4 @@
+import type { LyricDocumentV2 } from "./desktop/lyrics-document-v2";
 export const PROTOCOL_VERSION = 1 as const;
 export const RENDERER_VERSION = "android-alpha-renderer-1" as const;
 
@@ -14,7 +15,7 @@ export type BackgroundMode = "palette" | "gradient";
 export type GridDensity = "sparse" | "medium" | "dense";
 
 export interface RenderSpec {
-  schemaVersion: 1;
+  schemaVersion: 2;
   rendererVersion: typeof RENDERER_VERSION;
   locale: RenderLocale;
   song: {
@@ -31,6 +32,7 @@ export interface RenderSpec {
     translationEnabled: boolean;
     translation: string;
     instrumentalText: string;
+    lyricDocument: LyricDocumentV2;
   };
   canvas: {
     layoutMode: LayoutMode;

@@ -1,7 +1,8 @@
 import { RENDERER_VERSION, type RenderSpec } from "./types";
+import { createLyricDocumentV2 } from "./desktop/lyrics-document-v2";
 
 export const DEFAULT_RENDER_SPEC: RenderSpec = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   rendererVersion: RENDERER_VERSION,
   locale: "zh",
   song: {
@@ -13,6 +14,7 @@ export const DEFAULT_RENDER_SPEC: RenderSpec = {
     coverAssetId: null
   },
   content: {
+    lyricDocument: createLyricDocumentV2("晚风把城市写成一封信\n我们在时间的褶皱里相遇\n让每一句歌，都有光的形状", "The evening breeze writes the city into a letter\nWe meet in the folds of time\nLet every lyric take the shape of light"),
     mode: "lyrics",
     lyrics: "晚风把城市写成一封信\n我们在时间的褶皱里相遇\n让每一句歌，都有光的形状",
     translationEnabled: true,

@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { createLyricDocumentV2 } from "../src/desktop/lyrics-document-v2";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LyricsCard, splitUsefulLines } from "../src/Card";
@@ -15,6 +16,7 @@ function withLyrics(lyrics: string, translation = "", translationEnabled = false
     ...DEFAULT_RENDER_SPEC,
     content: {
       ...DEFAULT_RENDER_SPEC.content,
+      lyricDocument: createLyricDocumentV2(lyrics, translation),
       lyrics,
       translation,
       translationEnabled

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "rendererVersion": "android-alpha-renderer-1",
   "locale": "zh",
   "song": {
@@ -15,7 +15,65 @@
     "lyrics": "把夜色折成一艘纸船\n让它沿着银河慢慢靠岸\n如果明天仍有风\n就把我们的名字唱完",
     "translationEnabled": true,
     "translation": "Fold the night into a paper boat\nLet it drift ashore along the Milky Way\nIf the wind still rises tomorrow\nSing our names through to the end",
-    "instrumentalText": "纯音乐"
+    "instrumentalText": "纯音乐",
+    "lyricDocument": {
+      "schemaVersion": 2,
+      "id": "document-1",
+      "revision": 0,
+      "blocks": [
+        {
+          "id": "block-2",
+          "formatting": {
+            "sourcePresent": true,
+            "translationPresent": true,
+            "sourceSeparatorAfter": "",
+            "translationSeparatorAfter": ""
+          },
+          "units": [
+            {
+              "id": "unit-3",
+              "source": [
+                "把夜色折成一艘纸船"
+              ],
+              "translation": [
+                "Fold the night into a paper boat"
+              ]
+            },
+            {
+              "id": "unit-4",
+              "source": [
+                "让它沿着银河慢慢靠岸"
+              ],
+              "translation": [
+                "Let it drift ashore along the Milky Way"
+              ]
+            },
+            {
+              "id": "unit-5",
+              "source": [
+                "如果明天仍有风"
+              ],
+              "translation": [
+                "If the wind still rises tomorrow"
+              ]
+            },
+            {
+              "id": "unit-6",
+              "source": [
+                "就把我们的名字唱完"
+              ],
+              "translation": [
+                "Sing our names through to the end"
+              ]
+            }
+          ]
+        }
+      ],
+      "formatting": {
+        "sourcePrefix": "",
+        "translationPrefix": ""
+      }
+    }
   },
   "canvas": {
     "layoutMode": "portrait",

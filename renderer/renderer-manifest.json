@@ -2,7 +2,7 @@
   "rendererVersion": "android-alpha-renderer-1",
   "sourceCommit": "b894db9e121848122a16ddcdaaab1283ffab1e27",
   "sourcePackageVersion": "4.3.8",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "protocolVersion": 1,
   "goldenDatasetVersion": "android-alpha-fixtures-v1",
   "fontManifestHash": "cfd264f074ff825dba28f74f8234ee01f7e55bff4aeb7b1676fd54943563bf7c",

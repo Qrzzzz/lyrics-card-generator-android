@@ -190,7 +190,12 @@ class EditorViewModel(
         if (_uiState.value.isLeaving) return
         val project = _uiState.value.currentProject ?: return
         val updated = runCatching {
-            val candidate = transform(project.spec)
+            val edited = transform(project.spec)
+            val candidate = edited.copy(content = edited.content.copy(
+                lyricDocument = if (edited.content.lyricDocument != project.spec.content.lyricDocument) {
+                    edited.content.lyricDocument
+                } else project.spec.content.lyricDocument.reconcile(edited.content.lyrics, edited.content.translation),
+            ))
             project.copy(spec = candidate.requireValid())
         }.getOrElse { cause ->
             setError(lineLimitMessage(cause) ?: UiText.resource(R.string.editor_error_invalid_setting))
@@ -473,7 +478,9 @@ class EditorViewModel(
                 it.copy(
                     isLoading = false,
                     projectUnavailable = true,
-                    errorMessage = lineLimitMessage(cause, loadingStoredProject = true)
+                    errorMessage = if (generateSequence(cause) { it.cause }.any { it is com.qrzzzz.lyricscard.data.IncompatibleProjectException }) {
+                        UiText.resource(R.string.editor_error_incompatible_project)
+                    } else lineLimitMessage(cause, loadingStoredProject = true)
                         ?: UiText.resource(R.string.editor_error_open_project),
                 )
             }

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "rendererVersion": "android-alpha-renderer-1",
   "locale": "ja",
   "song": {
@@ -15,7 +15,65 @@
     "lyrics": "静かな窓辺で\nほどけた夢を集める\n君の声がまだ\n遠い空に残っている",
     "translationEnabled": true,
     "translation": "在安静的窗边\n收集散落的梦\n你的声音仍然\n留在遥远的天空",
-    "instrumentalText": "インストゥルメンタル"
+    "instrumentalText": "インストゥルメンタル",
+    "lyricDocument": {
+      "schemaVersion": 2,
+      "id": "document-1",
+      "revision": 0,
+      "blocks": [
+        {
+          "id": "block-2",
+          "formatting": {
+            "sourcePresent": true,
+            "translationPresent": true,
+            "sourceSeparatorAfter": "",
+            "translationSeparatorAfter": ""
+          },
+          "units": [
+            {
+              "id": "unit-3",
+              "source": [
+                "静かな窓辺で"
+              ],
+              "translation": [
+                "在安静的窗边"
+              ]
+            },
+            {
+              "id": "unit-4",
+              "source": [
+                "ほどけた夢を集める"
+              ],
+              "translation": [
+                "收集散落的梦"
+              ]
+            },
+            {
+              "id": "unit-5",
+              "source": [
+                "君の声がまだ"
+              ],
+              "translation": [
+                "你的声音仍然"
+              ]
+            },
+            {
+              "id": "unit-6",
+              "source": [
+                "遠い空に残っている"
+              ],
+              "translation": [
+                "留在遥远的天空"
+              ]
+            }
+          ]
+        }
+      ],
+      "formatting": {
+        "sourcePrefix": "",
+        "translationPrefix": ""
+      }
+    }
   },
   "canvas": {
     "layoutMode": "portrait",

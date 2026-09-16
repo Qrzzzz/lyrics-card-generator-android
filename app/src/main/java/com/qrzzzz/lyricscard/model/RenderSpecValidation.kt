@@ -42,6 +42,10 @@ fun RenderSpec.validate(): List<RenderSpecViolation> = buildList {
 
     validateLyricText("content.lyrics", content.lyrics)
     validateLyricText("content.translation", content.translation)
+    if (!content.lyricDocument.isValid() || content.lyricDocument.text() != content.lyrics.replace("\r\n", "\n").replace('\r', '\n') ||
+        content.lyricDocument.text(true) != content.translation.replace("\r\n", "\n").replace('\r', '\n')) {
+        violation("content.lyricDocument", "must be a valid V2 document matching its text projections")
+    }
     validateText("content.instrumentalText", content.instrumentalText, MAX_METADATA_LENGTH)
 
     val widthRange = when (canvas.layoutMode) {
