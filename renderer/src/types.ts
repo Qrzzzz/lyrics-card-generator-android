@@ -41,6 +41,10 @@ export interface RenderSpec {
     height: number;
     autoHeight: boolean;
     pixelRatio: 1 | 2;
+    autoWidth?: boolean;
+    landscape?: import("./desktop/types").LandscapeLayoutSettings;
+    /** Renderer-only derived geometry; never accepted from the native bridge. */
+    layoutPlan?: import("./desktop/types").LandscapeLayoutPlan;
   };
   typography: {
     fontScheme: FontScheme;
@@ -53,6 +57,12 @@ export interface RenderSpec {
     textColorMode: TextColorMode;
     textColorPreset: TextColorPreset;
     customTextColor: string | null;
+    latinFontFamily?: string;
+    customFontAsset?: string | null;
+    customFontEnabled?: boolean;
+    fontWeight?: number;
+    fontItalic?: boolean;
+    separatorStyle?: "dot" | "line";
   };
   visual: {
     backgroundMode: BackgroundMode;

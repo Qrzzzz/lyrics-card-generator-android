@@ -34,11 +34,12 @@ internal fun TypographyPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Uni
                 }
                 onSpecChange(
                     spec.copy(
-                        typography = spec.typography.copy(fontScheme = scheme, fontFamily = family),
+                        typography = spec.typography.copy(fontScheme = scheme, fontFamily = family, latinFontFamily = family, customFontEnabled = false),
                     ),
                 )
             },
         )
+        CustomFontControls(spec, onSpecChange)
         LabeledSlider(
             label = stringResource(R.string.editor_lyric_size),
             value = spec.typography.lyricSize.toFloat(),
@@ -50,10 +51,10 @@ internal fun TypographyPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Uni
         LabeledSlider(
             label = stringResource(R.string.editor_line_height),
             value = spec.typography.lineHeight.toFloat(),
-            range = 1.1f..1.75f,
+            range = 1.5f..2.1f,
             displayValue = "%.2f".format(spec.typography.lineHeight),
         ) {
-            onSpecChange(spec.copy(typography = spec.typography.copy(lineHeight = it.toDouble())))
+            onSpecChange(spec.copy(typography = spec.typography.copy(lineHeight = (it * 20).roundToInt() / 20.0)))
         }
         LabeledSlider(
             label = stringResource(R.string.editor_translation_scale),
@@ -65,7 +66,7 @@ internal fun TypographyPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Uni
         }
         Text(stringResource(R.string.editor_alignment), style = MaterialTheme.typography.labelLarge)
         ChoiceChips(
-            values = TextAlignment.entries,
+            values = listOf(TextAlignment.LEFT, TextAlignment.CENTER),
             selected = spec.typography.alignment,
             label = {
                 stringResource(

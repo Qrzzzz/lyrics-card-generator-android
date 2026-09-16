@@ -33,7 +33,7 @@ export const DEFAULT_RENDER_SPEC: RenderSpec = {
     fontScheme: "sans-heavy",
     fontFamily: "Source Han Sans SC",
     lyricSize: 56,
-    lineHeight: 1.4,
+    lineHeight: 1.8,
     alignment: "left",
     translationScale: 0.72,
     twoLineTitle: false,

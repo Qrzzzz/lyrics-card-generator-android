@@ -643,3 +643,12 @@ h1 {
     background: rgba(8, 9, 12, 0.72);
   }
 }
+/* V2 measurement and export use card coordinates, independent of WebView size. */
+.lyric-line, .translation-line { font-weight: inherit; font-style: inherit; }
+.lyric-separator { text-align: center; font-size: var(--lyric-size); line-height: 1.8; }
+.song-info h1 { font-size: 52px; }
+.song-artist { font-size: 34px; }
+.song-album { font-size: 27px; }
+.portrait-main { padding: 36px 0; }
+.landscape-content .cover-art { width: 100%; height: 100%; aspect-ratio: auto; }
+.landscape-content .card-footer { position: static; padding: 0; }

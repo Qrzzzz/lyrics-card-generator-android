@@ -35,18 +35,18 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                     val canvas = if (mode == LayoutMode.PORTRAIT) {
                         spec.canvas.copy(
                             layoutMode = mode,
-                            ratio = CanvasRatio.PORTRAIT_4_5,
-                            width = 1080,
-                            height = 1350,
-                            autoHeight = false,
+                            ratio = CanvasRatio.CUSTOM,
+                            width = 1040,
+                            height = 1080,
+                            autoHeight = true,
                         )
                     } else {
                         spec.canvas.copy(
                             layoutMode = mode,
-                            ratio = CanvasRatio.LANDSCAPE_16_9,
+                            ratio = CanvasRatio.CUSTOM,
                             width = 1920,
                             height = 1080,
-                            autoHeight = false,
+                            autoHeight = true,
                         )
                     }
                     onSpecChange(spec.copy(canvas = canvas))
@@ -61,12 +61,7 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                     CanvasRatio.CUSTOM,
                 )
             } else {
-                listOf(
-                    CanvasRatio.LANDSCAPE_16_9,
-                    CanvasRatio.LANDSCAPE_21_9,
-                    CanvasRatio.LANDSCAPE_3_2,
-                    CanvasRatio.CUSTOM,
-                )
+                listOf(CanvasRatio.CUSTOM)
             }
             ChoiceChips(
                 values = ratios,
@@ -87,14 +82,32 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                     )
                 },
             )
-            if (spec.canvas.ratio == CanvasRatio.CUSTOM) {
+            if (spec.canvas.layoutMode == LayoutMode.LANDSCAPE) {
+                val settings = spec.canvas.landscape
+                SettingSwitch("自动歌词宽度", settings.autoLyricsWidth) {
+                    onSpecChange(spec.copy(canvas = spec.canvas.copy(landscape = settings.copy(autoLyricsWidth = it))))
+                }
+                if (!settings.autoLyricsWidth) NumberField("歌词宽度", settings.lyricsWidth, 520..1280) {
+                    onSpecChange(spec.copy(canvas = spec.canvas.copy(landscape = settings.copy(lyricsWidth = it))))
+                }
+                SettingSwitch("自动高度", settings.autoHeight) {
+                    onSpecChange(spec.copy(canvas = spec.canvas.copy(landscape = settings.copy(autoHeight = it))))
+                }
+                if (!settings.autoHeight) NumberField("期望高度（内容过长时自动扩展）", settings.requestedHeight, 720..3600) {
+                    onSpecChange(spec.copy(canvas = spec.canvas.copy(landscape = settings.copy(requestedHeight = it))))
+                }
+            }
+            if (spec.canvas.ratio == CanvasRatio.CUSTOM && spec.canvas.layoutMode == LayoutMode.PORTRAIT) {
+                SettingSwitch("自动宽度", spec.canvas.autoWidth) {
+                    onSpecChange(spec.copy(canvas = spec.canvas.copy(autoWidth = it)))
+                }
                 val widthRange = if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) {
                     720..1440
                 } else {
                     1080..3000
                 }
                 val heightRange = if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) {
-                    720..3200
+                    if (spec.canvas.autoHeight) 640..6400 else 720..3200
                 } else {
                     720..1600
                 }

@@ -479,9 +479,9 @@ class RendererController private constructor(
         try {
             _status.value = RendererStatus(RendererStatus.Phase.EXPORTING, "正在生成 PNG…")
 
-            if (exportSpec.canvas.autoHeight) {
+            if (exportSpec.canvas.ratio == com.qrzzzz.lyricscard.model.CanvasRatio.CUSTOM) {
                 val measurement = measureUnlocked(exportSpec, sessionId)
-                exportSpec = exportSpec.copy(canvas = exportSpec.canvas.copy(height = measurement.height)).requireValid()
+                exportSpec = exportSpec.copy(canvas = exportSpec.canvas.copy(width = measurement.width, height = measurement.height)).requireValid()
             }
 
             val applied = request(
@@ -543,7 +543,7 @@ class RendererController private constructor(
         val payload = measured.payload.jsonObject
         val width = payload["width"]?.jsonPrimitive?.intOrNull ?: throw RendererException("测量结果缺少宽度")
         val height = payload["height"]?.jsonPrimitive?.intOrNull ?: throw RendererException("测量结果缺少高度")
-        require(width == spec.canvas.width && height in 720..3200) { "渲染器返回的自动高度无效" }
+        require(width in 720..3000 && height in 640..6400) { "渲染器返回的自动高度无效" }
         return CanvasMeasurement(width, height)
     }
 
@@ -986,6 +986,7 @@ class RendererController private constructor(
 
     private fun openRendererAsset(path: String): WebResourceResponse? {
         val assetPath = path.substringBefore('?').substringBefore('#')
+        if (assetPath.startsWith("custom-fonts/")) return CustomFontStore.open(appContext, assetPath.removePrefix("custom-fonts/"))
         if (!SAFE_RENDERER_PATH.matches(assetPath) || assetPath.split('/').any { it == ".." }) return null
         return runCatching {
             val mime = when (assetPath.substringAfterLast('.', "")) {

@@ -31,7 +31,7 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     (spec.visibility.showPlatformBadge && source !== "unknown") ||
     (spec.visibility.showSharedBy && spec.branding.sharedByName.trim().length > 0) ||
     spec.visibility.showGeneratedWatermark;
-  const lyricSize = fitLyricSize(spec, Math.max(1, lines.length), translations.length > 0, showHeader, showFooter);
+  const lyricSize = spec.typography.lyricSize;
   const serif =
     spec.typography.fontScheme === "serif-heavy" ||
     spec.typography.fontScheme === "system-serif" ||
@@ -44,9 +44,11 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     width: spec.canvas.width,
     height: spec.canvas.height,
     color: textColor,
-    fontFamily: serif
-      ? '"Source Han Serif SC", "Source Han Serif Heavy Local", serif'
-      : '"Source Han Sans SC", "Source Han Sans Heavy Local", sans-serif',
+    fontFamily: spec.typography.customFontEnabled && spec.typography.customFontAsset
+      ? '"Imported Lyric Font", sans-serif'
+      : `${JSON.stringify(spec.typography.latinFontFamily || spec.typography.fontFamily)}, ${JSON.stringify(spec.typography.fontFamily)}, ${serif ? "serif" : "sans-serif"}`,
+    fontWeight: spec.typography.fontWeight ?? 900,
+    fontStyle: spec.typography.fontItalic ? "italic" : "normal",
     "--card-width": `${spec.canvas.width}px`,
     "--card-height": `${spec.canvas.height}px`,
     "--text-color": textColor,
@@ -154,27 +156,29 @@ function LandscapeContent({
   showFooter
 }: CardContentProps) {
   const hasCover = spec.visibility.showCover && spec.content.mode === "lyrics";
+  const plan = spec.canvas.layoutPlan;
+  const rectStyle = (rect: { x: number; y: number; width: number; height: number } | undefined): CSSProperties | undefined => rect ? { position: "absolute", left: rect.x, top: rect.y, width: rect.width, height: rect.height } : undefined;
 
   return (
-    <div className={`landscape-content ${hasCover ? "has-cover" : "no-cover"}`} data-card-content="true">
+    <div className={`landscape-content ${hasCover ? "has-cover" : "no-cover"}`} data-card-content="true" style={plan ? { position: "absolute", inset: 0, display: "block", padding: 0 } : undefined}>
       {hasCover ? (
-        <div className="landscape-cover-slot">
+        <div className="landscape-cover-slot" style={rectStyle(plan?.coverRect)}>
           <CoverArtwork spec={spec} />
         </div>
       ) : null}
-      <div className="landscape-copy">
+      <div className="landscape-copy" style={plan ? { display: "contents" } : undefined}>
         {spec.content.mode === "instrumental" ? (
           <InstrumentalBlock spec={spec} />
         ) : (
           <>
-            {spec.visibility.showSongInfo ? <SongInfo spec={spec} textColor={textColor} landscape /> : null}
-            <div className="landscape-lyrics-viewport" data-card-lyrics-viewport="true">
+            {spec.visibility.showSongInfo ? <div style={rectStyle(plan?.metadataRect)}><SongInfo spec={spec} textColor={textColor} landscape /></div> : null}
+            <div className="landscape-lyrics-viewport" data-card-lyrics-viewport="true" style={rectStyle(plan?.lyricsRect)}>
               <LyricsBlock spec={spec} lines={lines} translations={translations} />
             </div>
           </>
         )}
       </div>
-      {showFooter ? <CardFooter spec={spec} source={source} textColor={textColor} landscape /> : null}
+      {showFooter ? <div style={rectStyle(plan?.accessoriesRect)}><CardFooter spec={spec} source={source} textColor={textColor} landscape /></div> : null}
     </div>
   );
 }
@@ -249,7 +253,7 @@ function LyricsBlock({ spec, lines, translations }: { spec: RenderSpec; lines: s
         return (
           <div className="lyric-pair" key={row.unitId} data-unit-id={row.unitId}
             style={{ paddingTop: `${Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0)}em` }}>
-            {row.isSeparator ? <div className="lyric-separator" aria-hidden="true">·</div> : <>
+            {row.isSeparator ? <div className="lyric-separator" aria-hidden="true">{spec.typography.separatorStyle === "line" ? "——" : "·"}</div> : <>
               {row.source.map((line, i) => <p className="lyric-line" key={i}>{line || "\u00A0"}</p>)}
               {spec.content.translationEnabled ? row.translation.map((line, i) => <p className="translation-line" key={i}>{line || "\u00A0"}</p>) : null}
             </>}

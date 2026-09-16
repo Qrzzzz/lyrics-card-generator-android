@@ -238,8 +238,8 @@
         },
         "height": {
           "type": "integer",
-          "minimum": 720,
-          "maximum": 3200
+          "minimum": 640,
+          "maximum": 6400
         },
         "autoHeight": {
           "type": "boolean"
@@ -250,6 +250,37 @@
             1,
             2
           ]
+        },
+        "autoWidth": {
+          "type": "boolean"
+        },
+        "landscape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "autoLyricsWidth",
+            "lyricsWidth",
+            "autoHeight",
+            "requestedHeight"
+          ],
+          "properties": {
+            "autoLyricsWidth": {
+              "type": "boolean"
+            },
+            "lyricsWidth": {
+              "type": "integer",
+              "minimum": 520,
+              "maximum": 1280
+            },
+            "autoHeight": {
+              "type": "boolean"
+            },
+            "requestedHeight": {
+              "type": "integer",
+              "minimum": 720,
+              "maximum": 3600
+            }
+          }
         }
       }
     },
@@ -290,8 +321,8 @@
         },
         "lineHeight": {
           "type": "number",
-          "minimum": 1.1,
-          "maximum": 1.75
+          "minimum": 1.5,
+          "maximum": 2.1
         },
         "alignment": {
           "type": "string",
@@ -338,6 +369,39 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "latinFontFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "customFontAsset": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}\\.(ttf|otf|woff2?)$"
+            }
+          ]
+        },
+        "customFontEnabled": {
+          "type": "boolean"
+        },
+        "fontWeight": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900
+        },
+        "fontItalic": {
+          "type": "boolean"
+        },
+        "separatorStyle": {
+          "enum": [
+            "dot",
+            "line"
           ]
         }
       }
@@ -505,8 +569,8 @@
                 "maximum": 1440
               },
               "height": {
-                "minimum": 720,
-                "maximum": 3200
+                "minimum": 640,
+                "maximum": 6400
               }
             }
           }
@@ -543,10 +607,7 @@
               },
               "height": {
                 "minimum": 720,
-                "maximum": 1600
-              },
-              "autoHeight": {
-                "const": false
+                "maximum": 6400
               }
             }
           }
@@ -569,9 +630,6 @@
         "properties": {
           "canvas": {
             "properties": {
-              "layoutMode": {
-                "const": "portrait"
-              },
               "ratio": {
                 "const": "custom"
               }

@@ -58,20 +58,32 @@ data class CanvasSpec(
     val height: Int = 1080,
     val autoHeight: Boolean = true,
     val pixelRatio: Int = 2,
+    val autoWidth: Boolean = true,
+    val landscape: LandscapeSettings = LandscapeSettings(),
 )
+
+@Serializable
+data class LandscapeSettings(val autoLyricsWidth: Boolean = true, val lyricsWidth: Int = 880,
+    val autoHeight: Boolean = true, val requestedHeight: Int = 1080)
 
 @Serializable
 data class TypographySpec(
     val fontScheme: FontScheme = FontScheme.SANS_HEAVY,
     val fontFamily: String = "Source Han Sans SC",
     val lyricSize: Int = 60,
-    val lineHeight: Double = 1.4,
+    val lineHeight: Double = 1.8,
     val alignment: TextAlignment = TextAlignment.LEFT,
     val translationScale: Double = 0.75,
     val twoLineTitle: Boolean = false,
     val textColorMode: TextColorMode = TextColorMode.AUTO,
     val textColorPreset: TextColorPreset = TextColorPreset.WHITE,
     val customTextColor: String? = null,
+    val latinFontFamily: String = "Source Han Sans SC",
+    val customFontAsset: String? = null,
+    val customFontEnabled: Boolean = false,
+    val fontWeight: Int = 900,
+    val fontItalic: Boolean = false,
+    val separatorStyle: String = "dot",
 )
 
 @Serializable
