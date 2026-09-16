@@ -49,7 +49,7 @@ $binding = Get-WorkflowScript '.github/workflows/final-device-gate.yml' 'Bind ca
 $values = @{
     SOURCE_COMMIT = '1' * 40; WORKFLOW_SHA = '3' * 40; TRIGGER_SHA = '3' * 40
     WORKFLOW_REF = 'refs/heads/main'; WORKFLOW_EVENT = 'workflow_dispatch'
-    CANDIDATE_RUN_ID = '1001'; CANDIDATE_ARTIFACT_NAME = 'production-candidate-2.0.0-111111111111'
+    CANDIDATE_RUN_ID = '1001'; CANDIDATE_ARTIFACT_NAME = 'production-candidate-2.0-111111111111'
     EVIDENCE_RUN_ID = '2002'; EVIDENCE_ARTIFACT_NAME = 'final-device-evidence-fixture'
     REPOSITORY = 'owner/repo'; GH_TOKEN = 'fixture'; API_URL = 'https://api.contract.invalid'
     VALIDATOR_COMMIT = '3' * 40

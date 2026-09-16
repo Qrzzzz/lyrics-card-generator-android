@@ -669,3 +669,8 @@ h1 {
 .cover-placeholder > *, .cover-placeholder::after { display:none; }
 .portrait-header > .cover-art { border-radius:44px; }
 .song-info, .lyrics-stack { text-shadow:inherit; }
+.song-info--landscape h1 { font-size:calc(52px * var(--left-scale)); line-height:1.18; overflow-wrap:anywhere; }
+.song-info--landscape .song-artist { margin-top:calc(16px * var(--left-scale)); font-size:calc(30px * var(--left-scale)); line-height:1.32; font-weight:600; white-space:normal; }
+.song-info--landscape .song-album { margin-top:calc(10px * var(--left-scale)); font-size:calc(23px * var(--left-scale)); line-height:1.35; font-weight:500; white-space:normal; }
+.lyrics-card--landscape .cover-art { border-radius:calc(28px * var(--left-scale)); }
+.lyrics-card--landscape .translation-line { line-height:var(--lyric-line-height); margin-top:calc(var(--lyric-size) * .16); }

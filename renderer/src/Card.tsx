@@ -36,7 +36,8 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     spec.visibility.showGeneratedWatermark;
   const rows = getLyricDocumentRows(spec.content.lyricDocument);
   const visualRows = rows.reduce((count, row, index) => count + (row.isSeparator ? 0 : 1 + (rows[index - 1]?.isSeparator ? 0 : Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0))), 0);
-  const lyricSize = Math.max(34, Math.min(spec.typography.lyricSize, visualRows > 10 ? spec.typography.lyricSize - 6 : spec.typography.lyricSize));
+  const landscape = spec.canvas.layoutMode === "landscape";
+  const lyricSize = landscape ? spec.typography.lyricSize : Math.max(34, Math.min(spec.typography.lyricSize, visualRows > 10 ? spec.typography.lyricSize - 6 : spec.typography.lyricSize));
   const serif =
     spec.typography.fontScheme === "serif-heavy" ||
     spec.typography.fontScheme === "system-serif" ||
@@ -69,7 +70,8 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     "--grid-opacity": String(spec.visual.gridOpacity),
     "--lyric-size": `${lyricSize}px`,
     "--translation-size": `${Math.round(lyricSize * spec.typography.translationScale)}px`,
-    "--pair-margin": `${lyricSize * (spec.content.translationEnabled ? .42 : .18)}px`,
+    "--pair-margin": `${lyricSize * (landscape ? (spec.content.translationEnabled ? .34 : .24) : (spec.content.translationEnabled ? .42 : .18))}px`,
+    "--left-scale": spec.canvas.layoutPlan?.leftScale ?? 1,
     "--lyric-line-height": String(spec.typography.lineHeight),
     "--cover-scale": String(spec.media.coverCropScale)
   };
@@ -232,7 +234,7 @@ function CoverArtwork({ spec }: { spec: RenderSpec }) {
 function SongInfo({ spec, textColor, landscape = false }: { spec: RenderSpec; textColor: string; landscape?: boolean }) {
   return (
     <div className={`song-info ${landscape ? "song-info--landscape" : ""}`} data-card-song-info="true">
-      <h1 className={spec.typography.twoLineTitle ? "title-two-lines" : "title-one-line"}>
+      <h1 className={landscape ? "landscape-title" : spec.typography.twoLineTitle ? "title-two-lines" : "title-one-line"}>
         <span>{spec.song.title || localeFallback(spec.locale, "title")}</span>
         {spec.song.explicit ? <ExplicitBadge color={textColor} /> : null}
       </h1>
@@ -261,7 +263,7 @@ function LyricsBlock({ spec, lines, translations }: { spec: RenderSpec; lines: s
         const dot = spec.typography.separatorStyle !== "line";
         return (
           <div className="lyric-pair" key={row.unitId} data-unit-id={row.unitId}
-            style={{ marginTop: index > 0 && !rows[index - 1]?.isSeparator ? `calc(${Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0)} * (var(--lyric-size) * var(--lyric-line-height) + var(--pair-margin) * 2))` : 0, marginBottom: row.isSeparator || index === rows.length - 1 ? 0 : "var(--pair-margin)" }}>
+            style={{ marginTop: index > 0 && !rows[index - 1]?.isSeparator ? `calc(${Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0)} * ${spec.canvas.layoutMode === "landscape" ? "var(--pair-margin)" : "(var(--lyric-size) * var(--lyric-line-height) + var(--pair-margin) * 2)"})` : 0, marginBottom: row.isSeparator || index === rows.length - 1 ? 0 : "var(--pair-margin)" }}>
             {row.isSeparator ? <div className="lyric-separator" aria-hidden="true" style={{height:"calc(var(--lyric-size) * .65)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{background:"currentColor",opacity:dot ? .48 : .36,width:`calc(var(--lyric-size) * ${dot ? .105 : 1.65})`,height:dot?"calc(var(--lyric-size) * .105)":"max(1px, calc(var(--lyric-size) * .022))",borderRadius:dot?"50%":0}}/></div> : <>
               {row.source.length ? <p className="lyric-line">{row.source.join("\n") || "\u00A0"}</p> : null}
               {spec.content.translationEnabled && row.translation.length ? <p className="translation-line">{row.translation.join("\n")}</p> : null}

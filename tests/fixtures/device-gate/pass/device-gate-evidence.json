@@ -9,20 +9,20 @@
     "sourceCommit": "1111111111111111111111111111111111111111",
     "candidateRunId": 1001,
     "candidateRunAttempt": 1,
-    "candidateArtifactName": "production-candidate-2.0.0-111111111111",
+    "candidateArtifactName": "production-candidate-2.0-111111111111",
     "qualityGateRunId": 9001,
-    "releaseMetadataSha256": "33f5fcbf1d6751058f2b5b49443da7a522913d682e5a9a9a1d01ac3c2cff000c",
+    "releaseMetadataSha256": "5e26640063ad648a161936172e7cd3ace54ea4ccadfa6108df437c8b2dac65a9",
     "package": "com.qrzzzz.lyricscard",
-    "versionName": "2.0.0",
+    "versionName": "2.0",
     "versionCode": 20000,
     "productionApk": {
-      "name": "lyrics-card-generator-android-2.0.0.apk",
+      "name": "lyrics-card-generator-android-2.0.apk",
       "bytes": 40,
       "sha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
       "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "productionAab": {
-      "name": "lyrics-card-generator-android-2.0.0.aab",
+      "name": "lyrics-card-generator-android-2.0.aab",
       "bytes": 40,
       "sha256": "61cb110e6d1b156350e21e891d4caeeb603382fb3289c1f32d981c900ae01bc5",
       "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -34,7 +34,7 @@
       "certificateSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "package": "com.qrzzzz.lyricscard.test",
       "targetPackage": "com.qrzzzz.lyricscard",
-      "versionName": "2.0.0",
+      "versionName": "2.0",
       "versionCode": 20000
     }
   },
@@ -67,7 +67,7 @@
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
-        "versionName": "2.0.0",
+        "versionName": "2.0",
         "versionCode": 20000,
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
@@ -94,7 +94,7 @@
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
-        "versionName": "2.0.0",
+        "versionName": "2.0",
         "versionCode": 20000,
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
@@ -121,7 +121,7 @@
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
-        "versionName": "2.0.0",
+        "versionName": "2.0",
         "versionCode": 20000,
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
@@ -148,7 +148,7 @@
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
-        "versionName": "2.0.0",
+        "versionName": "2.0",
         "versionCode": 20000,
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",
@@ -178,7 +178,7 @@
       "installedArtifacts": {
         "sourceCommit": "1111111111111111111111111111111111111111",
         "package": "com.qrzzzz.lyricscard",
-        "versionName": "2.0.0",
+        "versionName": "2.0",
         "versionCode": 20000,
         "productionApkSha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789",
         "testApkSha256": "9b5ba459805b3a4b8ade14727f3085003417c8ea452f513aae13464f394bdedf",

@@ -12,13 +12,13 @@ Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'device-gate-evidence.json'
 Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'release-metadata.json') -Destination $fixtureRoot
 Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'logs\instrumentation.log') -Destination (Join-Path $fixtureRoot 'logs')
 Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'logs\logcat.txt') -Destination (Join-Path $fixtureRoot 'logs')
-Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'payloads\production-apk.fixture') -Destination (Join-Path $fixtureRoot 'lyrics-card-generator-android-2.0.0.apk')
-Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'payloads\production-aab.fixture') -Destination (Join-Path $fixtureRoot 'lyrics-card-generator-android-2.0.0.aab')
+Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'payloads\production-apk.fixture') -Destination (Join-Path $fixtureRoot 'lyrics-card-generator-android-2.0.apk')
+Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'payloads\production-aab.fixture') -Destination (Join-Path $fixtureRoot 'lyrics-card-generator-android-2.0.aab')
 Copy-Item -LiteralPath (Join-Path $fixtureSourceRoot 'payloads\test-apk.fixture') -Destination (Join-Path $fixtureRoot 'app-production-release-androidTest.apk')
 $fixtureEvidencePath = Join-Path $fixtureRoot 'device-gate-evidence.json'
 $fixtureMetadataPath = Join-Path $fixtureRoot 'release-metadata.json'
-$fixtureApkPath = Join-Path $fixtureRoot 'lyrics-card-generator-android-2.0.0.apk'
-$fixtureAabPath = Join-Path $fixtureRoot 'lyrics-card-generator-android-2.0.0.aab'
+$fixtureApkPath = Join-Path $fixtureRoot 'lyrics-card-generator-android-2.0.apk'
+$fixtureAabPath = Join-Path $fixtureRoot 'lyrics-card-generator-android-2.0.aab'
 $fixtureTestApkPath = Join-Path $fixtureRoot 'app-production-release-androidTest.apk'
 $expectedRepository = 'Qrzzzz/lyrics-card-generator-android'
 $expectedCommit = '1111111111111111111111111111111111111111'
@@ -127,7 +127,7 @@ $null = Assert-DeviceGateArtifactBinding `
     -ProductionAabPath $fixtureAabPath `
     -TestApkPath $fixtureTestApkPath
 $fixtureBadging = @"
-package: name='com.qrzzzz.lyricscard.test' versionCode='20000' versionName='2.0.0'
+package: name='com.qrzzzz.lyricscard.test' versionCode='20000' versionName='2.0'
 "@
 $fixtureManifestXmlTree = @"
 E: manifest
@@ -250,7 +250,7 @@ foreach ($inspectionCase in @(
     }
 }
 
-$blankVersionBadging = $fixtureBadging.Replace("versionCode='20000'", "versionCode=''").Replace("versionName='2.0.0'", "versionName=''")
+$blankVersionBadging = $fixtureBadging.Replace("versionCode='20000'", "versionCode=''").Replace("versionName='2.0'", "versionName=''")
 $blankVersionEvidence = Read-Fixture
 $blankVersionEvidence.candidate.testApk.versionCode = 0
 $blankVersionEvidence.candidate.testApk.versionName = ''
@@ -311,7 +311,7 @@ function Assert-FinalConsumerRejectsUnattestedTestApk {
         SOURCE_COMMIT = $expectedCommit
         CANDIDATE_RUN_ID = '1001'
         CANDIDATE_RUN_ATTEMPT = '1'
-        CANDIDATE_ARTIFACT_NAME = 'production-candidate-2.0.0-111111111111'
+        CANDIDATE_ARTIFACT_NAME = 'production-candidate-2.0-111111111111'
         REPOSITORY = $expectedRepository
         ANDROID_HOME = (Join-Path $fixtureRoot 'sdk-not-invoked')
     }

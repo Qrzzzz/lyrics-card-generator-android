@@ -4,7 +4,9 @@
 
 ### Create polished lyric sharing cards on Android
 
-**NetEase Cloud Music import · Six-step card editor · Offline live preview · High-resolution PNG export**
+**NetEase Cloud Music import · Six-step card editor · Offline live preview · PNG / WebP / JPG export**
+
+**Version 2.0 cannot open 1.x projects.** LyricDocumentV2 preserves paragraphs, bilingual units, stable IDs and blank lines. Older projects are retained without migration; export any images you need in the old version before recreating projects. Version 2.0 supports measured layouts, custom fonts, spatial backgrounds and 1× / 1.4× / 2× export with native Android save and share. See the [parity and validation record](docs/ANDROID_2.0_PARITY.md).
 
 <p>
   <strong>Language</strong><br/>
@@ -25,7 +27,7 @@
 ![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84?logo=android&logoColor=white)
 ![Stack](https://img.shields.io/badge/Stack-Kotlin%20%2B%20Compose-7F52FF?logo=kotlin&logoColor=white)
 ![Renderer](https://img.shields.io/badge/Renderer-React%20%2B%20CSS-149ECA?logo=react&logoColor=white)
-![Output](https://img.shields.io/badge/Output-PNG%201%C3%97%20%2F%202%C3%97-FF5722)
+![Output](https://img.shields.io/badge/Output-PNG%20%2F%20WebP%20%2F%20JPG-FF5722)
 [![Release](https://img.shields.io/github/v/release/Qrzzzz/lyrics-card-generator-android)](https://github.com/Qrzzzz/lyrics-card-generator-android/releases/latest)
 
 </div>
@@ -85,7 +87,7 @@ When sideloading the APK from a browser, Android may ask you to temporarily allo
 
 - Start live preview only when it becomes useful in step three, then reuse the renderer session through later steps and export.
 - Render entirely from the React/CSS bundle included in the APK—no remote web page is required.
-- Export high-resolution PNG files at 1× or 2×.
+- Export PNG, WebP or JPG at 1×, 1.4× or 2×.
 - Save through the system file picker or send the result through Android's share sheet.
 
 ### 🌓 Android Experience
@@ -96,7 +98,7 @@ When sideloading the APK from a browser, Android may ask you to temporarily allo
 
 ## 🔒 Offline Use and Privacy
 
-Manual editing, project management, card preview, and PNG export all work offline. The native client makes restricted HTTPS requests only when you explicitly search or parse NetEase Cloud Music content, fetch lyrics, or download selected cover art.
+Manual editing, project management, card preview, and image export all work offline. The native client makes restricted HTTPS requests only when you explicitly search or parse NetEase Cloud Music content, fetch lyrics, or download selected cover art.
 
 The renderer WebView blocks network access, external navigation, file access, and mixed content. The app includes no analytics, tracking, advertising, telemetry, or crash-reporting SDK. Projects, cover art, and export cache remain on the device and are explicitly excluded from Android cloud backup and device transfer. See [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md) for the complete data and network behavior.
 
@@ -108,7 +110,7 @@ The renderer WebView blocks network access, external navigation, file access, an
 2. Search NetEase Cloud Music, paste a song link, or enter song information manually and choose cover art.
 3. Edit the lyrics and translation, then select the appropriate content mode.
 4. Adjust canvas layout, typography, and visual style while checking the live preview.
-5. Choose 1× or 2× and export a PNG.
+5. Choose PNG, WebP or JPG and export at 1×, 1.4× or 2×.
 6. Save the image to a selected location or share it directly with another app.
 
 <a id="local-development"></a>

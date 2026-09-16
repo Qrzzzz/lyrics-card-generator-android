@@ -4,6 +4,7 @@ import { createLandscapeLayoutPlan, DEFAULT_LANDSCAPE_LAYOUT_SETTINGS, getLandsc
 import type { RenderSpec } from './types';
 import { getPortraitLayout } from './desktop/card-layout-engine';
 import type { CardStyle } from './desktop/types';
+import { resolveAdaptiveArtworkSize } from './desktop/artwork-geometry';
 
 export function portraitLayout(spec: RenderSpec, width = spec.canvas.width) {
   // Only these CardStyle fields are read by the shared portrait geometry engine.
@@ -48,8 +49,15 @@ export function measureLayout(node: HTMLElement, spec: RenderSpec): RenderSpec {
       const footer=node.querySelector<HTMLElement>('[data-card-footer]');
       const image=node.querySelector<HTMLImageElement>('.cover-art img');
       const aspect=image?.naturalWidth && image.naturalHeight ? image.naturalWidth/image.naturalHeight : 1;
+      const cover=resolveAdaptiveArtworkSize({baseSize:480,aspectRatio:aspect,maxWidth:480,maxHeight:480});
+      const measureChrome=(element:HTMLElement|null) => {
+        if(!element) return 0;
+        const copy=element.cloneNode(true) as HTMLElement;
+        copy.style.width='480px'; copy.style.setProperty('--left-scale','1');
+        host.append(copy); const height=copy.scrollHeight; copy.remove(); return height;
+      };
       const plan=createLandscapeLayoutPlan({measurementKey:JSON.stringify(spec),settings,lyricsCandidates,
-        left:{coverWidth:520,coverHeight:520/aspect,metadataWidth:520,metadataHeight:info?.scrollHeight ?? 0, accessoriesWidth:520,accessoriesHeight:footer?.scrollHeight ?? 0}});
+        left:{coverWidth:cover.width,coverHeight:cover.height,metadataWidth:480,metadataHeight:measureChrome(info), accessoriesWidth:480,accessoriesHeight:measureChrome(footer)}});
       if (!plan) throw new Error('Could not resolve landscape layout');
       if (plan.canvas.width>3000 || plan.canvas.height>6400) throw new Error('Content exceeds the supported canvas size');
       return {...spec,canvas:{...spec.canvas,...plan.canvas,layoutPlan:plan}};

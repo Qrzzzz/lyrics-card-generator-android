@@ -4,7 +4,7 @@
 
 ### 在 Android 上制作高质感歌词分享卡片
 
-**网易云音乐导入 · 六步卡片编辑 · 离线实时预览 · 高清 PNG 导出**
+**网易云音乐导入 · 六步卡片编辑 · 离线实时预览 · PNG / WebP / JPG 导出**
 
 <p>
   <strong>语言</strong><br/>
@@ -25,7 +25,7 @@
 ![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84?logo=android&logoColor=white)
 ![Stack](https://img.shields.io/badge/Stack-Kotlin%20%2B%20Compose-7F52FF?logo=kotlin&logoColor=white)
 ![Renderer](https://img.shields.io/badge/Renderer-React%20%2B%20CSS-149ECA?logo=react&logoColor=white)
-![Output](https://img.shields.io/badge/Output-PNG%201%C3%97%20%2F%202%C3%97-FF5722)
+![Output](https://img.shields.io/badge/Output-PNG%20%2F%20WebP%20%2F%20JPG-FF5722)
 [![Release](https://img.shields.io/github/v/release/Qrzzzz/lyrics-card-generator-android)](https://github.com/Qrzzzz/lyrics-card-generator-android/releases/latest)
 
 </div>
@@ -47,6 +47,10 @@
 </details>
 
 ## 📦 下载与安装
+
+**2.0 项目格式不兼容 1.x。** 新版使用 LyricDocumentV2 保存段落、原译文配对、稳定 ID 和空行；不会迁移或删除旧项目。请先在旧版导出需要保留的图片，再重新创建 2.0 项目。
+
+2.0 对齐桌面 v6.3.5 的布局测量、字体、流光背景及 1× / 1.4× / 2× 图片导出，保留 Android 原生保存与分享。[对齐范围和验收记录](docs/ANDROID_2.0_PARITY.md)。
 
 请前往 [GitHub Releases](https://github.com/Qrzzzz/lyrics-card-generator-android/releases/latest) 下载最新版：
 
@@ -85,7 +89,7 @@
 
 - 从第三步开始按需启动实时预览，后续步骤与导出过程复用同一 Renderer 会话；
 - 使用 APK 内置的本地 React/CSS Renderer，不依赖远程网页；
-- 支持 1× / 2× 高清 PNG 导出；
+- 支持 1× / 1.4× / 2× 的 PNG / WebP / JPG 导出；
 - 支持通过系统文件选择器保存，或通过 Android 分享面板发送到其他应用。
 
 ### 🌓 Android 体验
@@ -96,7 +100,7 @@
 
 ## 🔒 离线使用与隐私
 
-手动编辑、项目管理、卡片预览和 PNG 导出均可离线完成。只有在你主动搜索或解析网易云音乐内容、获取歌词或下载所选封面时，Native 客户端才会发起受限的 HTTPS 请求。
+手动编辑、项目管理、卡片预览和图片导出均可离线完成。只有在你主动搜索或解析网易云音乐内容、获取歌词或下载所选封面时，Native 客户端才会发起受限的 HTTPS 请求。
 
 Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容。应用不包含分析、追踪、广告、遥测或崩溃上报 SDK；项目、封面和导出缓存保存在设备本地，并明确排除在 Android 云备份和换机迁移之外。完整说明见 [PRIVACY.md](https://github.com/Qrzzzz/lyrics-card-generator-android/blob/main/PRIVACY.md)。
 
@@ -108,7 +112,7 @@ Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容
 2. 搜索网易云音乐、粘贴歌曲链接，或手动填写歌曲信息并选择封面。
 3. 编辑歌词与翻译，选择合适的内容模式。
 4. 调整画布布局、字体方案和视觉样式，并查看实时预览。
-5. 选择 1× 或 2×，导出 PNG。
+5. 选择 PNG、WebP 或 JPG 和 1× / 1.4× / 2×，导出图片。
 6. 将图片保存到指定位置，或直接分享到其他应用。
 
 <a id="本地开发"></a>
