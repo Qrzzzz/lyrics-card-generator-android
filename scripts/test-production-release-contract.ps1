@@ -371,7 +371,7 @@ if ($verifier -notmatch 'actions/workflows/ci\.yml/runs\?branch=main&event=push&
 if ($policy.certificateSha256 -notmatch '^[0-9a-f]{64}$' -or
     $policy.trustAnchor.releaseTag -ne 'v1.0.0' -or
     $policy.trustAnchor.apkSha256 -notmatch '^[0-9a-f]{64}$' -or
-    $policy.lastVerifiedRelease.releaseTag -notmatch '^v\d+\.\d+\.\d+$' -or
+    $policy.lastVerifiedRelease.releaseTag -notmatch '^v(?:[01]\.\d+\.\d+|(?:[2-9]|[1-9]\d+)\.\d+)$' -or
     $policy.lastVerifiedRelease.sourceCommit -notmatch '^[0-9a-f]{40}$' -or
     $policy.lastVerifiedRelease.apkSha256 -notmatch '^[0-9a-f]{64}$' -or
     $policy.lastVerifiedRelease.certificateSha256 -ne $policy.certificateSha256) {

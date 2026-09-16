@@ -43,7 +43,7 @@ internal class AndroidExportPreviewDecoder(
         if (!file.isFile) return@withContext ExportPreviewDecodeResult.Missing
 
         try {
-            file.inputStream().buffered().use { input ->
+            if (image.mimeType == "image/png") file.inputStream().buffered().use { input ->
                 val signature = ByteArray(PNG_SIGNATURE.size)
                 if (input.read(signature) != signature.size || !signature.contentEquals(PNG_SIGNATURE)) {
                     return@withContext ExportPreviewDecodeResult.InvalidPng
@@ -53,7 +53,7 @@ internal class AndroidExportPreviewDecoder(
 
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, bounds)
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            if (image.mimeType !in listOf("image/png", "image/webp", "image/jpeg") || bounds.outMimeType != image.mimeType || bounds.outWidth <= 0 || bounds.outHeight <= 0) {
                 return@withContext ExportPreviewDecodeResult.InvalidPng
             }
 

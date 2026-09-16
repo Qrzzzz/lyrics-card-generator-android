@@ -337,7 +337,7 @@ class ProjectAssetStore(
         var prunedCount = 0
         val now = maxOf(clock(), storageSessionStartedAt)
         val completed = previousSessionFiles
-            .filter { it.isFile && it.name.endsWith(".png", ignoreCase = true) }
+            .filter { it.isFile && it.extension.lowercase(java.util.Locale.ROOT) in listOf("png", "webp", "jpg") }
             .sortedWith(compareByDescending<File> { it.lastModified() }.thenBy { it.name })
         var keptCount = 0
         var keptBytes = 0L
@@ -356,7 +356,7 @@ class ProjectAssetStore(
         }
         previousSessionFiles
             .filterNot { it.name.endsWith(".part") || it.name.endsWith(".tmp") }
-            .filterNot { it.name.endsWith(".png", ignoreCase = true) }
+            .filterNot { it.extension.lowercase(java.util.Locale.ROOT) in listOf("png", "webp", "jpg") }
             .forEach { file ->
                 if (file.delete()) prunedCount += 1
             }

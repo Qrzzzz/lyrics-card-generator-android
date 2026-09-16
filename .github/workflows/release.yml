@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       version:
-        description: Unpublished production versionName (x.y.z)
+        description: Unpublished production versionName (x.y)
         required: true
         type: string
 

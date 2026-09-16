@@ -14,7 +14,7 @@ export type SvgSourceCache = SingleSlotStringCache<number>;
 export type FontEmbedCssCache = SingleSlotStringCache<string>;
 
 export interface ExportCanvasSurface {
-  acquire(width: number, height: number, pixelRatio: 1 | 2): HTMLCanvasElement;
+  acquire(width: number, height: number, pixelRatio: 1 | 1.4 | 2): HTMLCanvasElement;
   release(): void;
 }
 
@@ -166,11 +166,12 @@ export async function renderNodeAsPng(
   node: HTMLElement,
   width: number,
   height: number,
-  pixelRatio: 1 | 2,
+  pixelRatio: 1 | 1.4 | 2,
   sourceCache: SvgSourceCache,
   fontEmbedCssCache: FontEmbedCssCache,
   canvasSurface: ExportCanvasSurface,
-  domRevision: number
+  domRevision: number,
+  mimeType = "image/png"
 ) {
   assertExportMemory(width, height, pixelRatio);
   await waitForStableRender();
@@ -201,7 +202,7 @@ export async function renderNodeAsPng(
     image = await loadSvgImage(svgDataUrl);
     svgDataUrl = undefined;
     const canvas = canvasSurface.acquire(width, height, pixelRatio);
-    return await drawImageAndEncodePngAndClear(image, canvas);
+    return await drawImageAndEncodePngAndClear(image, canvas, mimeType);
   } catch (error) {
     throw sanitizeExportError(error);
   } finally {
@@ -225,31 +226,35 @@ export async function encodeCanvasAsPngAndClear(canvas: HTMLCanvasElement) {
 
 export async function drawImageAndEncodePngAndClear(
   image: HTMLImageElement,
-  canvas: HTMLCanvasElement
+  canvas: HTMLCanvasElement,
+  mimeType = "image/png"
 ) {
   try {
     const context = canvas.getContext("2d");
     if (!context) {
       throw new Error("Canvas 2D context is unavailable");
     }
+    if (mimeType === "image/jpeg") { context.fillStyle = "#FFFFFF"; context.fillRect(0, 0, canvas.width, canvas.height); }
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
     // The canvas owns the drawn pixels now. Drop the SVG-backed Image before
     // PNG readback so old WebView does not retain both decoded surfaces.
     releaseDecodedImage(image);
-    return await encodeCanvasAsPng(canvas);
+    return await encodeCanvasAsPng(canvas, mimeType);
   } finally {
     releaseDecodedImage(image);
     clearCanvasPixels(canvas);
   }
 }
 
-async function encodeCanvasAsPng(canvas: HTMLCanvasElement) {
+async function encodeCanvasAsPng(canvas: HTMLCanvasElement, mimeType = "image/png") {
+  if (!["image/png", "image/webp", "image/jpeg"].includes(mimeType)) throw new Error("Unsupported image format");
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, "image/png", 1);
+    canvas.toBlob(resolve, mimeType, mimeType === "image/png" ? 1 : .95);
   });
   if (!blob) {
     throw new Error("html-to-image returned an empty PNG");
   }
+  if (blob.type !== mimeType) throw new Error("WebView does not support the requested image encoder");
   return blob;
 }
 

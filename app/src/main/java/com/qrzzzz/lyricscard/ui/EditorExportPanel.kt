@@ -27,11 +27,15 @@ import com.qrzzzz.lyricscard.model.LayoutMode
 import com.qrzzzz.lyricscard.model.Project
 
 @Composable
-internal fun ExportStepPanel(project: Project) {
+internal fun ExportStepPanel(project: Project, onSpecChange: (com.qrzzzz.lyricscard.model.RenderSpec) -> Unit = {}) {
     val spec = project.spec
     val songReady = spec.song.title.isNotBlank() || spec.song.artist.isNotBlank()
     val contentReady = spec.content.mode == ContentMode.INSTRUMENTAL || spec.content.lyrics.isNotBlank()
     PanelColumn {
+        SectionTitle(stringResource(R.string.v2_export_format))
+        ChoiceChips(values = listOf("png", "webp", "jpg"), selected = spec.canvas.exportFormat,
+            label = { it.uppercase(java.util.Locale.ROOT) },
+            onSelect = { onSpecChange(spec.copy(canvas = spec.canvas.copy(exportFormat = it))) })
         SectionTitle(stringResource(R.string.editor_pre_export_check))
         Text(project.name, style = MaterialTheme.typography.titleLarge)
         ReadinessRow(

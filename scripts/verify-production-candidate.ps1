@@ -51,8 +51,8 @@ $candidate = $CandidateCommit.ToLowerInvariant()
 if ($candidate -notmatch '^[0-9a-f]{40}$') {
     throw 'Candidate commit must be a full lowercase 40-character SHA.'
 }
-if ($ExpectedVersion -notmatch '^\d+\.\d+\.\d+$') {
-    throw 'Version must be a production x.y.z version.'
+if ($ExpectedVersion -notmatch '^(?:[01]\.\d+\.\d+|(?:[2-9]|[1-9]\d+)\.\d+)$') {
+    throw 'Version must be a production x.y version (historical 1.x.y accepted).'
 }
 
 $actual = (git rev-parse HEAD).Trim().ToLowerInvariant()

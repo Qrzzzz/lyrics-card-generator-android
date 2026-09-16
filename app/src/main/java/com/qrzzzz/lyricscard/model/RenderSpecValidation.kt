@@ -110,6 +110,8 @@ fun RenderSpec.validate(): List<RenderSpecViolation> = buildList {
     if (!typography.lineHeight.isFinite() || typography.lineHeight !in 1.5..2.1) {
         violation("typography.lineHeight", "must be in 1.5..2.1")
     }
+    if (canvas.exportFormat !in listOf("png", "webp", "jpg")) violation("canvas.exportFormat", "unsupported export format")
+    if (canvas.exportScale !in listOf(1.0, 1.4, 2.0)) violation("canvas.exportScale", "unsupported export scale")
     if (canvas.landscape.lyricsWidth !in 520..1280 || canvas.landscape.requestedHeight !in 720..3600) violation("canvas.landscape", "invalid landscape dimensions")
     if (typography.latinFontFamily.isBlank() || typography.latinFontFamily.length > 200) violation("typography.latinFontFamily", "invalid font family")
     if (typography.fontWeight !in 100..900) violation("typography.fontWeight", "must be in 100..900")

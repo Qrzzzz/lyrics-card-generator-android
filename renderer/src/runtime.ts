@@ -140,7 +140,8 @@ async function exportMessage(message: HostEnvelope) {
       ? parseRenderSpec(payload)
       : activeSpec;
   const requestedPixelRatio = payload.pixelRatio ?? nextSpec.canvas.pixelRatio;
-  const pixelRatio = requestedPixelRatio === 1 ? 1 : 2;
+  if (![1, 1.4, 2].includes(requestedPixelRatio as number)) throw new Error("Unsupported export scale");
+  const pixelRatio = requestedPixelRatio as 1 | 1.4 | 2;
   const activeController = requireController();
 
   send(message.requestId, "exportStarted", {
@@ -160,9 +161,9 @@ async function exportMessage(message: HostEnvelope) {
     });
     activeSpec = nextSpec;
     send(message.requestId, "exportCompleted", {
-      mimeType: "image/png",
-      width: nextSpec.canvas.width * pixelRatio,
-      height: nextSpec.canvas.height * pixelRatio,
+      mimeType: blob.type,
+      width: Math.floor(nextSpec.canvas.width * pixelRatio),
+      height: Math.floor(nextSpec.canvas.height * pixelRatio),
       totalBytes: blob.size,
       totalChunks
     });

@@ -85,7 +85,8 @@ export function App() {
           svgSourceCache,
           fontEmbedCssCache,
           canvasSurface,
-          domRevision
+          domRevision,
+          settledSpec.canvas.exportFormat === "jpg" ? "image/jpeg" : settledSpec.canvas.exportFormat === "webp" ? "image/webp" : "image/png"
         );
       }
     });

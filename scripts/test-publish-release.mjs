@@ -55,7 +55,7 @@ test('one-release waiver requires explicit authorization and truthful untested s
 });
 
 test('optional manual acceptance supports later releases while preserving evidence boundaries', () => {
-  for (const version of ['1.1.5', '1.1.6', '1.2.0', '2.0.0']) {
+  for (const version of ['1.1.5', '1.1.6', '1.2.0', '2.0', '2.1']) {
     const a = waivedAcceptance();
     a.version = a.candidate.versionName = a.manualAcceptanceWaiver.version = version;
     a.candidateArtifactName = `production-candidate-${version}-${a.sourceCommit.slice(0, 12)}`;

@@ -471,10 +471,10 @@ class RendererController private constructor(
     }
 
     suspend fun exportPng(spec: RenderSpec, pixelRatio: Int): ExportedImage = operationMutex.withLock {
-        require(pixelRatio in 1..2) { "Alpha 仅支持 1 倍或 2 倍导出" }
+        val scale = com.qrzzzz.lyricscard.model.exportPixelRatio(pixelRatio)
         val requestedSpec = spec.requireValid()
         currentSpec = requestedSpec
-        var exportSpec = requestedSpec.copy(canvas = requestedSpec.canvas.copy(pixelRatio = pixelRatio)).requireValid()
+        var exportSpec = requestedSpec.copy(canvas = requestedSpec.canvas.copy(pixelRatio = if (pixelRatio == 1) 1 else 2, exportScale = scale)).requireValid()
         val sessionId = awaitReady()
         try {
             _status.value = RendererStatus(RendererStatus.Phase.EXPORTING, "正在生成 PNG…")
@@ -496,7 +496,7 @@ class RendererController private constructor(
 
             val image = requestExport(
                 payload = buildJsonObject {
-                    put("pixelRatio", pixelRatio)
+                    put("pixelRatio", scale)
                     put("spec", RenderSpecJson.format.encodeToJsonElement(RenderSpec.serializer(), exportSpec))
                 },
                 spec = exportSpec,
@@ -795,8 +795,8 @@ class RendererController private constructor(
             .take(48)
         val suffix = "${System.currentTimeMillis()}-${UUID.randomUUID().toString().take(8)}"
         return ExportAssembly(
-            partFile = File(outputDir, ".$safeTitle-$suffix.png.part"),
-            finalFile = File(outputDir, "$safeTitle-$suffix.png"),
+            partFile = File(outputDir, ".$safeTitle-$suffix.${spec.canvas.exportFormat}.part"),
+            finalFile = File(outputDir, "$safeTitle-$suffix.${spec.canvas.exportFormat}"),
         )
     }
 
@@ -808,7 +808,7 @@ class RendererController private constructor(
         withContext(Dispatchers.IO) {
             val mimeType = payload["mimeType"]?.jsonPrimitive?.contentOrNull
                 ?: throw RendererException("导出结果缺少 MIME 类型")
-            require(mimeType == "image/png") { "仅允许 PNG 导出" }
+            require(mimeType == com.qrzzzz.lyricscard.model.exportMimeType(spec.canvas.exportFormat)) { "导出格式与请求不一致" }
             val reportedWidth = payload["width"]?.jsonPrimitive?.intOrNull
                 ?: throw RendererException("导出结果缺少宽度")
             val reportedHeight = payload["height"]?.jsonPrimitive?.intOrNull
@@ -817,8 +817,8 @@ class RendererController private constructor(
                 ?: throw RendererException("导出结果缺少总字节数")
             val reportedChunks = payload["totalChunks"]?.jsonPrimitive?.intOrNull
                 ?: throw RendererException("导出结果缺少总块数")
-            val expectedWidth = Math.multiplyExact(spec.canvas.width, spec.canvas.pixelRatio)
-            val expectedHeight = Math.multiplyExact(spec.canvas.height, spec.canvas.pixelRatio)
+            val expectedWidth = (spec.canvas.width * spec.canvas.exportScale).toInt()
+            val expectedHeight = (spec.canvas.height * spec.canvas.exportScale).toInt()
             require(reportedWidth == expectedWidth && reportedHeight == expectedHeight) {
                 "渲染器报告的导出尺寸与请求不一致"
             }
@@ -826,13 +826,13 @@ class RendererController private constructor(
             try {
                 val partFile = assembly.finish(reportedBytes, reportedChunks)
                 require(partFile.length() in MIN_PNG_BYTES..MAX_PNG_BYTES) { "PNG 文件大小异常" }
-                partFile.inputStream().use { input ->
+                if (mimeType == "image/png") partFile.inputStream().use { input ->
                     val signature = ByteArray(PNG_SIGNATURE.size)
                     require(input.read(signature) == signature.size && signature.contentEquals(PNG_SIGNATURE)) {
                         "渲染器返回的文件不是有效 PNG"
                     }
                 }
-                partFile.inputStream().use { input ->
+                if (mimeType == "image/png") partFile.inputStream().use { input ->
                     val skipped = input.skip(partFile.length() - PNG_IEND_TRAILER.size)
                     require(skipped == partFile.length() - PNG_IEND_TRAILER.size) { "PNG 文件不完整" }
                     val trailer = ByteArray(PNG_IEND_TRAILER.size)
@@ -842,6 +842,7 @@ class RendererController private constructor(
                 }
                 val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeFile(partFile.absolutePath, options)
+                require(options.outMimeType == mimeType) { "图片实际编码与请求格式不一致" }
                 require(options.outWidth == expectedWidth && options.outHeight == expectedHeight) {
                     "PNG 实际尺寸与导出请求不一致"
                 }

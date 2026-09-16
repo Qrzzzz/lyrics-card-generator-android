@@ -45,6 +45,8 @@ export interface RenderSpec {
     landscape?: import("./desktop/types").LandscapeLayoutSettings;
     /** Renderer-only derived geometry; never accepted from the native bridge. */
     layoutPlan?: import("./desktop/types").LandscapeLayoutPlan;
+    exportFormat?: "png" | "webp" | "jpg";
+    exportScale?: 1 | 1.4 | 2;
   };
   typography: {
     fontScheme: FontScheme;
@@ -139,7 +141,7 @@ export type RendererErrorCode =
 export interface RendererController {
   applySpec(spec: RenderSpec): Promise<void>;
   measure(spec: RenderSpec): Promise<{ width: number; height: number }>;
-  exportPng(spec: RenderSpec, pixelRatio: 1 | 2): Promise<Blob>;
+  exportPng(spec: RenderSpec, pixelRatio: 1 | 1.4 | 2): Promise<Blob>;
 }
 
 export interface LyricsCardRendererGlobal {

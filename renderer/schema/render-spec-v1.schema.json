@@ -281,6 +281,21 @@
               "maximum": 3600
             }
           }
+        },
+        "exportFormat": {
+          "enum": [
+            "png",
+            "webp",
+            "jpg"
+          ]
+        },
+        "exportScale": {
+          "type": "number",
+          "enum": [
+            1,
+            1.4,
+            2
+          ]
         }
       }
     },

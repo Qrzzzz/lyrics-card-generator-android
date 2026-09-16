@@ -26,7 +26,7 @@ export async function hashFile(path) {
 }
 
 export function validateAcceptance(a, version) {
-  assert.match(version, /^\d+\.\d+\.\d+$/);
+  assert.match(version, /^(?:[01]\.\d+\.\d+|(?:[2-9]|[1-9]\d+)\.\d+)$/);
   assert.equal(a.schemaVersion, 1);
   assert.equal(a.policy, 'focused-manual-v1');
   assert.equal(a.version, version);
@@ -146,7 +146,7 @@ async function api(endpoint, { method = 'GET', body, optional = false } = {}) {
 
 async function main() {
   const version = process.env.RELEASE_VERSION;
-  assert.match(version ?? '', /^\d+\.\d+\.\d+$/);
+  assert.match(version ?? '', /^(?:[01]\.\d+\.\d+|(?:[2-9]|[1-9]\d+)\.\d+)$/);
   assert.equal(process.env.GITHUB_EVENT_NAME, 'workflow_dispatch');
   assert.equal(process.env.GITHUB_REF, 'refs/heads/main');
   const validator = process.env.GITHUB_WORKFLOW_SHA;

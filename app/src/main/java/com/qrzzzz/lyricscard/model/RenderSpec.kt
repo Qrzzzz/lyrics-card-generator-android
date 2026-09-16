@@ -60,6 +60,8 @@ data class CanvasSpec(
     val pixelRatio: Int = 2,
     val autoWidth: Boolean = true,
     val landscape: LandscapeSettings = LandscapeSettings(),
+    val exportFormat: String = "png",
+    val exportScale: Double = 2.0,
 )
 
 @Serializable
