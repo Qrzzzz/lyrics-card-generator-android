@@ -77,3 +77,7 @@ The `main` snapshot is sufficient for default-branch Gradle alerts. It is not ev
 There is no standing advisory allowlist. A temporary exception requires a public tracking issue naming the GHSA, package/version and scope, owner, reason, compensating control, and an expiry date no more than 30 days away. Adding an `allow-ghsas` entry or weakening a threshold requires a separately reviewed commit that links that issue; expired exceptions fail review until removed or explicitly renewed.
 
 Dependabot creates reviewable pull requests only. It does not auto-merge, receive production-signing secrets, run the `production-signing` environment, publish a release, or replace the release checklist. The dependency workflow has no signing environment, secret reference, tag, or release step. Diagnostic artifact uploads may use existing read permissions; they do not justify adding publication, OIDC or attestation permissions. External GitHub Actions remain pinned to full commit SHAs, including updates proposed by Dependabot; local references must resolve inside the repository.
+
+### Kotlin and Commons Compress remediation (1.1.6)
+
+The [1.1.6 maintenance record](security/maintenance-1.1.6.md) covers the remaining three medium alerts with Kotlin 2.4.20 and host-only Commons Compress 1.26.0, including compiler/R8/KSP compatibility and Actions artifact migration. Closure requires actual default-branch submission and fixed alert states; no severity or deadline is waived.

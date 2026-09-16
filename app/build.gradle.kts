@@ -58,8 +58,8 @@ android {
         applicationId = "com.qrzzzz.lyricscard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10105
-        versionName = "1.1.5"
+        versionCode = 10106
+        versionName = "1.1.6"
 
         testInstrumentationRunner = "com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner"
         testProguardFiles("test-proguard-rules.pro")
@@ -500,6 +500,7 @@ tasks.register("verifyNettyResolution") {
 }
 
 val minimumHostParserVersions = mapOf(
+    "org.apache.commons:commons-compress" to "1.26.0",
     "org.jdom:jdom2" to "2.0.6.1",
     "org.bitbucket.b_c:jose4j" to "0.9.6",
 )
@@ -546,6 +547,26 @@ tasks.register("verifyHostParserResolution") {
         val buildscriptModules = resolvedHostParserModules(
             rootProject.buildscript.configurations.getByName("classpath"),
         )
+        val toolchain = rootProject.buildscript.configurations.getByName("classpath")
+            .incoming.resolutionResult.allComponents.mapNotNull { it.moduleVersion }
+            .associate { "${it.group}:${it.name}" to it.version }
+        mapOf(
+            "org.jetbrains.kotlin:kotlin-gradle-plugin" to "2.4.20",
+            "org.jetbrains.kotlin:compose-compiler-gradle-plugin" to "2.4.20",
+            "org.jetbrains.kotlin:kotlin-serialization" to "2.4.20",
+            "com.android.tools:r8" to "9.1.29",
+        ).forEach { (coordinate, minimum) ->
+            val selected = toolchain[coordinate]
+            check(selected != null && isVersionAtLeast(selected, minimum)) {
+                "Buildscript requires $coordinate >= $minimum; resolved $selected"
+            }
+            logger.lifecycle("Verified build tool {}:{}", coordinate, selected)
+        }
+        val loadedR8 = com.android.tools.r8.Version.getVersionString()
+        check(isVersionAtLeast(loadedR8.substringBefore(" "), "9.1.29")) {
+            "AGP loaded an incompatible R8 implementation: $loadedR8"
+        }
+        logger.lifecycle("Verified loaded R8 implementation: {}", loadedR8)
         checkPatchedHostParserModules(
             "Buildscript classpath",
             buildscriptModules,
