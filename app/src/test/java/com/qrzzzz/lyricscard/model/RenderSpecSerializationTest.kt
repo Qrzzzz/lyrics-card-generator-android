@@ -2,8 +2,10 @@ package com.qrzzzz.lyricscard.model
 
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.SerializationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class RenderSpecSerializationTest {
@@ -66,6 +68,28 @@ class RenderSpecSerializationTest {
         assertEquals(SongSource.UNKNOWN, decoded.song.source)
         assertEquals(CanvasRatio.CUSTOM, decoded.canvas.ratio)
         assertEquals(2, decoded.canvas.pixelRatio)
+    }
+
+    @Test
+    fun `legacy sparse project can be edited saved and reopened with stable defaults`() {
+        val legacy = RenderSpecJson.decode("""{"schemaVersion":1,"rendererVersion":"android-alpha-renderer-1","song":{"title":"旧项目","future":42},"future":{"nested":[1,2]}}""")
+        val edited = legacy.copy(song = legacy.song.copy(title = "修改后 🎵"))
+        val reopened = RenderSpecJson.decode(RenderSpecJson.encode(edited))
+        assertEquals(edited, reopened)
+        assertEquals("android-alpha-renderer-1", reopened.rendererVersion)
+        assertEquals(2, reopened.canvas.pixelRatio)
+    }
+
+    @Test
+    fun `invalid JSON types and enum values are rejected instead of silently defaulted`() {
+        listOf(
+            "{broken",
+            """{"song":null}""",
+            """{"canvas":{"pixelRatio":"invalid"}}""",
+            """{"locale":"unsupported-locale"}""",
+        ).forEach { payload ->
+            assertThrows(SerializationException::class.java) { RenderSpecJson.decode(payload) }
+        }
     }
 
     private companion object {
