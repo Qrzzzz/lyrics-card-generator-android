@@ -1,10 +1,13 @@
 import { mixColors, normalizeHex } from "./color";
 import { resolveCoverAssetUrl } from "./spec";
+import { analyzePalettePixels } from "./desktop/palette-extraction";
+import type { ExtractedPalette } from "./desktop/types";
 
 export type SampledPalette = {
   dominant: string;
   secondary: string;
   accent: string;
+  extracted?: ExtractedPalette;
 };
 
 export async function extractPaletteFromAsset(assetId: string): Promise<SampledPalette> {
@@ -16,26 +19,24 @@ export async function extractPaletteFromAsset(assetId: string): Promise<SampledP
   const image = await loadImage(source);
   const canvas = document.createElement("canvas");
   const size = 64;
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = Math.max(1, Math.round(size * image.naturalWidth / Math.max(image.naturalWidth, image.naturalHeight)));
+  canvas.height = Math.max(1, Math.round(size * image.naturalHeight / Math.max(image.naturalWidth, image.naturalHeight)));
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) {
     throw new PaletteExtractionError("Canvas 2D context is unavailable", "IMAGE_DECODE_FAILED");
   }
 
-  const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
-  const sourceX = Math.max(0, (image.naturalWidth - sourceSize) / 2);
-  const sourceY = Math.max(0, (image.naturalHeight - sourceSize) / 2);
-  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
   let data: Uint8ClampedArray;
   try {
-    data = context.getImageData(0, 0, size, size).data;
+    data = context.getImageData(0, 0, canvas.width, canvas.height).data;
   } catch {
     throw new PaletteExtractionError("Cover pixels could not be sampled", "IMAGE_DECODE_FAILED");
   }
 
-  return samplePalette(data);
+  const extracted = analyzePalettePixels(data, canvas.width, canvas.height, { sourceWidth: image.naturalWidth, sourceHeight: image.naturalHeight });
+  return { dominant: extracted.primary, secondary: extracted.secondary ?? extracted.primary, accent: extracted.accent ?? extracted.primary, extracted };
 }
 
 export function samplePalette(data: Uint8ClampedArray): SampledPalette {

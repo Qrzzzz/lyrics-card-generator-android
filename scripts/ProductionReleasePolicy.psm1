@@ -39,8 +39,8 @@ function Assert-ProductionCandidatePolicy {
     Assert-FullCommitSha -Value $workflowCommit -Name 'Workflow commit'
     Assert-FullCommitSha -Value $triggerCommit -Name 'Trigger commit'
 
-    if ($ExpectedVersion -notmatch '^\d+\.\d+\.\d+$') {
-        throw 'Version must be a production x.y.z version.'
+    if ($ExpectedVersion -notmatch '^(?:[01]\.\d+\.\d+|(?:[2-9]|[1-9]\d+)\.\d+)$') {
+        throw 'Version must be a production x.y version (historical 1.x.y accepted).'
     }
     if ($RepositoryVersion -ne $ExpectedVersion) {
         throw "Requested version '$ExpectedVersion' does not match Gradle version '$RepositoryVersion'."

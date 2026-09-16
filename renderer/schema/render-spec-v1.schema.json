@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://lyrics-card.local/schema/render-spec-v1.schema.json",
-  "title": "Lyrics Card RenderSpec v1",
+  "title": "Lyrics Card RenderSpec v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -18,23 +18,71 @@
     "media"
   ],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "rendererVersion": { "const": "android-alpha-renderer-1" },
-    "locale": { "type": "string", "enum": ["zh", "zh-TW", "en", "fr", "ja", "es"] },
+    "schemaVersion": {
+      "const": 2
+    },
+    "rendererVersion": {
+      "const": "android-alpha-renderer-1"
+    },
+    "locale": {
+      "type": "string",
+      "enum": [
+        "zh",
+        "zh-TW",
+        "en",
+        "fr",
+        "ja",
+        "es"
+      ]
+    },
     "song": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source", "title", "artist", "album", "explicit", "coverAssetId"],
+      "required": [
+        "source",
+        "title",
+        "artist",
+        "album",
+        "explicit",
+        "coverAssetId"
+      ],
       "properties": {
-        "source": { "type": "string", "enum": ["qq", "netease", "apple", "spotify", "unknown"] },
-        "title": { "type": "string", "maxLength": 240 },
-        "artist": { "type": "string", "maxLength": 240 },
-        "album": { "type": "string", "maxLength": 240 },
-        "explicit": { "type": "boolean" },
+        "source": {
+          "type": "string",
+          "enum": [
+            "qq",
+            "netease",
+            "apple",
+            "spotify",
+            "unknown"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "artist": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "album": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "explicit": {
+          "type": "boolean"
+        },
         "coverAssetId": {
           "anyOf": [
-            { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
-            { "type": "null" }
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       }
@@ -42,26 +90,250 @@
     "content": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "lyrics", "translationEnabled", "translation", "instrumentalText"],
+      "required": [
+        "mode",
+        "lyrics",
+        "translationEnabled",
+        "translation",
+        "instrumentalText",
+        "lyricDocument"
+      ],
       "properties": {
-        "mode": { "type": "string", "enum": ["lyrics", "instrumental"] },
-        "lyrics": { "type": "string", "maxLength": 200000, "maxLines": 400 },
-        "translationEnabled": { "type": "boolean" },
-        "translation": { "type": "string", "maxLength": 200000, "maxLines": 400 },
-        "instrumentalText": { "type": "string", "maxLength": 240 }
+        "mode": {
+          "type": "string",
+          "enum": [
+            "lyrics",
+            "instrumental"
+          ]
+        },
+        "lyrics": {
+          "type": "string",
+          "maxLength": 200000,
+          "maxLines": 400
+        },
+        "translationEnabled": {
+          "type": "boolean"
+        },
+        "translation": {
+          "type": "string",
+          "maxLength": 200000,
+          "maxLines": 400
+        },
+        "instrumentalText": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "lyricDocument": {
+          "type": "object",
+          "required": [
+            "schemaVersion",
+            "id",
+            "revision",
+            "blocks"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": 2
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "blocks": {
+              "type": "array",
+              "maxItems": 400,
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "units"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "units": {
+                    "type": "array",
+                    "maxItems": 800,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "source"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "source": {
+                          "type": "array",
+                          "maxItems": 400,
+                          "items": {
+                            "type": "string",
+                            "maxLength": 200000
+                          }
+                        },
+                        "translation": {
+                          "type": "array",
+                          "maxItems": 400,
+                          "items": {
+                            "type": "string",
+                            "maxLength": 200000
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "canvas": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["layoutMode", "ratio", "width", "height", "autoHeight", "pixelRatio"],
+      "required": [
+        "layoutMode",
+        "ratio",
+        "width",
+        "height",
+        "autoHeight",
+        "pixelRatio"
+      ],
       "properties": {
-        "layoutMode": { "type": "string", "enum": ["portrait", "landscape"] },
-        "ratio": { "type": "string", "enum": ["1:1", "4:5", "9:16", "16:9", "21:9", "3:2", "custom"] },
-        "width": { "type": "integer", "minimum": 720, "maximum": 3000 },
-        "height": { "type": "integer", "minimum": 720, "maximum": 3200 },
-        "autoHeight": { "type": "boolean" },
-        "pixelRatio": { "type": "integer", "enum": [1, 2] }
+        "layoutMode": {
+          "type": "string",
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "ratio": {
+          "type": "string",
+          "enum": [
+            "1:1",
+            "4:5",
+            "9:16",
+            "16:9",
+            "21:9",
+            "3:2",
+            "custom"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 720,
+          "maximum": 3000
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 640,
+          "maximum": 6400
+        },
+        "autoHeight": {
+          "type": "boolean"
+        },
+        "pixelRatio": {
+          "type": "integer",
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "autoWidth": {
+          "type": "boolean"
+        },
+        "landscape": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "autoLyricsWidth",
+            "lyricsWidth",
+            "autoHeight",
+            "requestedHeight"
+          ],
+          "properties": {
+            "autoLyricsWidth": {
+              "type": "boolean"
+            },
+            "lyricsWidth": {
+              "type": "integer",
+              "minimum": 520,
+              "maximum": 1280
+            },
+            "autoHeight": {
+              "type": "boolean"
+            },
+            "requestedHeight": {
+              "type": "integer",
+              "minimum": 720,
+              "maximum": 3600
+            }
+          }
+        },
+        "exportFormat": {
+          "enum": [
+            "png",
+            "webp",
+            "jpg"
+          ]
+        },
+        "exportScale": {
+          "type": "number",
+          "enum": [
+            1,
+            1.4,
+            2
+          ]
+        },
+        "portrait": {
+          "required": [
+            "ratio",
+            "width",
+            "height",
+            "autoWidth",
+            "autoHeight"
+          ],
+          "properties": {
+            "ratio": {
+              "enum": [
+                "custom",
+                "1:1",
+                "4:5",
+                "9:16"
+              ]
+            },
+            "autoHeight": {
+              "type": "boolean"
+            },
+            "autoWidth": {
+              "type": "boolean"
+            },
+            "height": {
+              "maximum": 6400,
+              "type": "integer",
+              "minimum": 640
+            },
+            "width": {
+              "maximum": 1440,
+              "type": "integer",
+              "minimum": 720
+            }
+          },
+          "additionalProperties": false,
+          "type": "object"
+        }
       }
     },
     "typography": {
@@ -80,19 +352,108 @@
         "customTextColor"
       ],
       "properties": {
-        "fontScheme": { "type": "string", "enum": ["sans-heavy", "serif-heavy", "system-sans", "system-serif"] },
-        "fontFamily": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "lyricSize": { "type": "integer", "minimum": 36, "maximum": 72 },
-        "lineHeight": { "type": "number", "minimum": 1.1, "maximum": 1.75 },
-        "alignment": { "type": "string", "enum": ["left", "center", "right"] },
-        "translationScale": { "type": "number", "minimum": 0.6, "maximum": 0.9 },
-        "twoLineTitle": { "type": "boolean" },
-        "textColorMode": { "type": "string", "enum": ["auto", "preset", "custom"] },
-        "textColorPreset": { "type": "string", "enum": ["white", "black", "warmWhite", "cream", "charcoal", "softBlue", "softGold"] },
+        "fontScheme": {
+          "type": "string",
+          "enum": [
+            "sans-heavy",
+            "serif-heavy",
+            "system-sans",
+            "system-serif"
+          ]
+        },
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "lyricSize": {
+          "type": "integer",
+          "minimum": 36,
+          "maximum": 72
+        },
+        "lineHeight": {
+          "type": "number",
+          "minimum": 1.5,
+          "maximum": 2.1
+        },
+        "alignment": {
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "translationScale": {
+          "type": "number",
+          "minimum": 0.6,
+          "maximum": 0.9
+        },
+        "twoLineTitle": {
+          "type": "boolean"
+        },
+        "textColorMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "preset",
+            "custom"
+          ]
+        },
+        "textColorPreset": {
+          "type": "string",
+          "enum": [
+            "white",
+            "black",
+            "warmWhite",
+            "cream",
+            "charcoal",
+            "softBlue",
+            "softGold"
+          ]
+        },
         "customTextColor": {
           "anyOf": [
-            { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$" },
-            { "type": "null" }
+            {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "latinFontFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "customFontAsset": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}\\.(ttf|otf|woff2?)$"
+            }
+          ]
+        },
+        "customFontEnabled": {
+          "type": "boolean"
+        },
+        "fontWeight": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900
+        },
+        "fontItalic": {
+          "type": "boolean"
+        },
+        "separatorStyle": {
+          "enum": [
+            "dot",
+            "line"
           ]
         }
       }
@@ -100,149 +461,539 @@
     "visual": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["backgroundMode", "palette", "gridEnabled", "gridDensity", "gridOpacity"],
+      "required": [
+        "backgroundMode",
+        "palette",
+        "gridEnabled",
+        "gridDensity",
+        "gridOpacity"
+      ],
       "properties": {
-        "backgroundMode": { "type": "string", "enum": ["palette", "gradient"] },
+        "backgroundMode": {
+          "type": "string",
+          "enum": [
+            "palette",
+            "gradient"
+          ]
+        },
         "palette": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["dominant", "secondary", "accent"],
+          "required": [
+            "dominant",
+            "secondary",
+            "accent"
+          ],
           "properties": {
-            "dominant": { "$ref": "#/$defs/color" },
-            "secondary": { "$ref": "#/$defs/color" },
-            "accent": { "$ref": "#/$defs/color" }
+            "dominant": {
+              "$ref": "#/$defs/color"
+            },
+            "secondary": {
+              "$ref": "#/$defs/color"
+            },
+            "accent": {
+              "$ref": "#/$defs/color"
+            },
+            "extracted": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "colors",
+                    "primary",
+                    "dark",
+                    "light",
+                    "muted",
+                    "averageLuminance",
+                    "averageSaturation",
+                    "hueVariance",
+                    "isLightCover",
+                    "kind"
+                  ],
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "pattern": "^#[0-9A-Fa-f]{6}$",
+                        "type": "string"
+                      },
+                      "maxItems": 64
+                    },
+                    "primary": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "secondary": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "accent": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "dark": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "light": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "muted": {
+                      "pattern": "^#[0-9A-Fa-f]{6}$",
+                      "type": "string"
+                    },
+                    "averageLuminance": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "averageSaturation": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "hueVariance": {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    "isLightCover": {
+                      "type": "boolean"
+                    },
+                    "kind": {
+                      "enum": [
+                        "colorful",
+                        "monochrome",
+                        "neutral",
+                        "low-variance"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
           }
         },
-        "gridEnabled": { "type": "boolean" },
-        "gridDensity": { "type": "string", "enum": ["sparse", "medium", "dense"] },
-        "gridOpacity": { "type": "number", "minimum": 0, "maximum": 1 }
+        "gridEnabled": {
+          "type": "boolean"
+        },
+        "gridDensity": {
+          "type": "string",
+          "enum": [
+            "sparse",
+            "medium",
+            "dense"
+          ]
+        },
+        "gridOpacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     },
     "visibility": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["showCover", "showSongInfo", "showAlbum", "showPlatformBadge", "showSharedBy", "showGeneratedWatermark"],
+      "required": [
+        "showCover",
+        "showSongInfo",
+        "showAlbum",
+        "showPlatformBadge",
+        "showSharedBy",
+        "showGeneratedWatermark"
+      ],
       "properties": {
-        "showCover": { "type": "boolean" },
-        "showSongInfo": { "type": "boolean" },
-        "showAlbum": { "type": "boolean" },
-        "showPlatformBadge": { "type": "boolean" },
-        "showSharedBy": { "type": "boolean" },
-        "showGeneratedWatermark": { "type": "boolean" }
+        "showCover": {
+          "type": "boolean"
+        },
+        "showSongInfo": {
+          "type": "boolean"
+        },
+        "showAlbum": {
+          "type": "boolean"
+        },
+        "showPlatformBadge": {
+          "type": "boolean"
+        },
+        "showSharedBy": {
+          "type": "boolean"
+        },
+        "showGeneratedWatermark": {
+          "type": "boolean"
+        }
       }
     },
     "branding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sharedByName", "platform"],
+      "required": [
+        "sharedByName",
+        "platform"
+      ],
       "properties": {
-        "sharedByName": { "type": "string", "maxLength": 240 },
-        "platform": { "type": "string", "enum": ["qq", "netease", "apple", "spotify", "unknown"] }
+        "sharedByName": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "qq",
+            "netease",
+            "apple",
+            "spotify",
+            "unknown"
+          ]
+        }
       }
     },
     "media": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["coverCropScale"],
+      "required": [
+        "coverCropScale"
+      ],
       "properties": {
-        "coverCropScale": { "type": "number", "minimum": 1, "maximum": 2 }
+        "coverCropScale": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2
+        }
       }
     }
   },
   "$defs": {
-    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$" }
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$"
+    }
   },
   "allOf": [
     {
-      "if": { "properties": { "canvas": { "properties": { "layoutMode": { "const": "portrait" } } } } },
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "layoutMode": {
+                "const": "portrait"
+              }
+            }
+          }
+        }
+      },
       "then": {
         "properties": {
           "canvas": {
             "properties": {
-              "ratio": { "enum": ["1:1", "4:5", "9:16", "custom"] },
-              "width": { "minimum": 720, "maximum": 1440 },
-              "height": { "minimum": 720, "maximum": 3200 }
+              "ratio": {
+                "enum": [
+                  "1:1",
+                  "4:5",
+                  "9:16",
+                  "custom"
+                ]
+              },
+              "width": {
+                "minimum": 720,
+                "maximum": 1440
+              },
+              "height": {
+                "minimum": 640,
+                "maximum": 6400
+              }
             }
           }
         }
       }
     },
     {
-      "if": { "properties": { "canvas": { "properties": { "layoutMode": { "const": "landscape" } } } } },
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "layoutMode": {
+                "const": "landscape"
+              }
+            }
+          }
+        }
+      },
       "then": {
         "properties": {
           "canvas": {
             "properties": {
-              "ratio": { "enum": ["16:9", "21:9", "3:2", "custom"] },
-              "width": { "minimum": 1080, "maximum": 3000 },
-              "height": { "minimum": 720, "maximum": 1600 },
-              "autoHeight": { "const": false }
+              "ratio": {
+                "enum": [
+                  "16:9",
+                  "21:9",
+                  "3:2",
+                  "custom"
+                ]
+              },
+              "width": {
+                "minimum": 1080,
+                "maximum": 3000
+              },
+              "height": {
+                "minimum": 720,
+                "maximum": 6400
+              }
             }
           }
         }
       }
     },
     {
-      "if": { "properties": { "canvas": { "properties": { "autoHeight": { "const": true } } } } },
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "autoHeight": {
+                "const": true
+              }
+            }
+          }
+        }
+      },
       "then": {
         "properties": {
           "canvas": {
             "properties": {
-              "layoutMode": { "const": "portrait" },
-              "ratio": { "const": "custom" }
+              "ratio": {
+                "const": "custom"
+              }
             }
           }
         }
       }
     },
     {
-      "if": { "properties": { "content": { "properties": { "mode": { "const": "instrumental" } } } } },
+      "if": {
+        "properties": {
+          "content": {
+            "properties": {
+              "mode": {
+                "const": "instrumental"
+              }
+            }
+          }
+        }
+      },
       "then": {
         "properties": {
-          "content": { "properties": { "translationEnabled": { "const": false } } },
+          "content": {
+            "properties": {
+              "translationEnabled": {
+                "const": false
+              }
+            }
+          },
           "canvas": {
             "properties": {
-              "layoutMode": { "const": "portrait" },
-              "ratio": { "const": "1:1" },
-              "width": { "const": 1080 },
-              "height": { "const": 1080 },
-              "autoHeight": { "const": false }
+              "layoutMode": {
+                "const": "portrait"
+              },
+              "ratio": {
+                "const": "1:1"
+              },
+              "width": {
+                "const": 1080
+              },
+              "height": {
+                "const": 1080
+              },
+              "autoHeight": {
+                "const": false
+              }
             }
           }
         }
       }
     },
     {
-      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "1:1" } } } } },
-      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1080 }, "height": { "const": 1080 } } } } }
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "ratio": {
+                "const": "1:1"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "width": {
+                "const": 1080
+              },
+              "height": {
+                "const": 1080
+              }
+            }
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "4:5" } } } } },
-      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1080 }, "height": { "const": 1350 } } } } }
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "ratio": {
+                "const": "4:5"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "width": {
+                "const": 1080
+              },
+              "height": {
+                "const": 1350
+              }
+            }
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "9:16" } } } } },
-      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1080 }, "height": { "const": 1920 } } } } }
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "ratio": {
+                "const": "9:16"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "width": {
+                "const": 1080
+              },
+              "height": {
+                "const": 1920
+              }
+            }
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "16:9" } } } } },
-      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1920 }, "height": { "const": 1080 } } } } }
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "ratio": {
+                "const": "16:9"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "width": {
+                "const": 1920
+              },
+              "height": {
+                "const": 1080
+              }
+            }
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "21:9" } } } } },
-      "then": { "properties": { "canvas": { "properties": { "width": { "const": 2520 }, "height": { "const": 1080 } } } } }
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "ratio": {
+                "const": "21:9"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "width": {
+                "const": 2520
+              },
+              "height": {
+                "const": 1080
+              }
+            }
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "canvas": { "properties": { "ratio": { "const": "3:2" } } } } },
-      "then": { "properties": { "canvas": { "properties": { "width": { "const": 1800 }, "height": { "const": 1200 } } } } }
+      "if": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "ratio": {
+                "const": "3:2"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "canvas": {
+            "properties": {
+              "width": {
+                "const": 1800
+              },
+              "height": {
+                "const": 1200
+              }
+            }
+          }
+        }
+      }
     },
     {
-      "if": { "properties": { "typography": { "properties": { "textColorMode": { "const": "custom" } } } } },
+      "if": {
+        "properties": {
+          "typography": {
+            "properties": {
+              "textColorMode": {
+                "const": "custom"
+              }
+            }
+          }
+        }
+      },
       "then": {
         "properties": {
           "typography": {
             "properties": {
-              "customTextColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$" }
+              "customTextColor": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?$"
+              }
             }
           }
         }

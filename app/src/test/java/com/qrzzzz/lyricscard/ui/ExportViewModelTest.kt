@@ -388,14 +388,17 @@ class ExportViewModelTest {
     }
 
     @Test
-    fun multiplierIsRestrictedToOneOrTwoAndInvalidValuesCannotAddAThirdMode() =
+    fun supportedQualityModesRejectInvalidValues() =
         runTest(mainDispatcherRule.dispatcher) {
             val project = project("export-scale-contract")
             val viewModel = exportViewModel(project)
             runCurrent()
 
             viewModel.setMultiplier(-20)
-            assertEquals(1, viewModel.uiState.value.multiplier)
+            assertEquals(2, viewModel.uiState.value.multiplier)
+            viewModel.setMultiplier(14)
+            assertEquals(14, viewModel.uiState.value.multiplier)
+            assertEquals(1.4, com.qrzzzz.lyricscard.model.exportPixelRatio(14), 0.0)
             viewModel.setMultiplier(20)
             assertEquals(2, viewModel.uiState.value.multiplier)
         }

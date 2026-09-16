@@ -59,7 +59,7 @@ jobs:
           foreach ($value in @($env:CANDIDATE_RUN_ID, $env:EVIDENCE_RUN_ID)) {
             if ($value -notmatch '^[1-9][0-9]*$') { throw 'Workflow run IDs must be positive decimal integers.' }
           }
-          if ($env:CANDIDATE_ARTIFACT_NAME -notmatch '^production-candidate-[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$') {
+          if ($env:CANDIDATE_ARTIFACT_NAME -notmatch '^production-candidate-(?:[01]\.[0-9]+\.[0-9]+|(?:[2-9]|[1-9][0-9]+)\.[0-9]+)-[0-9a-f]{12}$') {
             throw 'candidate_artifact_name does not match the production candidate contract.'
           }
           if ($env:EVIDENCE_ARTIFACT_NAME -notmatch '^final-device-evidence-[A-Za-z0-9._-]+$') {
@@ -178,7 +178,7 @@ jobs:
               $evidence.candidate.candidateArtifactName -cne $env:CANDIDATE_ARTIFACT_NAME) {
             throw 'Device evidence names a different signed candidate artifact.'
           }
-          if ($metadata.versionName -cnotmatch '^\d+\.\d+\.\d+$' -or
+          if ($metadata.versionName -cnotmatch '^(?:[01]\.\d+\.\d+|(?:[2-9]|[1-9]\d+)\.\d+)$' -or
               $evidence.candidate.productionApk.name -cne "lyrics-card-generator-android-$($metadata.versionName).apk" -or
               $evidence.candidate.productionAab.name -cne "lyrics-card-generator-android-$($metadata.versionName).aab" -or
               $evidence.candidate.testApk.name -cne 'app-production-release-androidTest.apk') {

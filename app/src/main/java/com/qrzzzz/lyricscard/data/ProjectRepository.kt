@@ -241,6 +241,9 @@ class ProjectRepository(
 
     private fun ProjectEntity.toProject(): Project {
         try {
+            if (schemaVersion != com.qrzzzz.lyricscard.model.RenderSpec.SCHEMA_VERSION) {
+                throw IncompatibleProjectException()
+            }
             val spec = RenderSpecJson.decode(specJson)
             check(schemaVersion == spec.schemaVersion) {
                 "entity schemaVersion $schemaVersion does not match JSON ${spec.schemaVersion}"
@@ -292,6 +295,8 @@ class ProjectRepository(
         const val MAX_PROJECT_NAME_LENGTH = 120
     }
 }
+
+class IncompatibleProjectException : IllegalStateException("Android 2.0 cannot open 1.x projects; create a new project. No migration is performed.")
 
 class CorruptProjectException(
     val projectId: String,

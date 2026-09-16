@@ -13,6 +13,8 @@ import {
 } from "./export";
 import { installRendererController } from "./runtime";
 import type { RenderSpec } from "./types";
+import { prepareCustomFont } from "./fonts";
+import { measureLayout, portraitLayout } from "./layout";
 
 export function App() {
   const [spec, setSpec] = useState(DEFAULT_RENDER_SPEC);
@@ -28,13 +30,35 @@ export function App() {
     const fontEmbedCssCache = createFontEmbedCssCache();
     const canvasSurface = createExportCanvasSurface();
     const domLifecycle = createRendererDomLifecycle(svgSourceCache, canvasSurface);
+    let settledSpec = DEFAULT_RENDER_SPEC;
+    let settledKey = "";
 
     async function applySpec(nextSpec: RenderSpec, activation: "committed" | "transient") {
+      const key = createRendererDomKey(nextSpec);
+      if (key !== settledKey) {
+        await prepareCustomFont(nextSpec);
+        fontEmbedCssCache.clear();
+        flushSync(() => setSpec(nextSpec));
+        await waitForStableRender();
+        settledSpec = measureLayout(requireCardNode(cardRef.current), nextSpec);
+        flushSync(() => setSpec(settledSpec));
+        await waitForStableRender();
+        if (settledSpec.canvas.autoHeight && settledSpec.canvas.layoutMode === "portrait") {
+          for (let pass = 0; pass < 16; pass++) {
+            const height = measureCardHeight(requireCardNode(cardRef.current), settledSpec);
+            if (Math.abs(height - settledSpec.canvas.height) <= 1) break;
+            settledSpec = {...settledSpec, canvas:{...settledSpec.canvas,height}};
+            flushSync(() => setSpec(settledSpec));
+            await waitForStableRender();
+          }
+        }
+        settledKey = key;
+      }
       return domLifecycle.apply(
-        createRendererDomKey(nextSpec),
+        createRendererDomKey(settledSpec),
         activation,
         async () => {
-          flushSync(() => setSpec(nextSpec));
+          flushSync(() => setSpec(settledSpec));
           await waitForStableRender();
         }
       );
@@ -46,24 +70,9 @@ export function App() {
       },
       async measure(nextSpec) {
         await applySpec(nextSpec, "transient");
-        const node = requireCardNode(cardRef.current);
-        let measuredHeight = measureCardHeight(node, nextSpec);
-        if (nextSpec.canvas.autoHeight) {
-          let measuredSpec = nextSpec;
-          for (let pass = 0; pass < 16; pass += 1) {
-            measuredSpec = {
-              ...measuredSpec,
-              canvas: { ...measuredSpec.canvas, height: measuredHeight }
-            };
-            await applySpec(measuredSpec, "transient");
-            const refinedHeight = measureCardHeight(node, measuredSpec);
-            if (Math.abs(refinedHeight - measuredHeight) <= 1) break;
-            measuredHeight = refinedHeight;
-          }
-        }
         return {
-          width: nextSpec.canvas.width,
-          height: measuredHeight
+          width: settledSpec.canvas.width,
+          height: settledSpec.canvas.height
         };
       },
       async exportPng(nextSpec, pixelRatio) {
@@ -71,13 +80,14 @@ export function App() {
         const node = requireCardNode(cardRef.current);
         return renderNodeAsPng(
           node,
-          nextSpec.canvas.width,
-          nextSpec.canvas.height,
+          settledSpec.canvas.width,
+          settledSpec.canvas.height,
           pixelRatio,
           svgSourceCache,
           fontEmbedCssCache,
           canvasSurface,
-          domRevision
+          domRevision,
+          settledSpec.canvas.exportFormat === "jpg" ? "image/jpeg" : settledSpec.canvas.exportFormat === "webp" ? "image/webp" : "image/png"
         );
       }
     });
@@ -156,9 +166,9 @@ function measureCardHeight(node: HTMLElement, spec: RenderSpec) {
   const headerHeight = header?.scrollHeight ?? 0;
   const lyricsHeight = lyrics.scrollHeight;
   const footerHeight = footer?.scrollHeight ?? 0;
-  const gaps = (header ? 30 : 0) + (footer ? 24 : 0);
-  const measured = Math.ceil(padding + mainPadding + headerHeight + lyricsHeight + footerHeight + gaps);
-  return Math.min(3200, Math.max(720, measured));
+  const measured = Math.ceil(2 * portraitLayout(spec).safeRect.y + padding + mainPadding + headerHeight + lyricsHeight + footerHeight);
+  if (measured > 6400) throw new Error("Content exceeds automatic canvas height");
+  return Math.max(640, measured);
 }
 
 function numberValue(value: string) {

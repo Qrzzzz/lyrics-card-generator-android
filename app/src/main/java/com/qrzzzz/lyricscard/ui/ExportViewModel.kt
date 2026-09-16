@@ -147,7 +147,7 @@ class ExportViewModel internal constructor(
     private val _uiState = MutableStateFlow(
         ExportUiState(
             projectId = projectId,
-            multiplier = (savedStateHandle[MULTIPLIER_KEY] ?: 2).coerceIn(1, 2),
+            multiplier = (savedStateHandle.get<Int>(MULTIPLIER_KEY) ?: 2).takeIf { it in listOf(1, 14, 2) } ?: 2,
             fileName = savedStateHandle[FILE_NAME_KEY] ?: "",
             measuredHeight = savedStateHandle[MEASURED_HEIGHT_KEY] ?: 0,
             operation = initialOperation,
@@ -186,7 +186,7 @@ class ExportViewModel internal constructor(
 
     fun setMultiplier(value: Int) {
         if (_uiState.value.isBusy) return
-        val next = value.coerceIn(1, 2)
+        val next = value.takeIf { it in listOf(1, 14, 2) } ?: 2
         if (next == _uiState.value.multiplier) return
         savedStateHandle[MULTIPLIER_KEY] = next
         clearPersistedImage()
@@ -311,7 +311,7 @@ class ExportViewModel internal constructor(
             val fileName = if (hadSavedFileName) {
                 _uiState.value.fileName
             } else {
-                defaultFileName(project.spec.song.title, clock())
+                defaultFileName(project.spec.song.title, clock()).removeSuffix(".png") + ".${project.spec.canvas.exportFormat}"
             }
             savedStateHandle[MULTIPLIER_KEY] = defaultMultiplier
             savedStateHandle[FILE_NAME_KEY] = fileName
@@ -380,7 +380,7 @@ class ExportViewModel internal constructor(
             }
             try {
                 currentCoroutineContext().ensureActive()
-                val renderingStatus = UiText.resource(R.string.export_running, multiplier)
+                val renderingStatus = UiText.resource(R.string.export_running, com.qrzzzz.lyricscard.model.exportPixelRatio(multiplier).toString().removeSuffix(".0"))
                 persistOperation(ExportOperationState.RENDERING)
                 persistMessages(renderingStatus, null)
                 _uiState.update {

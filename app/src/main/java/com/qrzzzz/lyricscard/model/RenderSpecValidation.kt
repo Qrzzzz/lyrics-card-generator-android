@@ -42,6 +42,10 @@ fun RenderSpec.validate(): List<RenderSpecViolation> = buildList {
 
     validateLyricText("content.lyrics", content.lyrics)
     validateLyricText("content.translation", content.translation)
+    if (!content.lyricDocument.isValid() || content.lyricDocument.text() != content.lyrics.replace("\r\n", "\n").replace('\r', '\n') ||
+        content.lyricDocument.text(true) != content.translation.replace("\r\n", "\n").replace('\r', '\n')) {
+        violation("content.lyricDocument", "must be a valid V2 document matching its text projections")
+    }
     validateText("content.instrumentalText", content.instrumentalText, MAX_METADATA_LENGTH)
 
     val widthRange = when (canvas.layoutMode) {
@@ -49,8 +53,8 @@ fun RenderSpec.validate(): List<RenderSpecViolation> = buildList {
         LayoutMode.LANDSCAPE -> 1080..3000
     }
     val heightRange = when (canvas.layoutMode) {
-        LayoutMode.PORTRAIT -> 720..3200
-        LayoutMode.LANDSCAPE -> 720..1600
+        LayoutMode.PORTRAIT -> if (canvas.autoHeight) 640..6400 else 720..3200
+        LayoutMode.LANDSCAPE -> 720..6400
     }
     if (canvas.width !in widthRange) {
         violation("canvas.width", "must be in ${widthRange.first}..${widthRange.last}")
@@ -80,7 +84,7 @@ fun RenderSpec.validate(): List<RenderSpecViolation> = buildList {
     }
 
     if (canvas.autoHeight &&
-        (canvas.layoutMode != LayoutMode.PORTRAIT || canvas.ratio != CanvasRatio.CUSTOM)
+        canvas.ratio != CanvasRatio.CUSTOM
     ) {
         violation("canvas.autoHeight", "is supported only for a custom portrait canvas")
     }
@@ -103,9 +107,16 @@ fun RenderSpec.validate(): List<RenderSpecViolation> = buildList {
     if (typography.lyricSize !in 36..72) {
         violation("typography.lyricSize", "must be in 36..72")
     }
-    if (!typography.lineHeight.isFinite() || typography.lineHeight !in 1.1..1.75) {
-        violation("typography.lineHeight", "must be in 1.1..1.75")
+    if (!typography.lineHeight.isFinite() || typography.lineHeight !in 1.5..2.1) {
+        violation("typography.lineHeight", "must be in 1.5..2.1")
     }
+    if (canvas.exportFormat !in listOf("png", "webp", "jpg")) violation("canvas.exportFormat", "unsupported export format")
+    if (canvas.exportScale !in listOf(1.0, 1.4, 2.0)) violation("canvas.exportScale", "unsupported export scale")
+    if (canvas.landscape.lyricsWidth !in 520..1280 || canvas.landscape.requestedHeight !in 720..3600) violation("canvas.landscape", "invalid landscape dimensions")
+    if (typography.latinFontFamily.isBlank() || typography.latinFontFamily.length > 200) violation("typography.latinFontFamily", "invalid font family")
+    if (typography.fontWeight !in 100..900) violation("typography.fontWeight", "must be in 100..900")
+    if (typography.separatorStyle !in listOf("dot", "line")) violation("typography.separatorStyle", "must be dot or line")
+    if (typography.customFontAsset != null && !Regex("[a-f0-9]{64}\\.(ttf|otf|woff2?)").matches(typography.customFontAsset)) violation("typography.customFontAsset", "invalid font asset")
     if (!typography.translationScale.isFinite() || typography.translationScale !in 0.6..0.9) {
         violation("typography.translationScale", "must be in 0.6..0.9")
     }

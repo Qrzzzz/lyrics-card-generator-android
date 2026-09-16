@@ -15,7 +15,8 @@ class ProjectTemplatesTest {
         assertEquals(ProjectTemplates.DEFAULT_BLANK_NAME, project.name)
         assertEquals(42L, project.createdAt)
         assertEquals(42L, project.updatedAt)
-        assertEquals(RenderSpec(), project.spec)
+        assertEquals(RenderSpec(content = project.spec.content), project.spec)
+        assertEquals("", project.spec.content.lyricDocument.text())
         assertNull(project.coverAssetId)
         assertTrue(project.validate().isEmpty())
     }

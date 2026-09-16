@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "rendererVersion": "android-alpha-renderer-1",
   "locale": "fr",
   "song": {
@@ -15,7 +15,65 @@
     "lyrics": "La ville retient son souffle\nSous les fenêtres encore allumées\nNos pas dessinent une route\nQue le matin saura garder\nEt dans le bruit des heures\nJe reconnais ta voix",
     "translationEnabled": false,
     "translation": "",
-    "instrumentalText": "Instrumental"
+    "instrumentalText": "Instrumental",
+    "lyricDocument": {
+      "schemaVersion": 2,
+      "id": "document-1",
+      "revision": 0,
+      "blocks": [
+        {
+          "id": "block-2",
+          "formatting": {
+            "sourcePresent": true,
+            "translationPresent": false,
+            "sourceSeparatorAfter": "",
+            "translationSeparatorAfter": ""
+          },
+          "units": [
+            {
+              "id": "unit-3",
+              "source": [
+                "La ville retient son souffle"
+              ]
+            },
+            {
+              "id": "unit-4",
+              "source": [
+                "Sous les fenêtres encore allumées"
+              ]
+            },
+            {
+              "id": "unit-5",
+              "source": [
+                "Nos pas dessinent une route"
+              ]
+            },
+            {
+              "id": "unit-6",
+              "source": [
+                "Que le matin saura garder"
+              ]
+            },
+            {
+              "id": "unit-7",
+              "source": [
+                "Et dans le bruit des heures"
+              ]
+            },
+            {
+              "id": "unit-8",
+              "source": [
+                "Je reconnais ta voix"
+              ]
+            }
+          ]
+        }
+      ],
+      "formatting": {
+        "sourcePrefix": "",
+        "translationPrefix": ""
+      }
+    }
   },
   "canvas": {
     "layoutMode": "portrait",
@@ -29,7 +87,7 @@
     "fontScheme": "sans-heavy",
     "fontFamily": "Source Han Sans SC",
     "lyricSize": 52,
-    "lineHeight": 1.42,
+    "lineHeight": 1.8,
     "alignment": "right",
     "translationScale": 0.72,
     "twoLineTitle": true,

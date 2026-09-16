@@ -23,10 +23,7 @@ export function resolveTextColor(spec: RenderSpec) {
   if (textColorMode === "custom" && customTextColor) {
     return normalizeHex(customTextColor, "#F8F4EA");
   }
-  if (textColorMode === "preset") {
-    return TEXT_PRESETS[textColorPreset];
-  }
-  return "#F8F4EA";
+  return "#FFFFFF";
 }
 
 export function withAlpha(color: string, alpha: number) {

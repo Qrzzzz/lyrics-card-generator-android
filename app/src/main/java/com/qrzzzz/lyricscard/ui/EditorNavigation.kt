@@ -205,7 +205,7 @@ internal fun EditorStepContent(
                     )
                     BrandingPanel(project.spec, actions.onSpecChange)
                 }
-                EditorStep.EXPORT -> ExportStepPanel(project)
+                EditorStep.EXPORT -> ExportStepPanel(project, actions.onSpecChange)
             }
         }
     }

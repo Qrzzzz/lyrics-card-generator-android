@@ -3,6 +3,10 @@ import { isDarkColor, mixColors, resolveTextColor, withAlpha } from "./color";
 import { assertLyricLineLimit, type LyricTextPath } from "./renderLimits";
 import { resolveCoverAssetUrl } from "./spec";
 import type { RenderSpec, SongSource, TextAlignment } from "./types";
+import { getLyricDocumentRows } from "./desktop/lyrics-document-v2";
+import { SpatialBackground } from "./SpatialBackground";
+import { resolveCardContentTextShadow } from "./desktop/card-content-depth";
+import { portraitLayout } from "./layout";
 
 type CardCssProperties = CSSProperties & Record<`--${string}`, string | number>;
 
@@ -30,7 +34,10 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     (spec.visibility.showPlatformBadge && source !== "unknown") ||
     (spec.visibility.showSharedBy && spec.branding.sharedByName.trim().length > 0) ||
     spec.visibility.showGeneratedWatermark;
-  const lyricSize = fitLyricSize(spec, Math.max(1, lines.length), translations.length > 0, showHeader, showFooter);
+  const rows = getLyricDocumentRows(spec.content.lyricDocument);
+  const visualRows = rows.reduce((count, row, index) => count + (row.isSeparator ? 0 : 1 + (rows[index - 1]?.isSeparator ? 0 : Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0))), 0);
+  const landscape = spec.canvas.layoutMode === "landscape";
+  const lyricSize = landscape ? spec.typography.lyricSize : Math.max(34, Math.min(spec.typography.lyricSize, visualRows > 10 ? spec.typography.lyricSize - 6 : spec.typography.lyricSize));
   const serif =
     spec.typography.fontScheme === "serif-heavy" ||
     spec.typography.fontScheme === "system-serif" ||
@@ -43,9 +50,12 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     width: spec.canvas.width,
     height: spec.canvas.height,
     color: textColor,
-    fontFamily: serif
-      ? '"Source Han Serif SC", "Source Han Serif Heavy Local", serif'
-      : '"Source Han Sans SC", "Source Han Sans Heavy Local", sans-serif',
+    textShadow: resolveCardContentTextShadow(textColor),
+    fontFamily: spec.typography.customFontEnabled && spec.typography.customFontAsset
+      ? `${fontFamilyCss(spec.typography.latinFontFamily || "Imported Lyric Font")}, "Imported Lyric Font", sans-serif`
+      : `${fontFamilyCss(spec.typography.latinFontFamily || spec.typography.fontFamily)}, ${fontFamilyCss(spec.typography.fontFamily)}, ${serif ? "serif" : "sans-serif"}`,
+    fontWeight: spec.typography.fontWeight ?? 900,
+    fontStyle: spec.typography.fontItalic ? "italic" : "normal",
     "--card-width": `${spec.canvas.width}px`,
     "--card-height": `${spec.canvas.height}px`,
     "--text-color": textColor,
@@ -59,7 +69,9 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
     "--grid-size": `${GRID_SIZES[spec.visual.gridDensity]}px`,
     "--grid-opacity": String(spec.visual.gridOpacity),
     "--lyric-size": `${lyricSize}px`,
-    "--translation-size": `${Math.max(19, Math.round(lyricSize * spec.typography.translationScale))}px`,
+    "--translation-size": `${Math.round(lyricSize * spec.typography.translationScale)}px`,
+    "--pair-margin": `${lyricSize * (landscape ? (spec.content.translationEnabled ? .34 : .24) : (spec.content.translationEnabled ? .42 : .18))}px`,
+    "--left-scale": spec.canvas.layoutPlan?.leftScale ?? 1,
     "--lyric-line-height": String(spec.typography.lineHeight),
     "--cover-scale": String(spec.media.coverCropScale)
   };
@@ -72,7 +84,7 @@ export function LyricsCard({ spec }: { spec: RenderSpec }) {
       data-layout-mode={spec.canvas.layoutMode}
       data-ratio={spec.canvas.ratio}
     >
-      <CardBackground spec={spec} />
+      <SpatialBackground spec={spec} />
       {spec.canvas.layoutMode === "landscape" ? (
         <LandscapeContent
           spec={spec}
@@ -123,16 +135,17 @@ function PortraitContent({
   showFooter
 }: CardContentProps) {
   const showHeader = spec.content.mode === "lyrics" && (spec.visibility.showCover || spec.visibility.showSongInfo);
+  const layout = portraitLayout(spec);
 
   return (
-    <div className="portrait-content" data-card-content="true">
+    <div className="portrait-content" data-card-content="true" style={{position:"absolute",left:layout.safeRect.x,top:layout.safeRect.y,width:layout.safeRect.width,height:layout.safeRect.height,padding:"18px 18px 8px"}}>
       {showHeader ? (
-        <header className="portrait-header" data-card-header="true">
+        <header className="portrait-header" data-card-header="true" style={{minHeight:layout.headerRect?.height,gap:40}}>
           {spec.visibility.showCover ? <CoverArtwork spec={spec} /> : null}
           {spec.visibility.showSongInfo ? <SongInfo spec={spec} textColor={textColor} /> : null}
         </header>
       ) : null}
-      <main className={`portrait-main mode--${spec.content.mode}`} data-card-lyrics-viewport="true">
+      <main className={`portrait-main mode--${spec.content.mode}`} data-card-lyrics-viewport="true" style={{width:layout.lyricsRect.width,marginLeft:spec.typography.alignment==="center"?"auto":0,marginRight:spec.typography.alignment==="center"?"auto":undefined,padding:spec.content.mode==="lyrics"?"32px 0 16px":0}}>
         {spec.content.mode === "instrumental" ? (
           <InstrumentalBlock spec={spec} />
         ) : (
@@ -153,27 +166,29 @@ function LandscapeContent({
   showFooter
 }: CardContentProps) {
   const hasCover = spec.visibility.showCover && spec.content.mode === "lyrics";
+  const plan = spec.canvas.layoutPlan;
+  const rectStyle = (rect: { x: number; y: number; width: number; height: number } | undefined): CSSProperties | undefined => rect ? { position: "absolute", left: rect.x, top: rect.y, width: rect.width, height: rect.height } : undefined;
 
   return (
-    <div className={`landscape-content ${hasCover ? "has-cover" : "no-cover"}`} data-card-content="true">
+    <div className={`landscape-content ${hasCover ? "has-cover" : "no-cover"}`} data-card-content="true" style={plan ? { position: "absolute", inset: 0, display: "block", padding: 0 } : undefined}>
       {hasCover ? (
-        <div className="landscape-cover-slot">
+        <div className="landscape-cover-slot" style={rectStyle(plan?.coverRect)}>
           <CoverArtwork spec={spec} />
         </div>
       ) : null}
-      <div className="landscape-copy">
+      <div className="landscape-copy" style={plan ? { display: "contents" } : undefined}>
         {spec.content.mode === "instrumental" ? (
           <InstrumentalBlock spec={spec} />
         ) : (
           <>
-            {spec.visibility.showSongInfo ? <SongInfo spec={spec} textColor={textColor} landscape /> : null}
-            <div className="landscape-lyrics-viewport" data-card-lyrics-viewport="true">
+            {spec.visibility.showSongInfo ? <div style={rectStyle(plan?.metadataRect)}><SongInfo spec={spec} textColor={textColor} landscape /></div> : null}
+            <div className="landscape-lyrics-viewport" data-card-lyrics-viewport="true" style={rectStyle(plan?.lyricsRect)}>
               <LyricsBlock spec={spec} lines={lines} translations={translations} />
             </div>
           </>
         )}
       </div>
-      {showFooter ? <CardFooter spec={spec} source={source} textColor={textColor} landscape /> : null}
+      {showFooter ? <div style={rectStyle(plan?.accessoriesRect)}><CardFooter spec={spec} source={source} textColor={textColor} landscape /></div> : null}
     </div>
   );
 }
@@ -219,7 +234,7 @@ function CoverArtwork({ spec }: { spec: RenderSpec }) {
 function SongInfo({ spec, textColor, landscape = false }: { spec: RenderSpec; textColor: string; landscape?: boolean }) {
   return (
     <div className={`song-info ${landscape ? "song-info--landscape" : ""}`} data-card-song-info="true">
-      <h1 className={spec.typography.twoLineTitle ? "title-two-lines" : "title-one-line"}>
+      <h1 className={landscape ? "landscape-title" : spec.typography.twoLineTitle ? "title-two-lines" : "title-one-line"}>
         <span>{spec.song.title || localeFallback(spec.locale, "title")}</span>
         {spec.song.explicit ? <ExplicitBadge color={textColor} /> : null}
       </h1>
@@ -238,23 +253,30 @@ function ExplicitBadge({ color }: { color: string }) {
 }
 
 function LyricsBlock({ spec, lines, translations }: { spec: RenderSpec; lines: string[]; translations: string[] }) {
-  const activeLines = lines.length > 0 ? lines : [localeFallback(spec.locale, "lyrics")];
-  const hasTranslations = spec.content.translationEnabled && translations.length > 0;
+  const rows = getLyricDocumentRows(spec.content.lyricDocument);
   const alignment = alignmentClass(spec.typography.alignment);
 
   return (
     <div className={`lyrics-stack ${alignment}`} data-card-lyrics="true">
-      {activeLines.map((line, index) => {
-        const translation = hasTranslations ? translations[index] : "";
+      {rows.length === 0 ? <p className="lyric-line">{localeFallback(spec.locale, "lyrics")}</p> : null}
+      {rows.map((row, index) => {
+        const dot = spec.typography.separatorStyle !== "line";
         return (
-          <div className="lyric-pair" key={`${index}-${line}`}>
-            <p className="lyric-line">{line || "\u00A0"}</p>
-            {translation ? <p className="translation-line">{translation}</p> : null}
+          <div className="lyric-pair" key={row.unitId} data-unit-id={row.unitId}
+            style={{ marginTop: index > 0 && !rows[index - 1]?.isSeparator ? `calc(${Math.max(row.sourceGapBeforeLines, spec.content.translationEnabled ? row.translationGapBeforeLines : 0)} * ${spec.canvas.layoutMode === "landscape" ? "var(--pair-margin)" : "(var(--lyric-size) * var(--lyric-line-height) + var(--pair-margin) * 2)"})` : 0, marginBottom: row.isSeparator || index === rows.length - 1 ? 0 : "var(--pair-margin)" }}>
+            {row.isSeparator ? <div className="lyric-separator" aria-hidden="true" style={{height:"calc(var(--lyric-size) * .65)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{background:"currentColor",opacity:dot ? .48 : .36,width:`calc(var(--lyric-size) * ${dot ? .105 : 1.65})`,height:dot?"calc(var(--lyric-size) * .105)":"max(1px, calc(var(--lyric-size) * .022))",borderRadius:dot?"50%":0}}/></div> : <>
+              {row.source.length ? <p className="lyric-line">{row.source.join("\n") || "\u00A0"}</p> : null}
+              {spec.content.translationEnabled && row.translation.length ? <p className="translation-line">{row.translation.join("\n")}</p> : null}
+            </>}
           </div>
         );
       })}
     </div>
   );
+}
+
+function fontFamilyCss(family: string) {
+  return ["serif", "sans-serif", "system-ui", "monospace", "cursive"].includes(family) ? family : JSON.stringify(family);
 }
 
 function InstrumentalBlock({ spec }: { spec: RenderSpec }) {
@@ -299,9 +321,7 @@ function CardFooter({
       ) : null}
       {spec.visibility.showGeneratedWatermark ? (
         <div className="generated-watermark">
-          <span />
-          <p>generated by lyric card generator</p>
-          <span />
+          <p data-project-signature="true">Qrzzzz/lyrics-card-generator</p>
         </div>
       ) : null}
     </footer>

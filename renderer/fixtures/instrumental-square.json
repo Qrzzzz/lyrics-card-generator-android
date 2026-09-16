@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "rendererVersion": "android-alpha-renderer-1",
   "locale": "zh-TW",
   "song": {
@@ -15,7 +15,17 @@
     "lyrics": "",
     "translationEnabled": false,
     "translation": "",
-    "instrumentalText": "純音樂"
+    "instrumentalText": "純音樂",
+    "lyricDocument": {
+      "schemaVersion": 2,
+      "id": "document-1",
+      "revision": 0,
+      "blocks": [],
+      "formatting": {
+        "sourcePrefix": "",
+        "translationPrefix": ""
+      }
+    }
   },
   "canvas": {
     "layoutMode": "portrait",
@@ -29,7 +39,7 @@
     "fontScheme": "serif-heavy",
     "fontFamily": "Source Han Serif SC",
     "lyricSize": 60,
-    "lineHeight": 1.4,
+    "lineHeight": 1.8,
     "alignment": "left",
     "translationScale": 0.75,
     "twoLineTitle": false,

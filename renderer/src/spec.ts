@@ -3,6 +3,7 @@ import { normalizeHex } from "./color";
 import generatedValidateV1 from "./generated/renderSpecValidator";
 import { assertRenderSpecLineLimits, LyricLineLimitError } from "./renderLimits";
 import type { RenderSpec } from "./types";
+import { isLyricDocumentV2, serializeLyricDocument } from "./desktop/lyrics-document-v2";
 
 const validateV1 = generatedValidateV1 as ValidateFunction<RenderSpec>;
 
@@ -20,6 +21,11 @@ export function parseRenderSpec(input: unknown): RenderSpec {
   const candidate = typeof input === "string" ? parseJson(input) : input;
   if (!validateV1(candidate)) {
     throw new InvalidRenderSpecError(validateV1.errors ?? []);
+  }
+  const document = candidate.content.lyricDocument;
+  const text = isLyricDocumentV2(document) ? serializeLyricDocument(document) : null;
+  if (!text || text.source !== candidate.content.lyrics.replace(/\r\n?/g, "\n") || text.translation !== candidate.content.translation.replace(/\r\n?/g, "\n")) {
+    throw new InvalidRenderSpecError([{ instancePath: "/content/lyricDocument", schemaPath: "", keyword: "document", params: {}, message: "must be a valid V2 document matching text projections" }]);
   }
   try {
     assertRenderSpecLineLimits(candidate);
@@ -57,6 +63,7 @@ export function normalizeRenderSpec(spec: RenderSpec): RenderSpec {
     visual: {
       ...spec.visual,
       palette: {
+        ...spec.visual.palette,
         dominant: normalizeHex(spec.visual.palette.dominant),
         secondary: normalizeHex(spec.visual.palette.secondary),
         accent: normalizeHex(spec.visual.palette.accent)

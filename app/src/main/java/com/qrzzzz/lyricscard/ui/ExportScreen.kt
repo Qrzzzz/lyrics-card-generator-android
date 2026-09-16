@@ -103,7 +103,7 @@ fun ExportScreen(
     )
     val imeVisible = imeInsets.isVisible
     val saveLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("image/png"),
+        ActivityResultContracts.CreateDocument(state.exported?.mimeType ?: com.qrzzzz.lyricscard.model.exportMimeType(state.project?.spec?.canvas?.exportFormat ?: "png")),
     ) { uri ->
         onSaveDestination(uri)
     }
@@ -113,7 +113,7 @@ fun ExportScreen(
         try {
             when (effect.action) {
                 ExportPendingAction.SAVE -> {
-                    saveLauncher.launch(ensurePng(state.fileName, defaultFileName))
+                    saveLauncher.launch(ensureImageExtension(state.fileName, defaultFileName, state.project?.spec?.canvas?.exportFormat ?: "png"))
                 }
                 ExportPendingAction.SHARE -> {
                     val readinessError = shareReadinessError(state)
@@ -182,7 +182,7 @@ fun ExportScreen(
             ) {
                 RendererPreview(
                     spec = project.spec.copy(
-                        canvas = project.spec.canvas.copy(pixelRatio = state.multiplier),
+                        canvas = project.spec.canvas.copy(pixelRatio = if (state.multiplier == 1) 1 else 2),
                     ),
                     controller = renderer,
                     onMeasuredHeight = onMeasuredHeight,
@@ -222,7 +222,7 @@ fun ExportScreen(
             ) {
                 RendererPreview(
                     spec = project.spec.copy(
-                        canvas = project.spec.canvas.copy(pixelRatio = state.multiplier),
+                        canvas = project.spec.canvas.copy(pixelRatio = if (state.multiplier == 1) 1 else 2),
                     ),
                     controller = renderer,
                     onMeasuredHeight = onMeasuredHeight,
@@ -267,8 +267,8 @@ internal fun ExportControls(
     onPreviewBitmapReleased: (Bitmap) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val finalWidth = project.spec.canvas.width * state.multiplier
-    val finalHeight = state.measuredHeight * state.multiplier
+    val finalWidth = (project.spec.canvas.width * com.qrzzzz.lyricscard.model.exportPixelRatio(state.multiplier)).toInt()
+    val finalHeight = (state.measuredHeight * com.qrzzzz.lyricscard.model.exportPixelRatio(state.multiplier)).toInt()
     val estimateMb = finalWidth.toLong() * finalHeight.toLong() * 4.0 / (1024.0 * 1024.0)
     val invalidFileName = INVALID_FILE_CHARS.containsMatchIn(state.fileName)
     val resultPending = state.exported != null && state.preview.phase == ExportPreviewPhase.LOADING
@@ -288,7 +288,7 @@ internal fun ExportControls(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                listOf(1, 2).forEach { value ->
+                listOf(1, 14, 2).forEach { value ->
                     FilterChip(
                         selected = state.multiplier == value,
                         onClick = { onMultiplier(value) },
@@ -296,7 +296,7 @@ internal fun ExportControls(
                             Text(
                                 stringResource(
                                     R.string.export_scale_label,
-                                    value,
+                                    com.qrzzzz.lyricscard.model.exportPixelRatio(value).toString().removeSuffix(".0"),
                                     stringResource(
                                         if (value == 1) {
                                             R.string.common_standard
@@ -344,8 +344,8 @@ internal fun ExportControls(
                 modifier = Modifier.fillMaxWidth().testTag(EXPORT_FILE_NAME_TAG),
                 label = { Text(stringResource(R.string.export_file_name)) },
                 suffix = {
-                    if (!state.fileName.endsWith(".png", true)) {
-                        Text(stringResource(R.string.file_extension_png))
+                    if (!state.fileName.endsWith(".${project.spec.canvas.exportFormat}", true)) {
+                        Text(stringResource(R.string.v2_file_extension, project.spec.canvas.exportFormat))
                     }
                 },
                 supportingText = {
@@ -559,6 +559,13 @@ internal fun shareImage(
 internal fun ensurePng(value: String, fallbackName: String): String {
     val clean = value.ifBlank { fallbackName }.replace(INVALID_FILE_CHARS, "-")
     return if (clean.endsWith(".png", true)) clean else "$clean.png"
+}
+
+internal fun ensureImageExtension(value: String, fallbackName: String, format: String): String {
+    require(format in listOf("png", "webp", "jpg"))
+    val clean = value.ifBlank { fallbackName }.replace(INVALID_FILE_CHARS, "-")
+        .replace(Regex("\\.(png|jpe?g|webp)$", RegexOption.IGNORE_CASE), "")
+    return "$clean.$format"
 }
 
 private val INVALID_FILE_CHARS = Regex("[\\\\/:*?\"<>|]+")

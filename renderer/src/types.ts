@@ -1,3 +1,4 @@
+import type { LyricDocumentV2 } from "./desktop/lyrics-document-v2";
 export const PROTOCOL_VERSION = 1 as const;
 export const RENDERER_VERSION = "android-alpha-renderer-1" as const;
 
@@ -14,7 +15,7 @@ export type BackgroundMode = "palette" | "gradient";
 export type GridDensity = "sparse" | "medium" | "dense";
 
 export interface RenderSpec {
-  schemaVersion: 1;
+  schemaVersion: 2;
   rendererVersion: typeof RENDERER_VERSION;
   locale: RenderLocale;
   song: {
@@ -31,6 +32,7 @@ export interface RenderSpec {
     translationEnabled: boolean;
     translation: string;
     instrumentalText: string;
+    lyricDocument: LyricDocumentV2;
   };
   canvas: {
     layoutMode: LayoutMode;
@@ -39,6 +41,12 @@ export interface RenderSpec {
     height: number;
     autoHeight: boolean;
     pixelRatio: 1 | 2;
+    autoWidth?: boolean;
+    landscape?: import("./desktop/types").LandscapeLayoutSettings;
+    /** Renderer-only derived geometry; never accepted from the native bridge. */
+    layoutPlan?: import("./desktop/types").LandscapeLayoutPlan;
+    exportFormat?: "png" | "webp" | "jpg";
+    exportScale?: 1 | 1.4 | 2;
   };
   typography: {
     fontScheme: FontScheme;
@@ -51,6 +59,12 @@ export interface RenderSpec {
     textColorMode: TextColorMode;
     textColorPreset: TextColorPreset;
     customTextColor: string | null;
+    latinFontFamily?: string;
+    customFontAsset?: string | null;
+    customFontEnabled?: boolean;
+    fontWeight?: number;
+    fontItalic?: boolean;
+    separatorStyle?: "dot" | "line";
   };
   visual: {
     backgroundMode: BackgroundMode;
@@ -58,6 +72,7 @@ export interface RenderSpec {
       dominant: string;
       secondary: string;
       accent: string;
+      extracted?: import("./desktop/types").ExtractedPalette | null;
     };
     gridEnabled: boolean;
     gridDensity: GridDensity;
@@ -126,7 +141,7 @@ export type RendererErrorCode =
 export interface RendererController {
   applySpec(spec: RenderSpec): Promise<void>;
   measure(spec: RenderSpec): Promise<{ width: number; height: number }>;
-  exportPng(spec: RenderSpec, pixelRatio: 1 | 2): Promise<Blob>;
+  exportPng(spec: RenderSpec, pixelRatio: 1 | 1.4 | 2): Promise<Blob>;
 }
 
 export interface LyricsCardRendererGlobal {

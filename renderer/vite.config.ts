@@ -9,7 +9,7 @@ const outputDirectory = process.env.RENDERER_OUT_DIR
   : resolve(rendererRoot, "dist");
 const normalizeNewlines = (value: string) => value.replace(/\r\n/g, "\n");
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base: "./",
   plugins: [
     {
@@ -59,7 +59,7 @@ export default defineConfig({
       }
     }
   ],
-  publicDir: false,
+  publicDir: command === "serve" ? "public" : false,
   build: {
     outDir: outputDirectory,
     emptyOutDir: true,
@@ -72,4 +72,4 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     testTimeout: 10_000
   }
-});
+}));

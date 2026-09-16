@@ -10,7 +10,7 @@ describe("RenderSpec v1 validation", () => {
   });
 
   it("rejects a mismatched protocol schema", () => {
-    expect(() => parseRenderSpec({ ...DEFAULT_RENDER_SPEC, schemaVersion: 2 })).toThrow(InvalidRenderSpecError);
+    expect(() => parseRenderSpec({ ...DEFAULT_RENDER_SPEC, schemaVersion: 1 })).toThrow(InvalidRenderSpecError);
   });
 
   it("rejects portrait specs with a landscape ratio", () => {

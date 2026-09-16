@@ -13,7 +13,7 @@
     "qualityGateRunUrl": "https://github.com/Qrzzzz/lyrics-card-generator-android/actions/runs/9001"
   },
   "package": "com.qrzzzz.lyricscard",
-  "versionName": "2.0.0",
+  "versionName": "2.0",
   "versionCode": 20000,
   "minSdk": 26,
   "targetSdk": 36,
@@ -34,12 +34,12 @@
   },
   "artifactDigests": [
     {
-      "name": "lyrics-card-generator-android-2.0.0.aab",
+      "name": "lyrics-card-generator-android-2.0.aab",
       "bytes": 40,
       "sha256": "61cb110e6d1b156350e21e891d4caeeb603382fb3289c1f32d981c900ae01bc5"
     },
     {
-      "name": "lyrics-card-generator-android-2.0.0.apk",
+      "name": "lyrics-card-generator-android-2.0.apk",
       "bytes": 40,
       "sha256": "9feaa1df58b5c723f7a468d0cfa8c35a31bc355ba825e900cf1553baf64c6789"
     }

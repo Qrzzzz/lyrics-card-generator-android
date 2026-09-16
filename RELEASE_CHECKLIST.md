@@ -6,6 +6,8 @@
 
 ## 1. 冻结签名候选
 
+从 2.0 起，`versionName`、发布输入、发布文档和标签使用两段号（`2.0` / `2.1`、`v2.0` / `v2.1`）；`versionCode` 持续递增，2.0 为 20000。验证器仅为核验历史保留 0.x.y / 1.x.y 三段号，拒绝 2.0.0 等新三段号。2.0 发布说明必须包含旧项目不兼容、保留但不迁移的提示。
+
 - [ ] 使用干净主干提交，版本与源码一致；已有候选继续复用，流程改动不重建相同 APK。
 - [ ] 同一 source SHA 的 Android Quality Gate 和 Dependency Security 已成功；引用已有 run，不在本地重复全套。
 - [ ] Production Release Candidate 从受保护 main dispatch，生产签名环境保留审批、来源限制和连续证书锚点。

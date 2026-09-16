@@ -308,7 +308,7 @@ function Assert-DeviceGateEvidence {
     $package = [string](Get-RequiredProperty $candidate 'package' 'candidate')
     if ($package -ne 'com.qrzzzz.lyricscard') { throw "Unexpected production package '$package'." }
     $versionName = [string](Get-RequiredProperty $candidate 'versionName' 'candidate')
-    if ($versionName -notmatch '^\d+\.\d+\.\d+$') { throw 'candidate.versionName must be x.y.z.' }
+    if ($versionName -notmatch '^(?:[01]\.\d+\.\d+|(?:[2-9]|[1-9]\d+)\.\d+)$') { throw 'candidate.versionName must be x.y (historical 1.x.y accepted).' }
     $versionCode = [int](Get-RequiredProperty $candidate 'versionCode' 'candidate')
     if ($versionCode -le 0) { throw 'candidate.versionCode must be positive.' }
 

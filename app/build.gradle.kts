@@ -58,13 +58,13 @@ android {
         applicationId = "com.qrzzzz.lyricscard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10107
-        versionName = "1.1.7"
+        versionCode = 20000
+        versionName = "2.0"
 
         testInstrumentationRunner = "com.qrzzzz.lyricscard.ui.ReleaseEvidenceTestRunner"
         testProguardFiles("test-proguard-rules.pro")
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("int", "RENDERER_SCHEMA_VERSION", "1")
+        buildConfigField("int", "RENDERER_SCHEMA_VERSION", "2")
         buildConfigField("String", "RENDERER_VERSION", "\"android-alpha-renderer-1\"")
         buildConfigField("String", "BASELINE_COMMIT", "\"b894db9e121848122a16ddcdaaab1283ffab1e27\"")
     }

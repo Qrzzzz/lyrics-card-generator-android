@@ -25,7 +25,7 @@ data class RenderSpec(
     val media: MediaSpec = MediaSpec(),
 ) {
     companion object {
-        const val SCHEMA_VERSION: Int = 1
+        const val SCHEMA_VERSION: Int = 2
         const val DEFAULT_RENDERER_VERSION: String = "android-alpha-renderer-1"
     }
 }
@@ -47,6 +47,7 @@ data class ContentSpec(
     val translationEnabled: Boolean = false,
     val translation: String = "",
     val instrumentalText: String = "纯音乐",
+    val lyricDocument: LyricDocumentV2 = LyricDocumentV2.create(lyrics, translation),
 )
 
 @Serializable
@@ -57,20 +58,39 @@ data class CanvasSpec(
     val height: Int = 1080,
     val autoHeight: Boolean = true,
     val pixelRatio: Int = 2,
+    val autoWidth: Boolean = true,
+    val landscape: LandscapeSettings = LandscapeSettings(),
+    val exportFormat: String = "png",
+    val exportScale: Double = 2.0,
+    val portrait: PortraitSettings = PortraitSettings(),
 )
+
+@Serializable
+data class PortraitSettings(val ratio: CanvasRatio = CanvasRatio.CUSTOM, val width: Int = 1040,
+    val height: Int = 1080, val autoWidth: Boolean = true, val autoHeight: Boolean = true)
+
+@Serializable
+data class LandscapeSettings(val autoLyricsWidth: Boolean = true, val lyricsWidth: Int = 880,
+    val autoHeight: Boolean = true, val requestedHeight: Int = 1080)
 
 @Serializable
 data class TypographySpec(
     val fontScheme: FontScheme = FontScheme.SANS_HEAVY,
     val fontFamily: String = "Source Han Sans SC",
     val lyricSize: Int = 60,
-    val lineHeight: Double = 1.4,
+    val lineHeight: Double = 1.8,
     val alignment: TextAlignment = TextAlignment.LEFT,
     val translationScale: Double = 0.75,
     val twoLineTitle: Boolean = false,
-    val textColorMode: TextColorMode = TextColorMode.AUTO,
+    val textColorMode: TextColorMode = TextColorMode.PRESET,
     val textColorPreset: TextColorPreset = TextColorPreset.WHITE,
     val customTextColor: String? = null,
+    val latinFontFamily: String = "Source Han Sans SC",
+    val customFontAsset: String? = null,
+    val customFontEnabled: Boolean = false,
+    val fontWeight: Int = 900,
+    val fontItalic: Boolean = false,
+    val separatorStyle: String = "dot",
 )
 
 @Serializable
@@ -87,6 +107,7 @@ data class PaletteSpec(
     val dominant: String = "#7C3AED",
     val secondary: String = "#2563EB",
     val accent: String = "#F97316",
+    val extracted: kotlinx.serialization.json.JsonObject? = null,
 )
 
 @Serializable
@@ -290,6 +311,13 @@ object RenderSpecJson {
     fun encode(spec: RenderSpec): String =
         format.encodeToString(RenderSpec.serializer(), spec.requireValid())
 
-    fun decode(value: String): RenderSpec =
-        format.decodeFromString(RenderSpec.serializer(), value).requireValid()
+    fun decode(value: String): RenderSpec {
+        val root = format.parseToJsonElement(value) as? kotlinx.serialization.json.JsonObject
+            ?: throw kotlinx.serialization.SerializationException("Expected project object")
+        if (root["schemaVersion"]?.toString() != "2" ||
+            (root["content"] as? kotlinx.serialization.json.JsonObject)?.containsKey("lyricDocument") != true) {
+            throw kotlinx.serialization.SerializationException("Incompatible project: Android 2.0 requires a V2 document; no migration")
+        }
+        return format.decodeFromString(RenderSpec.serializer(), value).requireValid()
+    }
 }
