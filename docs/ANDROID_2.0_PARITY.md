@@ -66,3 +66,9 @@ Android 起点：`55c6177177df5324b20b9b04d52f3c4263c4155a`（1.1.7 / 10107）�
 工具问题单列：早期 ASCII lint 构建已成功，但 Windows 对 lint 缓存 JAR 的清理失败；最终 JVM 单独运行与清理通过。两个早期临时目录仍保留，额外清理被自动审批以 `blocked by policy` 拒绝，不改变产品 PASS 结论，也不记作已清理。
 
 后续清理（2026-09-16）：维护者明确要求移入回收站后，已通过 Windows `SendToRecycleBin` 将上述 `worktree-cf7389bd0c42-6af7831c0fda40fd996e7302278945e4` 和 `worktree-f945b94ef6e5-6bd76bea493c41218134a8f6a29b9184` 两个临时目录移入回收站；原路径均已不存在。未永久删除，也未处理其他工作树。
+
+## 发布阶段补充（2026-09-16）
+
+维护者随后明确授权 release。实现 PR #71 合并为 `e533b161ebffca94d11842f9219626378a3b53cc`，同 SHA 主干 Quality Gate [35093575502](https://github.com/Qrzzzz/lyrics-card-generator-android/actions/runs/35093575502) 和 Dependency Security [35093575506](https://github.com/Qrzzzz/lyrics-card-generator-android/actions/runs/35093575506) 全部 PASS；生产候选 [35094909253](https://github.com/Qrzzzz/lyrics-card-generator-android/actions/runs/35094909253) 的 release 测试、签名、证书连续性和 attestation PASS。
+
+正式 APK 为 `com.qrzzzz.lyricscard` / `2.0` / 20000，54,918,797 字节，SHA-256 `4bf505130dc8a6e0b0de4e3771a8e00066a37ef0de5cdf3111f524ebb32364f0`。它与上文的本地 debug APK 是不同产物。六项人工操作仍为 NOT RUN；候选原 metadata 未改写。发布授权与候选绑定见 [v2.0-acceptance.json](releases/v2.0-acceptance.json)，公开状态以托管发布工作流和 GitHub Release 为准。
