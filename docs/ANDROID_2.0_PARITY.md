@@ -64,3 +64,5 @@ Android 起点：`55c6177177df5324b20b9b04d52f3c4263c4155a`（1.1.7 / 10107）�
 日志、SHA256SUMS 与对照截图一并保存在 `build/v2-evidence/`（生成文件，不进入源码提交）。
 
 工具问题单列：早期 ASCII lint 构建已成功，但 Windows 对 lint 缓存 JAR 的清理失败；最终 JVM 单独运行与清理通过。两个早期临时目录仍保留，额外清理被自动审批以 `blocked by policy` 拒绝，不改变产品 PASS 结论，也不记作已清理。
+
+后续清理（2026-09-16）：维护者明确要求移入回收站后，已通过 Windows `SendToRecycleBin` 将上述 `worktree-cf7389bd0c42-6af7831c0fda40fd996e7302278945e4` 和 `worktree-f945b94ef6e5-6bd76bea493c41218134a8f6a29b9184` 两个临时目录移入回收站；原路径均已不存在。未永久删除，也未处理其他工作树。
