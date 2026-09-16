@@ -81,4 +81,3 @@ Dependabot creates reviewable pull requests only. It does not auto-merge, receiv
 ### Kotlin and Commons Compress remediation (1.1.6)
 
 The [1.1.6 maintenance record](security/maintenance-1.1.6.md) covers the remaining three medium alerts with Kotlin 2.4.20 and host-only Commons Compress 1.26.0, including compiler/R8/KSP compatibility and Actions artifact migration. Closure requires actual default-branch submission and fixed alert states; no severity or deadline is waived.
-
