@@ -2,6 +2,12 @@
 
 本文件记录用户可见的版本变化。内部逐提交重构与实验过程不在此展开。
 
+## 1.1.7 — 运行库与 Renderer 维护
+
+- 更新协程与 JSON 运行库，补充排队导出取消、旧项目往返和 Native／Renderer 消息兼容回归。
+- 更新 React 19.3、Vite 8 与配套插件、TypeScript 7；保留原有 PNG 样式、1×／2× 导出和保存格式。
+- 历史维护事项及本版实际验证范围见维护报告；可选真机操作未执行时仍记录 NOT RUN。
+
 ## 1.1.6 — 安全依赖与构建流程维护
 
 - 更新 Kotlin／Compose 编译工具链并修复 Commons Compress 与 Commons Lang 宿主依赖告警，保持保存项目和 Renderer 协议兼容。
