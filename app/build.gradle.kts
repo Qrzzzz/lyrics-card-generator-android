@@ -501,6 +501,7 @@ tasks.register("verifyNettyResolution") {
 
 val minimumHostParserVersions = mapOf(
     "org.apache.commons:commons-compress" to "1.26.0",
+    "org.apache.commons:commons-lang3" to "3.18.0",
     "org.jdom:jdom2" to "2.0.6.1",
     "org.bitbucket.b_c:jose4j" to "0.9.6",
 )
