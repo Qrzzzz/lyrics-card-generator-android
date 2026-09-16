@@ -113,6 +113,8 @@ The renderer WebView blocks network access, external navigation, file access, an
 
 <a id="local-development"></a>
 
+See the [1.1.7 maintenance report](docs/security/maintenance-1.1.7.md) for dependency decisions and regression coverage, and the [release policy](docs/RELEASE_READINESS.md) for acceptance scope.
+
 ## 🛠️ Local Development
 
 ### Requirements

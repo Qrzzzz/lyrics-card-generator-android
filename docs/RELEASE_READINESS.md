@@ -30,6 +30,6 @@
 
 生产签名仍需要受保护 main、同 SHA Quality Gate、版本唯一性、环境审批及固定证书。发布 job 不读取生产密钥，不构建或重签。main 的 required checks 与环境 reviewer 不因设备范围调整而取消。
 
-构建和测试工具链的既有告警继续由 [#35](https://github.com/Qrzzzz/lyrics-card-generator-android/issues/35) 和[依赖基线](security/dependency-baseline-2026-09-04.md) 跟踪；不宣称所有生态零漏洞。
+当前 1.1.7 运行库与 Renderer 维护证据见 [维护报告](security/maintenance-1.1.7.md)。#35 已在 1.1.6 的实际依赖提交和零开放告警核验后关闭；历史告警继续由 [#35](https://github.com/Qrzzzz/lyrics-card-generator-android/issues/35) 和[依赖基线](security/dependency-baseline-2026-09-04.md) 保留；实时扫描结论绑定具体源码与运行，不宣称所有生态永远零漏洞。
 
 执行步骤见 [RELEASE_CHECKLIST.md](../RELEASE_CHECKLIST.md)，来源合同见 [RELEASE_PROVENANCE.md](RELEASE_PROVENANCE.md)。

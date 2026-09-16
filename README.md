@@ -113,6 +113,8 @@ Renderer WebView 禁止网络访问、外部导航、文件访问和混合内容
 
 <a id="本地开发"></a>
 
+维护版本 1.1.7 的依赖选择与回归范围见 [维护报告](docs/security/maintenance-1.1.7.md)，发布范围见 [验收策略](docs/RELEASE_READINESS.md)。
+
 ## 🛠️ 本地开发
 
 ### 环境要求

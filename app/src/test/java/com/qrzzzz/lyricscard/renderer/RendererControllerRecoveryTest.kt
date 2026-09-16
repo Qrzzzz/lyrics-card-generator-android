@@ -345,6 +345,39 @@ class RendererControllerRecoveryTest {
         }
     }
 
+    @Test
+    fun `cancelling a queued export leaves the active export and subsequent retry intact`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val exportDir = File(context.cacheDir, "exports")
+        val bridge = FakeRendererBridge(successPng()).apply { mode = FakeRendererBridge.Mode.HANG_BEFORE_CHUNK }
+        val controller = RendererController(context, ProjectAssetStore(context), TEST_TIMEOUT_MS, bridge)
+        try {
+            controller.acquireWebView(context, Any())
+            val observed = bridge.observeNextExport()
+            val active = async { controller.exportPng(TEST_SPEC, 1) }
+            val attempt = observed.await()
+            val queued = async { controller.exportPng(TEST_SPEC, 1) }
+            runCurrent()
+            queued.cancelAndJoin()
+            assertTrue(active.isActive)
+            assertEquals(0, controller.generation.value)
+            bridge.completeExport(attempt)
+            val image = active.await()
+            assertTrue(image.file.isFile)
+            assertTrue(partFiles(exportDir).isEmpty())
+            image.file.delete()
+            bridge.mode = FakeRendererBridge.Mode.SUCCESS
+            val retry = controller.exportPng(TEST_SPEC, 1)
+            assertTrue(retry.file.isFile)
+            retry.file.delete()
+        } finally {
+            controller.close()
+            deletePartFiles(exportDir)
+            Dispatchers.resetMain()
+        }
+    }
+
     private fun successPng(): ByteArray {
         val bitmap = Bitmap.createBitmap(
             TEST_SPEC.canvas.width,
@@ -378,7 +411,7 @@ class RendererControllerRecoveryTest {
 private class FakeRendererBridge(
     var pngBytes: ByteArray,
 ) : RendererBridge {
-    enum class Mode { HANG_AFTER_CHUNK, HANG_SET_SPEC, SUCCESS }
+    enum class Mode { HANG_AFTER_CHUNK, HANG_BEFORE_CHUNK, HANG_SET_SPEC, SUCCESS }
 
     data class Attempt(
         val session: Session,
@@ -435,7 +468,9 @@ private class FakeRendererBridge(
             )
             "exportPng" -> {
                 emit(session, RendererEnvelope(requestId = envelope.requestId, type = "exportStarted"))
-                if (mode == Mode.HANG_AFTER_CHUNK) {
+                if (mode == Mode.HANG_BEFORE_CHUNK) {
+                    nextExport.complete(Attempt(session, envelope.requestId))
+                } else if (mode == Mode.HANG_AFTER_CHUNK) {
                     val partial = pngBytes.copyOfRange(0, minOf(8, pngBytes.size))
                     emit(
                         session,
@@ -499,6 +534,10 @@ private class FakeRendererBridge(
                 payload = buildJsonObject { put("message", "late old-session error") },
             ),
         )
+    }
+
+    fun completeExport(attempt: Attempt) {
+        emitSuccessfulExport(attempt.session, attempt.requestId)
     }
 
     private fun emitSuccessfulExport(session: Session, requestId: String) {
