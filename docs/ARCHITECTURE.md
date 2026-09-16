@@ -71,6 +71,8 @@ Manifest 设置 `usesCleartextTraffic=false`。除 launcher MainActivity 外没�
 
 ## Export state 与原子完成
 
+`ExportAssembly.kt` 拥有临时文件获取、分块顺序/大小校验、有界队列写入和取消清理；`RendererController` 保留 session/request 身份判断、PNG 校验和最终文件发布。文件交接失败仍在不可取消上下文清理，队列排空后才交回控制器验证。
+
 `ExportViewModel` 明确建模 `IDLE → PREPARING → RENDERING → FINALIZING → SUCCESS`，并保留 `CANCELLED`、`FAILURE`、`INTERRUPTED`。PREPARING/RENDERING 可取消；进入 `FINALIZING` 后在 `NonCancellable` 中完成缩略图、Room export record 和可恢复成功 metadata，避免 UI 显示半完成状态。
 
 Renderer 先应用/测量 spec，再在 mutex 内生成 PNG。PNG Blob 使用单次 ArrayBuffer read 与有界 Base64 chunks 回传；Native 校验 session、request、chunk 顺序、块数、总字节数、MIME、PNG 签名和实际尺寸，并先写 `.part`，验证成功才原子发布。取消或失败会关闭并删除 partial/final 临时文件，recovery 不改变 latest-wins/cancel 语义。Export preview 在后台解码，并回收 retired Bitmap。

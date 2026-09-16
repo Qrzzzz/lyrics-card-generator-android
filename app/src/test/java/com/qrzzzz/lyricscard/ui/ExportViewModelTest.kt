@@ -401,6 +401,81 @@ class ExportViewModelTest {
         }
 
     @Test
+    fun delayedSaveSuccessDoesNotReplaceNewExportStatus() = runTest(mainDispatcherRule.dispatcher) {
+        val completion = CompletableDeferred<Unit>()
+        val files = FakeExportFiles().apply { copyBlock = { _, _ -> completion.await() } }
+        val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+        val vm = exportViewModel(project("stale-save-success"), renderer = renderer, exportFiles = files)
+        runCurrent()
+        vm.retry()
+        advanceUntilIdle()
+        vm.saveTo(android.net.Uri.parse("content://test/old.png"))
+        runCurrent()
+        renderer.exportBlock = { _, _ -> awaitCancellation() }
+        vm.retry()
+        runCurrent()
+        val status = vm.uiState.value.status
+        completion.complete(Unit)
+        runCurrent()
+        assertEquals(ExportOperationState.RENDERING, vm.uiState.value.operation)
+        assertEquals(status, vm.uiState.value.status)
+        assertNull(vm.uiState.value.errorMessage)
+        assertEquals(1, files.copied.size)
+        vm.cancelExport()
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun delayedSaveFailureDoesNotAttachErrorToReplacementImage() = runTest(mainDispatcherRule.dispatcher) {
+        val completion = CompletableDeferred<Unit>()
+        val files = FakeExportFiles().apply {
+            copyBlock = { _, _ -> completion.await(); error("old destination unavailable") }
+        }
+        val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+        val vm = exportViewModel(project("stale-save-failure"), renderer = renderer, exportFiles = files)
+        runCurrent()
+        vm.retry()
+        advanceUntilIdle()
+        vm.saveTo(android.net.Uri.parse("content://test/old.png"))
+        runCurrent()
+        vm.retry()
+        advanceUntilIdle()
+        val replacement = vm.uiState.value.exported
+        completion.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(ExportOperationState.SUCCESS, vm.uiState.value.operation)
+        assertEquals(replacement, vm.uiState.value.exported)
+        assertNull(vm.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun olderSaveFailureDoesNotOverwriteNewerSaveSuccessForSameImage() = runTest(mainDispatcherRule.dispatcher) {
+        val completion = CompletableDeferred<Unit>()
+        val files = FakeExportFiles().apply {
+            copyBlock = { _, destination ->
+                if (destination.lastPathSegment == "old.png") {
+                    completion.await()
+                    error("old destination unavailable")
+                }
+            }
+        }
+        val renderer = FakeRendererOperations().apply { exportBlock = { _, _ -> image() } }
+        val vm = exportViewModel(project("overlapping-save"), renderer = renderer, exportFiles = files)
+        runCurrent()
+        vm.retry()
+        advanceUntilIdle()
+        vm.saveTo(android.net.Uri.parse("content://test/old.png"))
+        runCurrent()
+        vm.saveTo(android.net.Uri.parse("content://test/new.png"))
+        runCurrent()
+        completion.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(UiText.resource(R.string.export_saved), vm.uiState.value.status)
+        assertNull(vm.uiState.value.errorMessage)
+        assertEquals(1, files.copied.size)
+    }
+
+    @Test
     fun cancelledSafDestinationKeepsResultAndPublishesUnderstandableStatus() =
         runTest(mainDispatcherRule.dispatcher) {
             val project = project("export-saf-cancel")

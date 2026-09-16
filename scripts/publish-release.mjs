@@ -10,6 +10,15 @@ const sha = /^[0-9a-f]{40}$/;
 const digest = /^[0-9a-f]{64}$/;
 const positive = n => Number.isSafeInteger(n) && n > 0;
 const json = path => JSON.parse(readFileSync(path, 'utf8').replace(/^\uFEFF/, ''));
+const hasManualWaiver = a => Object.hasOwn(a, 'manualAcceptanceWaiver');
+const candidateVersionCode = a => hasManualWaiver(a) ? a.candidate.versionCode : a.device.versionCode;
+const candidateApkHash = a => hasManualWaiver(a) ? a.candidate.apkSha256 : a.device.installedApkSha256;
+
+export function acceptanceSummary(a) {
+  return hasManualWaiver(a)
+    ? `六项人工验收：NOT RUN，维护者授权 ${a.version} 按可选人工验收规则发布；本次未执行实体设备安装验证，不声称人工操作通过。`
+    : `设备：${a.device.model} / API ${a.device.api}；打开、编辑、预览、PNG 导出、保存后打开和分享面板通过。`;
+}
 export async function hashFile(path) {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(path)) hash.update(chunk);
@@ -24,17 +33,37 @@ export function validateAcceptance(a, version) {
   assert.match(a.sourceCommit, sha);
   assert.ok(positive(a.candidateRunId) && positive(a.candidateRunAttempt) && positive(a.dependencyRunId));
   assert.equal(a.candidateArtifactName, `production-candidate-${version}-${a.sourceCommit.slice(0, 12)}`);
-  assert.equal(a.device.kind, 'physical');
-  assert.ok(typeof a.device.model === 'string' && a.device.model.trim());
-  assert.ok(Number.isInteger(a.device.api) && a.device.api >= 26);
-  assert.match(a.device.installedApkSha256, digest);
-  assert.equal(a.device.versionName, version);
-  assert.ok(positive(a.device.versionCode));
+  if (hasManualWaiver(a)) {
+    // From 1.1.5 manual device checks are optional; preserve the historical 1.1.4 record.
+    // Candidate identity, signing, CI, ancestry and original bytes remain mandatory.
+    const [major, minor, patch] = version.split('.').map(Number);
+    assert.ok(major > 1 || (major === 1 && (minor > 1 || (minor === 1 && patch >= 4))),
+      'Optional manual acceptance starts at 1.1.5, with the historical 1.1.4 exception');
+    assert.deepEqual(a.manualAcceptanceWaiver, {
+      version, scope: 'six-manual-checks', authorizedBy: 'Qrzzzz',
+      authorization: version === '1.1.4' ? '默认直接跳过 6 项人工验收，做完后直接发布'
+        : '删掉以前的强制的真机实测环节，做完后直接release',
+    });
+    assert.equal(a.confirmedBy, a.manualAcceptanceWaiver.authorizedBy);
+    assert.equal(a.device, null, 'Do not invent device evidence for an untested release');
+    assert.equal(a.candidate.versionName, version);
+    assert.ok(positive(a.candidate.versionCode));
+    assert.match(a.candidate.apkSha256, digest);
+  } else {
+    assert.equal(a.device.kind, 'physical');
+    assert.ok(typeof a.device.model === 'string' && a.device.model.trim());
+    assert.ok(Number.isInteger(a.device.api) && a.device.api >= 26);
+    assert.match(a.device.installedApkSha256, digest);
+    assert.equal(a.device.versionName, version);
+    assert.ok(positive(a.device.versionCode));
+  }
   assert.match(a.confirmedBy, /^[A-Za-z0-9-]{1,39}$/);
   assert.ok(Number.isFinite(Date.parse(a.confirmedAt)) && Date.parse(a.confirmedAt) <= Date.now());
   assert.ok(typeof a.confirmation === 'string' && a.confirmation.trim());
   assert.deepEqual(Object.keys(a.checks).sort(), [...requiredChecks].sort());
-  for (const check of requiredChecks) assert.equal(a.checks[check], 'PASS', `${check} requires actual confirmation`);
+  for (const check of requiredChecks) {
+    assert.equal(a.checks[check], hasManualWaiver(a) ? 'NOT RUN' : 'PASS', `${check} must reflect actual acceptance`);
+  }
   assert.ok(Array.isArray(a.notCovered) && a.notCovered.length > 0);
   assert.ok(a.notCovered.every(item => typeof item === 'string' && item.trim()));
   return a;
@@ -65,7 +94,7 @@ export async function validateFiles(root, a, repository, certificate) {
   const metadata = json(join(root, 'release-metadata.json'));
   assert.equal(metadata.schemaVersion, 2);
   assert.equal(metadata.versionName, a.version);
-  assert.equal(metadata.versionCode, a.device.versionCode);
+  assert.equal(metadata.versionCode, candidateVersionCode(a));
   assert.equal(metadata.package, 'com.qrzzzz.lyricscard');
   assert.equal(metadata.source.repository, repository);
   assert.equal(metadata.source.commit, a.sourceCommit);
@@ -79,7 +108,7 @@ export async function validateFiles(root, a, repository, certificate) {
   assert.equal(metadata.signing.certificateSha256, certificate);
   // Metadata is the original attested build-time record. Never rewrite its readiness.
   const hashes = Object.fromEntries(await Promise.all(names.map(async name => [name, await hashFile(join(root, name))])));
-  assert.equal(hashes[`lyrics-card-generator-android-${a.version}.apk`], a.device.installedApkSha256);
+  assert.equal(hashes[`lyrics-card-generator-android-${a.version}.apk`], candidateApkHash(a));
   const payloadNames = names.filter(name => !['release-metadata.json', 'SHA256SUMS'].includes(name));
   assert.deepEqual(metadata.artifactDigests.map(item => item.name).sort(), payloadNames);
   for (const item of metadata.artifactDigests) {
@@ -166,6 +195,7 @@ async function main() {
     validatePublishedAssets(release.assets, files);
     writeFileSync('publication-result.json', JSON.stringify({ status: 'ALREADY_PUBLISHED', policy: a.policy,
       version, sourceCommit: a.sourceCommit, validatorCommit: validator, releaseUrl: release.html_url,
+      checks: a.checks, manualAcceptanceWaiver: a.manualAcceptanceWaiver ?? null,
       assets: files.hashes }, null, 2));
     console.log(`Already published and verified: ${release.html_url}`);
     return;
@@ -174,13 +204,13 @@ async function main() {
   const runUrl = `https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}`;
   const acceptanceUrl = `https://github.com/${repository}/blob/${validator}/docs/releases/v${version}-acceptance.json`;
   const body = `${notes.trim()}\n\n## 发布验收\n\n` +
-    `- 发布策略：focused-manual-v1；[人工验收记录](${acceptanceUrl})，由 ${a.confirmedBy} 于 ${a.confirmedAt} 确认。\n` +
+    `- 发布策略：focused-manual-v1；[验收与发布授权记录](${acceptanceUrl})，由 ${a.confirmedBy} 于 ${a.confirmedAt} 确认。\n` +
     `- Source / tag：\`${a.sourceCommit}\`；[签名候选](${candidate.html_url})，attempt ${a.candidateRunAttempt}。\n` +
-    `- 设备：${a.device.model} / API ${a.device.api}；打开、编辑、预览、PNG 导出、保存后打开和分享面板通过。\n` +
+    `- ${acceptanceSummary(a)}\n` +
     `- 本次不覆盖：${a.notCovered.join('；')}。\n` +
     `- 生产证书 SHA-256：\`${policy.certificateSha256}\`。\n` +
     `- [发布运行](${runUrl})：复核候选来源、同 SHA CI、全部五个附件的哈希和 GitHub attestation。\n\n` +
-    '附件为签名候选原字节。release-metadata.json 的 PROVISIONAL / NOT RUN / finalReady=false 是构建时记录，保持原样；本次采用上述人工验收策略，不宣称旧完整设备矩阵通过。\n';
+    '附件为签名候选原字节。release-metadata.json 的 PROVISIONAL / NOT RUN / finalReady=false 是构建时记录，保持原样；本次验收范围以上述记录为准，不宣称未执行的设备测试通过。\n';
   const marker = `<!-- focused-manual-v1:${a.sourceCommit} -->`;
   if (release) assert.ok(release.body?.includes(marker), 'Existing draft requires manual review');
   if (!ref) {
@@ -205,6 +235,7 @@ async function main() {
   validatePublishedAssets(published.assets, files);
   writeFileSync('publication-result.json', JSON.stringify({ status: 'PUBLISHED', policy: a.policy, version,
     sourceCommit: a.sourceCommit, validatorCommit: validator, candidateRunId: a.candidateRunId,
+    checks: a.checks, manualAcceptanceWaiver: a.manualAcceptanceWaiver ?? null,
     releaseUrl: published.html_url, assets: files.hashes }, null, 2));
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Published [${tag}](${published.html_url}) with five verified original assets.\n`);
 }

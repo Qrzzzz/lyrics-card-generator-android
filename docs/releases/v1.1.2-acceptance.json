@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "policy": "focused-manual-v1",
+  "version": "1.1.2",
+  "sourceCommit": "4c0621de8ab3ca9734c3a33f1199ac5607c16943",
+  "candidateRunId": 34777572350,
+  "candidateRunAttempt": 1,
+  "candidateArtifactName": "production-candidate-1.1.2-4c0621de8ab3",
+  "dependencyRunId": 34776818155,
+  "device": {
+    "kind": "physical",
+    "model": "Xiaomi 2210132C",
+    "api": 36,
+    "versionName": "1.1.2",
+    "versionCode": 10102,
+    "installedApkSha256": "4617ec7ff9a614c72ecf9b413d770c5c6bc43c38c57150cc6bafc4d056e6cba3"
+  },
+  "confirmedBy": "Qrzzzz",
+  "confirmedAt": "2026-09-13T23:48:40.2548313Z",
+  "confirmation": "维护者在本次发布会话中确认：“六项全部通过，进入release流程”。六项指打开应用、编辑歌词、实时预览、导出 PNG、保存后打开图片、打开系统分享面板。此前已通过 adb 覆盖安装候选，独立核对设备版本及实际 base.apk SHA-256 与冻结候选一致。",
+  "checks": {
+    "open": "PASS",
+    "edit": "PASS",
+    "preview": "PASS",
+    "exportPng": "PASS",
+    "saveAndOpen": "PASS",
+    "shareSheet": "PASS"
+  },
+  "notCovered": [
+    "API 30 fresh-install serif 1×→2× 超时专项与 API 26/30/33/36 完整自动化矩阵",
+    "UTP / instrumentation 依赖兼容专项",
+    "20 次连续导出、4 GB 内存专项和 30 分钟耐久",
+    "TalkBack 手势与 200% 字体专项",
+    "向第三方应用或联系人实际发送图片"
+  ]
+}

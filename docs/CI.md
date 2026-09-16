@@ -5,7 +5,7 @@
 | 用途 | 保留的验收 | 不应被当作本次完成证据的内容 |
 | --- | --- | --- |
 | 普通合并 | 本次涉及的产品正确性、依赖差异与流程合同；保护分支要求的检查结果 | 其他 SHA 的绿灯、缺失或被取消的应执行检查 |
-| 常规发布 | `focused-manual-v1`：主干同 SHA 全量 CI、可信签名候选、来源/证书/哈希/attestation、实际安装哈希与真机六项 | PR 的轻量检查、自动填写的人工结果、旧候选的验收 |
+| 常规发布 | `focused-manual-v1`：主干同 SHA 全量 CI、可信签名候选、来源/证书/哈希/attestation、候选哈希与可选人工验收 | PR 的轻量检查、自动填写的人工结果、旧候选的验收 |
 | 按需专项 | API 30 probe、跨 API 矩阵、耐久、低内存、TalkBack/大字体；旧 Capture/Final 仅在安排专项时使用 | 未运行的专项，或以专项缺设备阻止无关补丁合并 |
 | 历史记录 | 绑定原 SHA/run 的旧失败、阻塞、签名 metadata 与已发布验收 | 将旧 FAIL/NOT RUN 改写成 PASS 或作为每版必须重跑的清单 |
 
@@ -26,7 +26,7 @@
 | 普通 Android 业务、资源、单测 | productionDebug JVM、lint、APK 构建 |
 | 协议/schema/bridge、Manifest/备份、Gradle/依赖、R8、签名/发布输入、release/alpha/仪器测试源码、公共脚本、未知路径 | Renderer、完整 Android、流程合同、审计及 Unicode smoke |
 
-`renderer`、`android`、`contracts`、`audit` 独立调度，在线审计不作为产品检查的前置依赖。完整 Android 执行 BC、Netty、JDOM/jose4j 的宿主依赖解析、四变体 JVM、productionRelease lint/R8、alpha/production debug APK、productionRelease APK/AAB、bundletool manifest 提取、release AndroidTest APK 打包，并检查生成 assets 不修改源码。完整合同保留 CI/publish、依赖、生产来源、frozen-source 和按需设备证据校验。
+`renderer`、`android`、`contracts`、`audit` 独立调度，在线审计不作为产品检查的前置依赖。完整 Android 执行 BC、Netty、JDOM/jose4j/Commons Compress、Kotlin/R8 的宿主依赖解析、四变体 JVM、productionRelease lint/R8、alpha/production debug APK、productionRelease APK/AAB、bundletool manifest 提取、release AndroidTest APK 打包，并检查生成 assets 不修改源码。完整合同保留 CI/publish、依赖、生产来源、frozen-source 和按需设备证据校验。
 
 `quality-gate` 是始终执行的汇总 job：范围输出必须完整合法，本次应执行的子任务必须成功；失败、取消、缺结果或未授权跳过均拒绝。`unicode-path-jvm-smoke` 继续作为独立 required check，并纳入汇总。服务器分支保护已核对为 strict，要求 `quality-gate`、`unicode-path-jvm-smoke`、`dependency-review`，名称保持不变。
 
@@ -42,13 +42,15 @@ Dependabot 将 React、React DOM 及类型定义放在同一组，其余兼容�
 
 ## 发布复用
 
+自 1.1.5 起按维护者授权永久取消强制真机人工验收。未执行时六项记录 NOT RUN、device=null，并通过版本绑定的 manualAcceptanceWaiver 和 candidate 哈希记录发布授权；1.1.4 历史记录保持兼容。CI、签名、来源及原始附件校验继续执行。
+
 引用冻结 source SHA 的成功 main Quality Gate，无需在本地再跑同一套 Renderer/JVM 全量测试。签名 job 安装锁定依赖、重新审计，然后运行 productionRelease JVM/lint 与生产 APK/AAB/test APK 构建、证书和 provenance 检查；alpha/debug 测试由原 Quality Gate 证明。
 
-签名 source 与 main dispatch/工作流 SHA 相同，审批期间允许 main 正常前进，来源必须仍属于主干历史。常规发布由 Publish Verified Candidate 读取主干中已确认的人工验收记录，验证 source/发布 validator 的祖先链、run/attempt、原产物字节和 attestation，再发布五个原始附件。
+签名 source 与 main dispatch/工作流 SHA 相同，审批期间允许 main 正常前进，来源必须仍属于主干历史。常规发布由 Publish Verified Candidate 读取主干中已确认的验收与发布授权记录，验证 source/发布 validator 的祖先链、run/attempt、原产物字节和 attestation，再发布五个原始附件。
 
 生产候选、测试 APK、设备证据与最终 verdict 的 Actions artifact 均保留 90 天。此设置只影响新上传的 artifact，已经过期或按旧设置上传的产物不会自动延期。
 
-产品或测试 APK 改变仍要重新冻结候选。仅修改 CI/验证流程时不需要重新签同一 APK；真机按发布清单确认核心操作，专项设备测试按风险选择，历史失败记录保留。旧 Capture/Final 工作流默认禁用，可在明确安排完整矩阵时另行启用。
+产品或测试 APK 改变仍要重新冻结候选。仅修改 CI/验证流程时不需要重新签同一 APK；真机核心操作改为可选，专项设备测试按风险选择，历史失败记录保留。旧 Capture/Final 工作流默认禁用，可在明确安排完整矩阵时另行启用。
 
 ## 验证脚本
 

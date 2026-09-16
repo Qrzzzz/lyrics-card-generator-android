@@ -208,6 +208,7 @@ class FakeExportFiles : ExportFiles {
     var clearBlock: (suspend () -> Long)? = null
     val copied = mutableListOf<Pair<ExportedImage, Uri>>()
     var copyFailure: Throwable? = null
+    var copyBlock: (suspend (ExportedImage, Uri) -> Unit)? = null
     var thumbnailCalls = 0
     var createThumbnailBlock: suspend (String, ExportedImage) -> String = { projectId, image ->
         File(image.file.parentFile, "$projectId-thumbnail.png").absolutePath
@@ -219,6 +220,7 @@ class FakeExportFiles : ExportFiles {
     }
 
     override suspend fun copyTo(image: ExportedImage, destination: Uri) {
+        copyBlock?.invoke(image, destination)
         copyFailure?.let { throw it }
         copied += image to destination
     }

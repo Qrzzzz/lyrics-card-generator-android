@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "policy": "focused-manual-v1",
+  "version": "1.1.4",
+  "sourceCommit": "fc0af758c13583cf86695f52acb06fa190aca91c",
+  "candidateRunId": 34818773180,
+  "candidateRunAttempt": 1,
+  "candidateArtifactName": "production-candidate-1.1.4-fc0af758c135",
+  "dependencyRunId": 34817609308,
+  "device": null,
+  "candidate": {
+    "versionName": "1.1.4",
+    "versionCode": 10104,
+    "apkSha256": "d1cb4622629dec3247dc395260152da9d07fffd14758dbec64f441232c08f115"
+  },
+  "confirmedBy": "Qrzzzz",
+  "confirmedAt": "2026-09-14T07:02:41.0000000+00:00",
+  "confirmation": "维护者在本任务明确要求“默认直接跳过 6 项人工验收，做完后直接发布”。此记录绑定实际签名候选，表达发布授权与人工豁免，不是设备安装或操作通过的确认。六项均未执行；#9/#35 的既有风险、原级别、责任人及期限保持不变。",
+  "manualAcceptanceWaiver": {
+    "version": "1.1.4",
+    "scope": "six-manual-checks",
+    "authorizedBy": "Qrzzzz",
+    "authorization": "默认直接跳过 6 项人工验收，做完后直接发布"
+  },
+  "checks": {
+    "open": "NOT RUN",
+    "edit": "NOT RUN",
+    "preview": "NOT RUN",
+    "exportPng": "NOT RUN",
+    "saveAndOpen": "NOT RUN",
+    "shareSheet": "NOT RUN"
+  },
+  "notCovered": [
+    "本候选的实体设备安装验证及六项人工核心操作",
+    "本版 API 30、完整跨 API 矩阵、20 次导出、内存与耐久专项",
+    "TalkBack、大字体与 UTP/instrumentation 专项",
+    "向第三方应用或联系人实际发送图片"
+  ]
+}
