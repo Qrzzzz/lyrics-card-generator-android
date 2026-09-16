@@ -4,7 +4,7 @@
 
 ## 1.1.6 — 安全依赖与构建流程维护
 
-- 更新 Kotlin／Compose 编译工具链并修复 Commons Compress 宿主依赖告警，保持保存项目和 Renderer 协议兼容。
+- 更新 Kotlin／Compose 编译工具链并修复 Commons Compress 与 Commons Lang 宿主依赖告警，保持保存项目和 Renderer 协议兼容。
 - 更新 CI、依赖提交及候选到发布的附件 Actions，保留生产签名和原始附件来源验证。
 - 真机人工操作仍为可选；本版实际覆盖以验收记录为准。
 
