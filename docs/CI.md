@@ -26,7 +26,7 @@
 | 普通 Android 业务、资源、单测 | productionDebug JVM、lint、APK 构建 |
 | 协议/schema/bridge、Manifest/备份、Gradle/依赖、R8、签名/发布输入、release/alpha/仪器测试源码、公共脚本、未知路径 | Renderer、完整 Android、流程合同、审计及 Unicode smoke |
 
-`renderer`、`android`、`contracts`、`audit` 独立调度，在线审计不作为产品检查的前置依赖。完整 Android 执行 BC、Netty、JDOM/jose4j 的宿主依赖解析、四变体 JVM、productionRelease lint/R8、alpha/production debug APK、productionRelease APK/AAB、bundletool manifest 提取、release AndroidTest APK 打包，并检查生成 assets 不修改源码。完整合同保留 CI/publish、依赖、生产来源、frozen-source 和按需设备证据校验。
+`renderer`、`android`、`contracts`、`audit` 独立调度，在线审计不作为产品检查的前置依赖。完整 Android 执行 BC、Netty、JDOM/jose4j/Commons Compress、Kotlin/R8 的宿主依赖解析、四变体 JVM、productionRelease lint/R8、alpha/production debug APK、productionRelease APK/AAB、bundletool manifest 提取、release AndroidTest APK 打包，并检查生成 assets 不修改源码。完整合同保留 CI/publish、依赖、生产来源、frozen-source 和按需设备证据校验。
 
 `quality-gate` 是始终执行的汇总 job：范围输出必须完整合法，本次应执行的子任务必须成功；失败、取消、缺结果或未授权跳过均拒绝。`unicode-path-jvm-smoke` 继续作为独立 required check，并纳入汇总。服务器分支保护已核对为 strict，要求 `quality-gate`、`unicode-path-jvm-smoke`、`dependency-review`，名称保持不变。
 
