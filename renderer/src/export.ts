@@ -309,7 +309,7 @@ function releaseCanvas(canvas: HTMLCanvasElement | undefined) {
 }
 
 export function estimateExportBytes(width: number, height: number, pixelRatio: number) {
-  return width * height * pixelRatio * pixelRatio * 4;
+  return Math.floor(width * pixelRatio) * Math.floor(height * pixelRatio) * 4;
 }
 
 function assertExportMemory(width: number, height: number, pixelRatio: number) {

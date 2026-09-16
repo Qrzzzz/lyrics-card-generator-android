@@ -53,7 +53,7 @@ internal class AndroidExportPreviewDecoder(
 
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, bounds)
-            if (image.mimeType !in listOf("image/png", "image/webp", "image/jpeg") || bounds.outMimeType != image.mimeType || bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            if (!com.qrzzzz.lyricscard.renderer.hasImageEncoding(file, image.mimeType) || bounds.outWidth <= 0 || bounds.outHeight <= 0) {
                 return@withContext ExportPreviewDecodeResult.InvalidPng
             }
 
