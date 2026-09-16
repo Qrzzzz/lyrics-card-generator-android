@@ -42,3 +42,25 @@ Android 起点：`55c6177177df5324b20b9b04d52f3c4263c4155a`（1.1.7 / 10107）�
 `scripts/browser-v2-smoke.js` 另以三行原创双语内容实际执行横竖两种布局 × 三种格式，逐个重新解码输出字节并核对尺寸、MIME 与 1/1.4/2 倍。浏览器验证不替代 Android 真机 WebView 验收。桌面 Next 开发模式的生产 CSP 与开发 loader 冲突，仅在本地参考浏览器响应中去掉 CSP；桌面源码未修改，此参考不作为安全验证证据。
 
 保留差异：Android 的原生六步组织、4:5/9:16 快捷比例、平台符号和保存分享入口继续保留；桌面网络字体来源不能离线照搬，Android 通过本地字体导入实现自定义字体。
+
+## 最终本地验收（2026-09-16）
+
+产品代码：`a0935a1`，分支 `codex/android-2.0`。后续验收记录提交只更新本文。
+
+| 结果 | 命令 / 证据 | 范围 |
+| --- | --- | --- |
+| PASS | `npm --prefix renderer run typecheck`、`test`、`build` | 87 项 Renderer 回归、schema 生成一致性、生产打包 |
+| PASS | `scripts/gradle-via-ascii-worktree.ps1 -GradleArguments :app:testProductionDebugUnitTest` | HEAD 独立 ASCII worktree，真实 JVM 回归；最终轮 gradleExitCode=0、cleanup=complete |
+| PASS | `gradlew :app:lintProductionDebug :app:assembleProductionDebug` | 最终生产 flavor/debug 变体 lint 和可安装 APK；未添加更严 CI 门槛 |
+| PASS | `node --test scripts/test-ci-tools.mjs scripts/test-publish-release.mjs` | 28 项流程合同回归 |
+| PASS | `test-production-release-contract.ps1`、`test-device-gate-evidence.ps1`、`test-frozen-source-contract.ps1`、`test-dependency-security-contract.ps1` | 版本两段号、历史版本兼容、来源与拒绝路径；测试 fixture 不是真实设备证据 |
+| PASS | Playwright CLI + `browser-v2-smoke.js` | 横竖版各 PNG 1×、WebP 1.4×、JPG 2×，实际重新解码；预览/编码尺寸一致 |
+| PASS | `aapt dump badging`、`apksigner verify --verbose` | `com.qrzzzz.lyricscard.debug` / `2.0-debug` / 20000，API 26+，debug APK v2 签名有效 |
+| NOT RUN | 真机安装、Android System WebView 跨版本、字体文件选择器与系统分享实机操作 | 浏览器和 JVM 证据不替代这些操作 |
+| NOT RUN | main 远端 CI、生产签名 APK/AAB、attestation、标签与公开 Release | 本次为本地实现与构建，没有提交远端发布 |
+
+本地产物 `build/v2-evidence/lyrics-card-generator-2.0-debug.apk`，64,156,267 字节；SHA-256：
+`59f771e567afac494bdda20fd8fcf7e821a96fc3b5f2bc9b634abc9d930c8d53`。
+日志、SHA256SUMS 与对照截图一并保存在 `build/v2-evidence/`（生成文件，不进入源码提交）。
+
+工具问题单列：早期 ASCII lint 构建已成功，但 Windows 对 lint 缓存 JAR 的清理失败；最终 JVM 单独运行与清理通过。两个早期临时目录仍保留，额外清理被自动审批以 `blocked by policy` 拒绝，不改变产品 PASS 结论，也不记作已清理。
