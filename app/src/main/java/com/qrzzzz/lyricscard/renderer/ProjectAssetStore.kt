@@ -40,6 +40,16 @@ class ProjectAssetStore(
     private val storageSessionStartedAt = clock()
     private val fileMutex = Mutex()
     private val pendingAssetIds = mutableSetOf<String>()
+    private val ownershipLock = Any()
+    private val retainedCovers = mutableMapOf<Any, Set<String>>()
+
+    /** Synchronous handoff: a new editor/history reference is protected before saving can run. */
+    fun retainCovers(owner: Any, ids: Set<String>): Boolean = synchronized(ownershipLock) {
+        if (retainedCovers[owner].orEmpty() == ids) return@synchronized false
+        if (ids.isEmpty()) retainedCovers.remove(owner) else retainedCovers[owner] = ids.toSet()
+        pendingAssetIds.removeAll(ids)
+        true
+    }
 
     suspend fun importCover(uri: Uri): String = withContext(Dispatchers.IO) {
         appContext.contentResolver.openInputStream(uri)?.use { input ->
@@ -128,7 +138,7 @@ class ProjectAssetStore(
             } finally {
                 working?.recycle()
             }
-            id.also(pendingAssetIds::add)
+            id.also { synchronized(ownershipLock) { pendingAssetIds.add(it) } }
         } catch (cause: Throwable) {
             dataFile.delete()
             mimeFile.delete()
@@ -158,14 +168,14 @@ class ProjectAssetStore(
 
     override suspend fun markReferenced(id: String) = withContext(Dispatchers.IO) {
         fileMutex.withLock {
-            pendingAssetIds.remove(id)
+            synchronized(ownershipLock) { pendingAssetIds.remove(id) }
             Unit
         }
     }
 
     override suspend fun delete(id: String) = withContext(Dispatchers.IO) {
         fileMutex.withLock {
-            pendingAssetIds.remove(id)
+            synchronized(ownershipLock) { pendingAssetIds.remove(id) }
             deleteFiles(id)
             Unit
         }
@@ -239,7 +249,7 @@ class ProjectAssetStore(
         if (!root.isDirectory && !root.mkdirs()) {
             return CoverReconcileOutcome(missingIds = referencedIds)
         }
-        pendingAssetIds.removeAll(referencedIds)
+        synchronized(ownershipLock) { pendingAssetIds.removeAll(referencedIds) }
         val storedIds = root.listFiles()
             .orEmpty()
             .mapNotNull { file ->
@@ -253,7 +263,7 @@ class ProjectAssetStore(
             .toSet()
         var deletedOrphanCount = 0
         storedIds
-            .filterNot { it in referencedIds || it in pendingAssetIds }
+            .filterNot { it in referencedIds || synchronized(ownershipLock) { it in pendingAssetIds } }
             .forEach { id ->
                 if (deleteFiles(id)) deletedOrphanCount += 1
             }
@@ -441,14 +451,14 @@ class ProjectAssetStore(
         )
     }
 
-    private fun deleteFiles(id: String): Boolean {
-        if (!ASSET_ID.matches(id)) return false
+    private fun deleteFiles(id: String): Boolean = synchronized(ownershipLock) {
+        if (!ASSET_ID.matches(id) || retainedCovers.values.any { id in it }) return@synchronized false
         val data = dataFile(id)
         val mime = mimeFile(id)
         val existed = data.exists() || mime.exists()
         data.delete()
         mime.delete()
-        return existed && !data.exists() && !mime.exists()
+        existed && !data.exists() && !mime.exists()
     }
 
     private fun dataFile(id: String) = File(root, "$id$DATA_SUFFIX")

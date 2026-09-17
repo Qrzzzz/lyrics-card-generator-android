@@ -54,7 +54,8 @@ fun RenderSpec.validate(): List<RenderSpecViolation> = buildList {
     }
     val heightRange = when (canvas.layoutMode) {
         LayoutMode.PORTRAIT -> if (canvas.autoHeight) 640..6400 else 720..3200
-        LayoutMode.LANDSCAPE -> 720..6400
+        // Actual layout output; landscape.requestedHeight retains its separate 720 minimum.
+        LayoutMode.LANDSCAPE -> 640..6400
     }
     if (canvas.width !in widthRange) {
         violation("canvas.width", "must be in ${widthRange.first}..${widthRange.last}")

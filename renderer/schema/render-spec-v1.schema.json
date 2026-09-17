@@ -737,7 +737,7 @@
                 "maximum": 3000
               },
               "height": {
-                "minimum": 720,
+                "minimum": 640,
                 "maximum": 6400
               }
             }

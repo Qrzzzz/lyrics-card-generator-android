@@ -543,7 +543,8 @@ class RendererController private constructor(
         val payload = measured.payload.jsonObject
         val width = payload["width"]?.jsonPrimitive?.intOrNull ?: throw RendererException("测量结果缺少宽度")
         val height = payload["height"]?.jsonPrimitive?.intOrNull ?: throw RendererException("测量结果缺少高度")
-        require(width in 720..3000 && height in 640..6400) { "渲染器返回的自动高度无效" }
+        // Validate with the same mode-specific canvas contract used by preview and export.
+        spec.copy(canvas = spec.canvas.copy(width = width, height = height)).requireValid()
         return CanvasMeasurement(width, height)
     }
 

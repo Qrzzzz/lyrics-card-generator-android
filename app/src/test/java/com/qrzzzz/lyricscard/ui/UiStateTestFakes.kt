@@ -157,6 +157,7 @@ class FakePreferencesStore(
 }
 
 class FakeProjectAssets : ProjectAssets {
+    override fun retainCovers(owner: Any, ids: Set<String>) = Unit
     val deleted = mutableListOf<String>()
     val deleteContextWasActive = mutableListOf<Boolean>()
     var importUriBlock: suspend (Uri) -> String = { "00000000-0000-4000-8000-000000000001" }
