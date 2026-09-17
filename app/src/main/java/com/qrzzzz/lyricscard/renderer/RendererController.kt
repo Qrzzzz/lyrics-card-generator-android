@@ -842,7 +842,7 @@ class RendererController private constructor(
                     }
                 }
                 val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(partFile.absolutePath, options)
+                partFile.inputStream().use { BitmapFactory.decodeStream(it, null, options) }
                 require(hasImageEncoding(partFile, mimeType)) { "图片实际编码与请求格式不一致" }
                 require(options.outWidth == expectedWidth && options.outHeight == expectedHeight) {
                     "PNG 实际尺寸与导出请求不一致"
