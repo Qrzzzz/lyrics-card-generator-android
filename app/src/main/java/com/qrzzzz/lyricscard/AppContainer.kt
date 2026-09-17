@@ -227,7 +227,7 @@ internal class AndroidProjectAssets(
     override fun retainCovers(owner: Any, ids: Set<String>) {
         if (!store.retainCovers(owner, ids)) return
         cleanupScope.launch {
-            try { repository.reconcileCoverAssets() }
+            try { repository.collectUnusedCovers() }
             catch (cause: CancellationException) { throw cause }
             catch (_: Exception) { /* Retry reconciliation at next ownership change or startup. */ }
         }

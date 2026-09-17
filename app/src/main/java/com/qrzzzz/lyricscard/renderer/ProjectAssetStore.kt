@@ -18,6 +18,8 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -51,18 +53,30 @@ class ProjectAssetStore(
         true
     }
 
-    suspend fun importCover(uri: Uri): String = withContext(Dispatchers.IO) {
+    suspend fun importCover(uri: Uri): String = importWithReservation {
         appContext.contentResolver.openInputStream(uri)?.use { input ->
             fileMutex.withLock { importCoverLocked(input) }
         }
             ?: error("无法打开所选图片")
     }
 
-    suspend fun importCover(bytes: ByteArray): String = withContext(Dispatchers.IO) {
+    suspend fun importCover(bytes: ByteArray): String = importWithReservation {
         require(bytes.isNotEmpty()) { "无法读取空图片" }
         require(bytes.size <= MAX_COVER_BYTES) { "封面图片不能超过 25 MB" }
         ByteArrayInputStream(bytes).use { input ->
             fileMutex.withLock { importCoverLocked(input) }
+        }
+    }
+
+    private suspend fun importWithReservation(import: suspend () -> String): String {
+        var created: String? = null
+        try {
+            return withContext(Dispatchers.IO) { import().also { created = it } }
+        } catch (cause: CancellationException) {
+            // withContext can discard a completed IO result on cancellation. Release its file
+            // here because the caller never received the ID and cannot relinquish ownership.
+            withContext(NonCancellable) { created?.let { delete(it) } }
+            throw cause
         }
     }
 

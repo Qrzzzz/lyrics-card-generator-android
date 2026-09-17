@@ -379,6 +379,7 @@ class RendererControllerRecoveryTest {
     }
 
     @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     fun `short landscape measurement reaches native file validation for every format and scale`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val context = ApplicationProvider.getApplicationContext<Context>()

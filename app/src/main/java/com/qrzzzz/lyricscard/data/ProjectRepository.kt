@@ -186,6 +186,10 @@ class ProjectRepository(
         )
     }
 
+    suspend fun collectUnusedCovers() = assetMutationMutex.withLock {
+        assetFiles.deleteUnreferenced(projectDao.rebuildCoverAssetReferences())
+    }
+
     /** Relinquish an import reservation, but never bypass committed multi-project references. */
     suspend fun discardPendingCover(id: String) = assetMutationMutex.withLock {
         assetFiles.markReferenced(id)
