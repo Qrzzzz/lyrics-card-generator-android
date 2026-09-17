@@ -388,8 +388,8 @@ class RendererControllerRecoveryTest {
                 Triple("webp", "image/webp", Bitmap.CompressFormat.WEBP_LOSSLESS),
                 Triple("jpg", "image/jpeg", Bitmap.CompressFormat.JPEG),
             )) for ((multiplier, scale) in listOf(1 to 1.0, 14 to 1.4, 2 to 2.0)) {
-                val width = kotlin.math.round(1227 * scale).toInt()
-                val height = kotlin.math.round(697 * scale).toInt()
+                val width = (1227 * scale).toInt()
+                val height = (697 * scale).toInt()
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                 val bytes = ByteArrayOutputStream().use { out ->
                     assertTrue(bitmap.compress(compression, 95, out))
