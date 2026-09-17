@@ -127,6 +127,7 @@ class EditorViewModel(
     private val coverRetentionOwner = Any()
     private var closed = false
     private val saveMutex = Mutex()
+    private val neteaseMutationMutex = Mutex()
     private var autosaveJob: Job? = null
     private var coverImportJob: Job? = null
     private var neteaseSearchJob: Job? = null
@@ -510,8 +511,12 @@ class EditorViewModel(
             )
         }
         neteaseResolveJob = viewModelScope.launch {
-            // A cancelled import must finish rollback before its replacement can apply.
-            previousResolve?.join()
+            // Keep rollback serialized even when an intermediate replacement is cancelled
+            // while waiting for an older operation to finish non-cancellable storage work.
+            neteaseMutationMutex.withLock {
+            currentCoroutineContext().ensureActive()
+            updateNetease { it.copy(isResolving = true, phase = NeteaseLookupPhase.RESOLVING,
+                message = UiText.resource(R.string.editor_netease_resolving)) }
             val mutationOwner = Any()
             var appliedSpec: RenderSpec? = null
             var appliedRevision = -1L
@@ -601,6 +606,7 @@ class EditorViewModel(
                     mutationSnapshot = null
                     error("NetEase import could not be persisted")
                 }
+                currentCoroutineContext().ensureActive()
                 importedCoverId = null
                 mutationSnapshot = null
                 val imported = UiText.joined(
@@ -660,6 +666,7 @@ class EditorViewModel(
                 }
             } finally {
                 projectAssets.retainCovers(mutationOwner, emptySet())
+            }
             }
         }
     }

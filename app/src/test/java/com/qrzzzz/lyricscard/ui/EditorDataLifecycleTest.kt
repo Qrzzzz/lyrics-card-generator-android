@@ -212,6 +212,41 @@ class EditorDataLifecycleTest {
         }
     }
 
+    @Test fun `three replacements cannot bypass an older non cancellable storage operation`() = runTest(main.dispatcher) {
+        Fixture(this).use { f ->
+            val x = f.cover(); val original = f.open(x)
+            val started = CompletableDeferred<Project>()
+            val release = CompletableDeferred<Unit>()
+            val resolves = mutableListOf<String>()
+            val resolve = f.netease.resolveSongBlock
+            f.netease.resolveSongBlock = { id -> resolves += id; resolve(id) }
+            f.beforeSave = { snapshot ->
+                if (snapshot.spec.song.title == "Imported old") {
+                    started.complete(snapshot)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { release.await() }
+                }
+            }
+            f.editor.resolveNeteaseSong("old")
+            val oldCover = started.await().coverAssetId!!
+            f.editor.resolveNeteaseSong("middle")
+            runCurrent()
+            f.editor.resolveNeteaseSong("new")
+            runCurrent()
+            assertEquals(listOf("old"), resolves)
+            release.complete(Unit)
+            f.editor.uiState.first { it.netease.phase == NeteaseLookupPhase.SUCCESS }
+            assertEquals(listOf("old", "new"), resolves)
+            assertTrue(f.editor.flushAutosave())
+            val saved = f.repository.getProject(original.id)!!
+            assertEquals("Imported new", saved.spec.song.title)
+            assertEquals("Artist", saved.spec.song.artist)
+            f.assertImage(saved.coverAssetId!!)
+            f.repository.reconcileCoverAssets()
+            assertFalse(f.file(oldCover).exists())
+            f.assertImage(x)
+        }
+    }
+
     private fun imageBytes(): ByteArray {
         val bitmap = Bitmap.createBitmap(24, 24, Bitmap.Config.ARGB_8888)
         return ByteArrayOutputStream().use { output ->
