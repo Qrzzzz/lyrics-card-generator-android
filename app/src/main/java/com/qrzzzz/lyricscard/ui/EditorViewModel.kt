@@ -514,159 +514,159 @@ class EditorViewModel(
             // Keep rollback serialized even when an intermediate replacement is cancelled
             // while waiting for an older operation to finish non-cancellable storage work.
             neteaseMutationMutex.withLock {
-            currentCoroutineContext().ensureActive()
-            updateNetease { it.copy(isResolving = true, phase = NeteaseLookupPhase.RESOLVING,
-                message = UiText.resource(R.string.editor_netease_resolving)) }
-            val mutationOwner = Any()
-            var appliedSpec: RenderSpec? = null
-            var appliedRevision = -1L
-            var importedCoverId: String? = null
-            var coverWarning = false
-            var mutationSnapshot: EditorMutationSnapshot? = null
-            try {
-                val resolved = block()
-                val importedLineCount = LyricTextLimits.countPhysicalLines(resolved.lyrics)
-                if (resolved.lyrics.isNotEmpty() && importedLineCount > LyricTextLimits.MAX_LINES) {
-                    val message = lineLimitText(
-                        RenderSpecViolation(
-                            path = "content.lyrics",
-                            message = "exceeds line limit",
-                            constraint = RenderSpecViolation.Constraint.MAX_LINES,
-                            limit = LyricTextLimits.MAX_LINES,
-                            actual = importedLineCount,
-                        ),
-                        loadingStoredProject = false,
-                    )
-                    updateNetease {
-                        it.copy(
-                            isResolving = false,
-                            phase = NeteaseLookupPhase.ERROR,
-                            message = message,
+                currentCoroutineContext().ensureActive()
+                updateNetease { it.copy(isResolving = true, phase = NeteaseLookupPhase.RESOLVING,
+                    message = UiText.resource(R.string.editor_netease_resolving)) }
+                val mutationOwner = Any()
+                var appliedSpec: RenderSpec? = null
+                var appliedRevision = -1L
+                var importedCoverId: String? = null
+                var coverWarning = false
+                var mutationSnapshot: EditorMutationSnapshot? = null
+                try {
+                    val resolved = block()
+                    val importedLineCount = LyricTextLimits.countPhysicalLines(resolved.lyrics)
+                    if (resolved.lyrics.isNotEmpty() && importedLineCount > LyricTextLimits.MAX_LINES) {
+                        val message = lineLimitText(
+                            RenderSpecViolation(
+                                path = "content.lyrics",
+                                message = "exceeds line limit",
+                                constraint = RenderSpecViolation.Constraint.MAX_LINES,
+                                limit = LyricTextLimits.MAX_LINES,
+                                actual = importedLineCount,
+                            ),
+                            loadingStoredProject = false,
+                        )
+                        updateNetease {
+                            it.copy(
+                                isResolving = false,
+                                phase = NeteaseLookupPhase.ERROR,
+                                message = message,
+                            )
+                        }
+                        setError(message)
+                        return@launch
+                    }
+                    importedCoverId = resolved.coverUrl.takeIf(String::isNotBlank)?.let { coverUrl ->
+                        try {
+                            val bytes = neteaseClient.downloadCover(coverUrl)
+                            projectAssets.importCover(bytes)
+                        } catch (cause: CancellationException) {
+                            throw cause
+                        } catch (cause: Throwable) {
+                            coverWarning = true
+                            null
+                        }
+                    }
+                    currentCoroutineContext().ensureActive()
+                    if (_uiState.value.currentProject?.id != projectId) {
+                        importedCoverId?.let { cleanupPendingCover(it) }
+                        return@launch
+                    }
+                    val nextCoverId = importedCoverId
+                    val nextTitle = resolved.title.take(240)
+                    val nextArtist = resolved.artist.take(240)
+                    val nextAlbum = resolved.album.take(240)
+                    mutationSnapshot = captureEditorMutationSnapshot()
+                    projectAssets.retainCovers(mutationOwner,
+                        (mutationSnapshot.undoHistory + mutationSnapshot.redoHistory + mutationSnapshot.project.spec)
+                            .mapNotNull { it.song.coverAssetId }.toSet())
+                    updateSpec { spec ->
+                        spec.copy(
+                            song = spec.song.copy(
+                                source = SongSource.NETEASE,
+                                title = nextTitle,
+                                artist = nextArtist,
+                                album = nextAlbum,
+                                coverAssetId = nextCoverId ?: spec.song.coverAssetId,
+                            ),
+                            content = if (resolved.lyrics.isBlank()) {
+                                spec.content
+                            } else {
+                                spec.content.copy(lyrics = resolved.lyrics)
+                            },
+                            visibility = if (nextCoverId == null) {
+                                spec.visibility
+                            } else {
+                                spec.visibility.copy(showCover = true)
+                            },
+                            branding = spec.branding.copy(platform = SongSource.NETEASE),
                         )
                     }
-                    setError(message)
-                    return@launch
-                }
-                importedCoverId = resolved.coverUrl.takeIf(String::isNotBlank)?.let { coverUrl ->
-                    try {
-                        val bytes = neteaseClient.downloadCover(coverUrl)
-                        projectAssets.importCover(bytes)
-                    } catch (cause: CancellationException) {
-                        throw cause
-                    } catch (cause: Throwable) {
-                        coverWarning = true
-                        null
+                    appliedSpec = _uiState.value.currentProject?.spec
+                    appliedRevision = editRevision
+                    val appliedSong = appliedSpec?.song
+                    check(appliedSong?.title == nextTitle && (nextCoverId == null || appliedSong.coverAssetId == nextCoverId)) {
+                        "NetEase import was not applied"
                     }
-                }
-                currentCoroutineContext().ensureActive()
-                if (_uiState.value.currentProject?.id != projectId) {
-                    importedCoverId?.let { cleanupPendingCover(it) }
-                    return@launch
-                }
-                val nextCoverId = importedCoverId
-                val nextTitle = resolved.title.take(240)
-                val nextArtist = resolved.artist.take(240)
-                val nextAlbum = resolved.album.take(240)
-                mutationSnapshot = captureEditorMutationSnapshot()
-                projectAssets.retainCovers(mutationOwner,
-                    (mutationSnapshot.undoHistory + mutationSnapshot.redoHistory + mutationSnapshot.project.spec)
-                        .mapNotNull { it.song.coverAssetId }.toSet())
-                updateSpec { spec ->
-                    spec.copy(
-                        song = spec.song.copy(
-                            source = SongSource.NETEASE,
-                            title = nextTitle,
-                            artist = nextArtist,
-                            album = nextAlbum,
-                            coverAssetId = nextCoverId ?: spec.song.coverAssetId,
-                        ),
-                        content = if (resolved.lyrics.isBlank()) {
-                            spec.content
-                        } else {
-                            spec.content.copy(lyrics = resolved.lyrics)
-                        },
-                        visibility = if (nextCoverId == null) {
-                            spec.visibility
-                        } else {
-                            spec.visibility.copy(showCover = true)
-                        },
-                        branding = spec.branding.copy(platform = SongSource.NETEASE),
-                    )
-                }
-                appliedSpec = _uiState.value.currentProject?.spec
-                appliedRevision = editRevision
-                val appliedSong = appliedSpec?.song
-                check(appliedSong?.title == nextTitle && (nextCoverId == null || appliedSong.coverAssetId == nextCoverId)) {
-                    "NetEase import was not applied"
-                }
-                if (!flushAutosave()) {
-                    val message = _uiState.value.errorMessage
-                        ?: UiText.resource(R.string.editor_error_save_netease)
-                    restoreEditorMutation(checkNotNull(mutationSnapshot), appliedSpec, appliedRevision, message, restartPendingAutosave = false)
+                    if (!flushAutosave()) {
+                        val message = _uiState.value.errorMessage
+                            ?: UiText.resource(R.string.editor_error_save_netease)
+                        restoreEditorMutation(checkNotNull(mutationSnapshot), appliedSpec, appliedRevision, message, restartPendingAutosave = false)
+                        mutationSnapshot = null
+                        error("NetEase import could not be persisted")
+                    }
+                    currentCoroutineContext().ensureActive()
+                    importedCoverId = null
                     mutationSnapshot = null
-                    error("NetEase import could not be persisted")
-                }
-                currentCoroutineContext().ensureActive()
-                importedCoverId = null
-                mutationSnapshot = null
-                val imported = UiText.joined(
-                    R.string.list_separator,
-                    buildList {
-                        add(UiText.resource(R.string.editor_import_part_song))
-                        if (resolved.lyrics.isNotBlank()) {
-                            add(UiText.resource(R.string.editor_import_part_lyrics))
-                        }
-                        if (nextCoverId != null) add(UiText.resource(R.string.editor_import_part_cover))
-                    },
-                )
-                val resultMessage = UiText.resource(
-                    if (coverWarning) {
-                        R.string.editor_netease_import_success_cover_warning
-                    } else {
-                        R.string.editor_netease_import_success
-                    },
-                    imported,
-                )
-                updateNetease {
-                    it.copy(
-                        isResolving = false,
-                        phase = NeteaseLookupPhase.SUCCESS,
-                        message = resultMessage,
+                    val imported = UiText.joined(
+                        R.string.list_separator,
+                        buildList {
+                            add(UiText.resource(R.string.editor_import_part_song))
+                            if (resolved.lyrics.isNotBlank()) {
+                                add(UiText.resource(R.string.editor_import_part_lyrics))
+                            }
+                            if (nextCoverId != null) add(UiText.resource(R.string.editor_import_part_cover))
+                        },
                     )
-                }
-            } catch (cause: CancellationException) {
-                mutationSnapshot?.let {
-                    restoreEditorMutation(it, appliedSpec, appliedRevision, failureMessage = null, restartPendingAutosave = true)
-                }
-                importedCoverId?.let { cleanupPendingCover(it, cause) }
-                throw cause
-            } catch (cause: Throwable) {
-                mutationSnapshot?.let {
-                    restoreEditorMutation(
-                        it, appliedSpec, appliedRevision,
-                        failureMessage = neteaseFailureText(
-                            cause,
-                            R.string.editor_error_netease_resolve,
-                        ),
-                        restartPendingAutosave = true,
+                    val resultMessage = UiText.resource(
+                        if (coverWarning) {
+                            R.string.editor_netease_import_success_cover_warning
+                        } else {
+                            R.string.editor_netease_import_success
+                        },
+                        imported,
                     )
-                }
-                importedCoverId?.let { cleanupPendingCover(it, cause) }
-                if (_uiState.value.currentProject?.id == projectId) {
                     updateNetease {
                         it.copy(
                             isResolving = false,
-                            phase = NeteaseLookupPhase.ERROR,
-                            message = neteaseFailureText(
+                            phase = NeteaseLookupPhase.SUCCESS,
+                            message = resultMessage,
+                        )
+                    }
+                } catch (cause: CancellationException) {
+                    mutationSnapshot?.let {
+                        restoreEditorMutation(it, appliedSpec, appliedRevision, failureMessage = null, restartPendingAutosave = true)
+                    }
+                    importedCoverId?.let { cleanupPendingCover(it, cause) }
+                    throw cause
+                } catch (cause: Throwable) {
+                    mutationSnapshot?.let {
+                        restoreEditorMutation(
+                            it, appliedSpec, appliedRevision,
+                            failureMessage = neteaseFailureText(
                                 cause,
                                 R.string.editor_error_netease_resolve,
                             ),
+                            restartPendingAutosave = true,
                         )
                     }
+                    importedCoverId?.let { cleanupPendingCover(it, cause) }
+                    if (_uiState.value.currentProject?.id == projectId) {
+                        updateNetease {
+                            it.copy(
+                                isResolving = false,
+                                phase = NeteaseLookupPhase.ERROR,
+                                message = neteaseFailureText(
+                                    cause,
+                                    R.string.editor_error_netease_resolve,
+                                ),
+                            )
+                        }
+                    }
+                } finally {
+                    projectAssets.retainCovers(mutationOwner, emptySet())
                 }
-            } finally {
-                projectAssets.retainCovers(mutationOwner, emptySet())
-            }
             }
         }
     }
