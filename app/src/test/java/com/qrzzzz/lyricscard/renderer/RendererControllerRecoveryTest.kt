@@ -378,6 +378,47 @@ class RendererControllerRecoveryTest {
         }
     }
 
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun `short landscape measurement reaches native file validation for every format and scale`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        try {
+            for ((format, mime, compression) in listOf(
+                Triple("png", "image/png", Bitmap.CompressFormat.PNG),
+                Triple("webp", "image/webp", Bitmap.CompressFormat.WEBP_LOSSLESS),
+                Triple("jpg", "image/jpeg", Bitmap.CompressFormat.JPEG),
+            )) for ((multiplier, scale) in listOf(1 to 1.0, 14 to 1.4, 2 to 2.0)) {
+                val width = (1227 * scale).toInt()
+                val height = (697 * scale).toInt()
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val bytes = ByteArrayOutputStream().use { out ->
+                    assertTrue(bitmap.compress(compression, 95, out))
+                    bitmap.recycle()
+                    out.toByteArray()
+                }
+                val bridge = FakeRendererBridge(bytes, 1227, 697, width, height, mime).apply {
+                    mode = FakeRendererBridge.Mode.SUCCESS
+                }
+                val controller = RendererController(context, ProjectAssetStore(context), TEST_TIMEOUT_MS, bridge)
+                try {
+                    controller.acquireWebView(context, Any())
+                    val spec = TEST_SPEC.copy(canvas = TEST_SPEC.canvas.copy(
+                        layoutMode = com.qrzzzz.lyricscard.model.LayoutMode.LANDSCAPE,
+                        width = 1920, height = 1080, autoHeight = true, exportFormat = format,
+                    ))
+                    val image = controller.exportPng(spec, multiplier)
+                    assertEquals(width, image.width)
+                    assertEquals(height, image.height)
+                    assertEquals(mime, image.mimeType)
+                    assertTrue(image.file.readBytes().contentEquals(bytes))
+                    assertTrue(partFiles(File(context.cacheDir, "exports")).isEmpty())
+                    image.file.delete()
+                } finally { controller.close() }
+            }
+        } finally { Dispatchers.resetMain() }
+    }
+
     private fun successPng(): ByteArray {
         val bitmap = Bitmap.createBitmap(
             TEST_SPEC.canvas.width,
@@ -410,6 +451,11 @@ class RendererControllerRecoveryTest {
 
 private class FakeRendererBridge(
     var pngBytes: ByteArray,
+    val measuredWidth: Int = TEST_SPEC.canvas.width,
+    val measuredHeight: Int = TEST_SPEC.canvas.height,
+    val outputWidth: Int = measuredWidth,
+    val outputHeight: Int = measuredHeight,
+    val mimeType: String = "image/png",
 ) : RendererBridge {
     enum class Mode { HANG_AFTER_CHUNK, HANG_BEFORE_CHUNK, HANG_SET_SPEC, SUCCESS }
 
@@ -461,8 +507,8 @@ private class FakeRendererBridge(
                     requestId = envelope.requestId,
                     type = "measured",
                     payload = buildJsonObject {
-                        put("width", TEST_SPEC.canvas.width)
-                        put("height", TEST_SPEC.canvas.height)
+                        put("width", measuredWidth)
+                        put("height", measuredHeight)
                     },
                 ),
             )
@@ -518,9 +564,9 @@ private class FakeRendererBridge(
                 requestId = attempt.requestId,
                 type = "exportCompleted",
                 payload = buildJsonObject {
-                    put("mimeType", "image/png")
-                    put("width", TEST_SPEC.canvas.width)
-                    put("height", TEST_SPEC.canvas.height)
+                    put("mimeType", mimeType)
+                    put("width", outputWidth)
+                    put("height", outputHeight)
                     put("totalBytes", 8)
                     put("totalChunks", 2)
                 },
@@ -558,9 +604,9 @@ private class FakeRendererBridge(
                 requestId = requestId,
                 type = "exportCompleted",
                 payload = buildJsonObject {
-                    put("mimeType", "image/png")
-                    put("width", TEST_SPEC.canvas.width)
-                    put("height", TEST_SPEC.canvas.height)
+                    put("mimeType", mimeType)
+                    put("width", outputWidth)
+                    put("height", outputHeight)
                     put("totalBytes", pngBytes.size)
                     put("totalChunks", chunks.size)
                 },

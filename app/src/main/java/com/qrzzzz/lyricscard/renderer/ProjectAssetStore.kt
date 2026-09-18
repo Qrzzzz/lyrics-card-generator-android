@@ -18,6 +18,8 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -40,19 +42,41 @@ class ProjectAssetStore(
     private val storageSessionStartedAt = clock()
     private val fileMutex = Mutex()
     private val pendingAssetIds = mutableSetOf<String>()
+    private val ownershipLock = Any()
+    private val retainedCovers = mutableMapOf<Any, Set<String>>()
 
-    suspend fun importCover(uri: Uri): String = withContext(Dispatchers.IO) {
+    /** Synchronous handoff: a new editor/history reference is protected before saving can run. */
+    fun retainCovers(owner: Any, ids: Set<String>): Boolean = synchronized(ownershipLock) {
+        if (retainedCovers[owner].orEmpty() == ids) return@synchronized false
+        if (ids.isEmpty()) retainedCovers.remove(owner) else retainedCovers[owner] = ids.toSet()
+        pendingAssetIds.removeAll(ids)
+        true
+    }
+
+    suspend fun importCover(uri: Uri): String = importWithReservation {
         appContext.contentResolver.openInputStream(uri)?.use { input ->
             fileMutex.withLock { importCoverLocked(input) }
         }
             ?: error("无法打开所选图片")
     }
 
-    suspend fun importCover(bytes: ByteArray): String = withContext(Dispatchers.IO) {
+    suspend fun importCover(bytes: ByteArray): String = importWithReservation {
         require(bytes.isNotEmpty()) { "无法读取空图片" }
         require(bytes.size <= MAX_COVER_BYTES) { "封面图片不能超过 25 MB" }
         ByteArrayInputStream(bytes).use { input ->
             fileMutex.withLock { importCoverLocked(input) }
+        }
+    }
+
+    private suspend fun importWithReservation(import: suspend () -> String): String {
+        var created: String? = null
+        try {
+            return withContext(Dispatchers.IO) { import().also { created = it } }
+        } catch (cause: CancellationException) {
+            // withContext can discard a completed IO result on cancellation. Release its file
+            // here because the caller never received the ID and cannot relinquish ownership.
+            withContext(NonCancellable) { created?.let { delete(it) } }
+            throw cause
         }
     }
 
@@ -128,7 +152,7 @@ class ProjectAssetStore(
             } finally {
                 working?.recycle()
             }
-            id.also(pendingAssetIds::add)
+            id.also { synchronized(ownershipLock) { pendingAssetIds.add(it) } }
         } catch (cause: Throwable) {
             dataFile.delete()
             mimeFile.delete()
@@ -158,14 +182,14 @@ class ProjectAssetStore(
 
     override suspend fun markReferenced(id: String) = withContext(Dispatchers.IO) {
         fileMutex.withLock {
-            pendingAssetIds.remove(id)
+            synchronized(ownershipLock) { pendingAssetIds.remove(id) }
             Unit
         }
     }
 
     override suspend fun delete(id: String) = withContext(Dispatchers.IO) {
         fileMutex.withLock {
-            pendingAssetIds.remove(id)
+            synchronized(ownershipLock) { pendingAssetIds.remove(id) }
             deleteFiles(id)
             Unit
         }
@@ -239,7 +263,7 @@ class ProjectAssetStore(
         if (!root.isDirectory && !root.mkdirs()) {
             return CoverReconcileOutcome(missingIds = referencedIds)
         }
-        pendingAssetIds.removeAll(referencedIds)
+        synchronized(ownershipLock) { pendingAssetIds.removeAll(referencedIds) }
         val storedIds = root.listFiles()
             .orEmpty()
             .mapNotNull { file ->
@@ -253,7 +277,7 @@ class ProjectAssetStore(
             .toSet()
         var deletedOrphanCount = 0
         storedIds
-            .filterNot { it in referencedIds || it in pendingAssetIds }
+            .filterNot { it in referencedIds || synchronized(ownershipLock) { it in pendingAssetIds } }
             .forEach { id ->
                 if (deleteFiles(id)) deletedOrphanCount += 1
             }
@@ -441,14 +465,14 @@ class ProjectAssetStore(
         )
     }
 
-    private fun deleteFiles(id: String): Boolean {
-        if (!ASSET_ID.matches(id)) return false
+    private fun deleteFiles(id: String): Boolean = synchronized(ownershipLock) {
+        if (!ASSET_ID.matches(id) || retainedCovers.values.any { id in it }) return@synchronized false
         val data = dataFile(id)
         val mime = mimeFile(id)
         val existed = data.exists() || mime.exists()
         data.delete()
         mime.delete()
-        return existed && !data.exists() && !mime.exists()
+        existed && !data.exists() && !mime.exists()
     }
 
     private fun dataFile(id: String) = File(root, "$id$DATA_SUFFIX")

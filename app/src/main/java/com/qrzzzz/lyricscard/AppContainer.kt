@@ -66,6 +66,8 @@ interface UserPreferencesStore {
 }
 
 interface ProjectAssets {
+    fun retainCovers(owner: Any, ids: Set<String>)
+
     suspend fun importCover(uri: Uri): String
     suspend fun importCover(bytes: ByteArray): String
     suspend fun delete(id: String)
@@ -153,7 +155,9 @@ class DefaultAppContainer(context: Context) : AppContainer {
     override val preferences: UserPreferencesStore by lazy {
         UserPreferencesRepositoryStore(UserPreferencesRepository(appContext))
     }
-    override val projectAssets: ProjectAssets = AndroidProjectAssets(nativeAssetStore)
+    override val projectAssets: ProjectAssets by lazy {
+        AndroidProjectAssets(nativeAssetStore, projectRepositoryDelegate.value, applicationScope)
+    }
     override val netease: NeteaseClient by lazy { AndroidNeteaseClient(NeteaseMusicService()) }
     override val rendererController: RendererController by rendererControllerDelegate
     override val renderer: RendererOperations by lazy { AndroidRendererOperations(rendererController) }
@@ -212,12 +216,22 @@ private class UserPreferencesRepositoryStore(
     override suspend fun setShowSafeArea(enabled: Boolean) = repository.setShowSafeArea(enabled)
 }
 
-private class AndroidProjectAssets(
+internal class AndroidProjectAssets(
     private val store: ProjectAssetStore,
+    private val repository: ProjectRepository,
+    private val cleanupScope: CoroutineScope,
 ) : ProjectAssets {
     override suspend fun importCover(uri: Uri): String = store.importCover(uri)
     override suspend fun importCover(bytes: ByteArray): String = store.importCover(bytes)
-    override suspend fun delete(id: String) = store.delete(id)
+    override suspend fun delete(id: String) = repository.discardPendingCover(id)
+    override fun retainCovers(owner: Any, ids: Set<String>) {
+        if (!store.retainCovers(owner, ids)) return
+        cleanupScope.launch {
+            try { repository.collectUnusedCovers() }
+            catch (cause: CancellationException) { throw cause }
+            catch (_: Exception) { /* Retry reconciliation at next ownership change or startup. */ }
+        }
+    }
 }
 
 private class AndroidNeteaseClient(

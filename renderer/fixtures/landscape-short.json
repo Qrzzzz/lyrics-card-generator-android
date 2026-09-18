@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 2,
+  "rendererVersion": "android-alpha-renderer-1",
+  "locale": "en",
+  "song": {
+    "source": "spotify",
+    "title": "微光",
+    "artist": "Lyrics Card",
+    "album": "",
+    "explicit": true,
+    "coverAssetId": null
+  },
+  "content": {
+    "mode": "lyrics",
+    "lyrics": "微光",
+    "translationEnabled": false,
+    "translation": "",
+    "instrumentalText": "Instrumental",
+    "lyricDocument": {
+      "schemaVersion": 2,
+      "id": "document-1",
+      "revision": 0,
+      "blocks": [
+        {
+          "id": "block-2",
+          "formatting": {
+            "sourcePresent": true,
+            "translationPresent": false,
+            "sourceSeparatorAfter": "",
+            "translationSeparatorAfter": ""
+          },
+          "units": [
+            {
+              "id": "short-unit",
+              "source": [
+                "微光"
+              ]
+            }
+          ]
+        }
+      ],
+      "formatting": {
+        "sourcePrefix": "",
+        "translationPrefix": ""
+      }
+    }
+  },
+  "canvas": {
+    "layoutMode": "landscape",
+    "ratio": "custom",
+    "width": 1920,
+    "height": 1080,
+    "autoHeight": true,
+    "pixelRatio": 1,
+    "landscape": {
+      "autoLyricsWidth": true,
+      "lyricsWidth": 880,
+      "autoHeight": true,
+      "requestedHeight": 720
+    }
+  },
+  "typography": {
+    "fontScheme": "serif-heavy",
+    "fontFamily": "Source Han Serif SC",
+    "lyricSize": 60,
+    "lineHeight": 1.8,
+    "alignment": "left",
+    "translationScale": 0.72,
+    "twoLineTitle": true,
+    "textColorMode": "preset",
+    "textColorPreset": "cream",
+    "customTextColor": null
+  },
+  "visual": {
+    "backgroundMode": "gradient",
+    "palette": {
+      "dominant": "#3B203E",
+      "secondary": "#17365A",
+      "accent": "#C87956"
+    },
+    "gridEnabled": false,
+    "gridDensity": "sparse",
+    "gridOpacity": 0.08
+  },
+  "visibility": {
+    "showCover": true,
+    "showSongInfo": true,
+    "showAlbum": false,
+    "showPlatformBadge": false,
+    "showSharedBy": false,
+    "showGeneratedWatermark": false
+  },
+  "branding": {
+    "sharedByName": "",
+    "platform": "spotify"
+  },
+  "media": {
+    "coverCropScale": 1.18
+  }
+}

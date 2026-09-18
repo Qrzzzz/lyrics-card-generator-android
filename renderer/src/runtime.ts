@@ -115,6 +115,7 @@ async function measureMessage(message: HostEnvelope) {
   const nextSpec = extractSpec(message.payload, true);
   const activeController = requireController();
   const measurement = await activeController.measure(nextSpec);
+  parseRenderSpec({ ...nextSpec, canvas: { ...nextSpec.canvas, ...measurement } });
   activeSpec = nextSpec;
   send(message.requestId, "measured", measurement);
 }

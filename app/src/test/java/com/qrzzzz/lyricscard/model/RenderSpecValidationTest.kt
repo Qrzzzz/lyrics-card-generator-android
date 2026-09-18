@@ -6,6 +6,24 @@ import org.junit.Test
 
 class RenderSpecValidationTest {
     @Test
+    fun `actual landscape size and requested height have distinct bounds`() {
+        val short = RenderSpec(canvas = CanvasSpec(layoutMode = LayoutMode.LANDSCAPE,
+            width = 1227, height = 697, landscape = LandscapeSettings(requestedHeight = 720)))
+        assertTrue(short.validate().isEmpty())
+        assertEquals(short, RenderSpecJson.decode(RenderSpecJson.encode(short)))
+        for (height in listOf(0, 639, 6401)) {
+            assertTrue(short.copy(canvas = short.canvas.copy(height = height)).validate().any { it.path == "canvas.height" })
+        }
+        for (height in listOf(719, 3601)) {
+            assertTrue(short.copy(canvas = short.canvas.copy(landscape = LandscapeSettings(requestedHeight = height)))
+                .validate().any { it.path == "canvas.landscape" })
+        }
+        for (width in listOf(1079, 3001)) {
+            assertTrue(short.copy(canvas = short.canvas.copy(width = width)).validate().any { it.path == "canvas.width" })
+        }
+    }
+
+    @Test
     fun `default and sample specs are valid`() {
         assertTrue(RenderSpec().validate().isEmpty())
         assertTrue(ProjectTemplates.sample(id = "sample", now = 0L).spec.validate().isEmpty())

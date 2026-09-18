@@ -543,7 +543,8 @@ class RendererController private constructor(
         val payload = measured.payload.jsonObject
         val width = payload["width"]?.jsonPrimitive?.intOrNull ?: throw RendererException("测量结果缺少宽度")
         val height = payload["height"]?.jsonPrimitive?.intOrNull ?: throw RendererException("测量结果缺少高度")
-        require(width in 720..3000 && height in 640..6400) { "渲染器返回的自动高度无效" }
+        // Validate with the same mode-specific canvas contract used by preview and export.
+        spec.copy(canvas = spec.canvas.copy(width = width, height = height)).requireValid()
         return CanvasMeasurement(width, height)
     }
 
@@ -841,7 +842,7 @@ class RendererController private constructor(
                     }
                 }
                 val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(partFile.absolutePath, options)
+                partFile.inputStream().use { BitmapFactory.decodeStream(it, null, options) }
                 require(hasImageEncoding(partFile, mimeType)) { "图片实际编码与请求格式不一致" }
                 require(options.outWidth == expectedWidth && options.outHeight == expectedHeight) {
                     "PNG 实际尺寸与导出请求不一致"
