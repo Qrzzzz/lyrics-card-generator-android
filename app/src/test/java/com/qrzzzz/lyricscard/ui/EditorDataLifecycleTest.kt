@@ -160,16 +160,16 @@ class EditorDataLifecycleTest {
             val failedCover = imported.coverAssetId!!
             f.assertImage(failedCover)
             f.editor.updateSpec { it.copy(content = it.content.copy(lyrics = "Accepted later lyrics"),
-                typography = it.typography.copy(lyricSize = 60)) }
+                typography = it.typography.copy(lyricSize = 66)) }
             f.editor.updateProjectName("Accepted later name")
             fail.complete(Unit)
             f.editor.uiState.first { !it.netease.isResolving }
             assertEquals("Accepted later lyrics", f.editor.uiState.value.currentProject!!.spec.content.lyrics)
-            assertEquals(60, f.editor.uiState.value.currentProject!!.spec.typography.lyricSize)
+            assertEquals(66, f.editor.uiState.value.currentProject!!.spec.typography.lyricSize)
             assertTrue(f.editor.flushAutosave())
             val saved = f.repository.getProject(original.id)!!
             assertEquals("Accepted later lyrics", saved.spec.content.lyrics)
-            assertEquals(60, saved.spec.typography.lyricSize)
+            assertEquals(66, saved.spec.typography.lyricSize)
             assertEquals("Accepted later name", saved.name)
             assertEquals(original.spec.song, saved.spec.song)
             f.repository.reconcileCoverAssets()
