@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { isDarkColor, mixColors, resolveTextColor, withAlpha } from "./color";
 import { assertLyricLineLimit, type LyricTextPath } from "./renderLimits";
 import { resolveCoverAssetUrl } from "./spec";
@@ -204,9 +204,11 @@ type CardContentProps = {
 
 function CoverArtwork({ spec }: { spec: RenderSpec }) {
   const src = resolveCoverAssetUrl(spec.song.coverAssetId);
-  const [failed, setFailed] = useState(false);
+  return <CoverResource key={src ?? 'placeholder'} spec={spec} src={src} />;
+}
 
-  useEffect(() => setFailed(false), [src]);
+function CoverResource({ spec, src }: { spec: RenderSpec; src: string | null }) {
+  const [failed, setFailed] = useState(false);
 
   return (
     <div className="cover-art" data-card-cover="true">

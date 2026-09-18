@@ -56,7 +56,9 @@ export function measureLayout(node: HTMLElement, spec: RenderSpec): RenderSpec {
         copy.style.width='480px'; copy.style.setProperty('--left-scale','1');
         host.append(copy); const height=copy.scrollHeight; copy.remove(); return height;
       };
-      const plan=createLandscapeLayoutPlan({measurementKey:JSON.stringify(spec),settings,lyricsCandidates,
+      // Loaded wide covers can legitimately need less than the Android canvas minimum.
+      // Apply the floor inside the plan so every rectangle shares the final geometry.
+      const plan=createLandscapeLayoutPlan({measurementKey:JSON.stringify(spec),settings,lyricsCandidates,minimumCanvasHeight:640,
         left:{coverWidth:cover.width,coverHeight:cover.height,metadataWidth:480,metadataHeight:measureChrome(info), accessoriesWidth:480,accessoriesHeight:measureChrome(footer)}});
       if (!plan) throw new Error('Could not resolve landscape layout');
       if (plan.canvas.width>3000 || plan.canvas.height>6400) throw new Error('Content exceeds the supported canvas size');

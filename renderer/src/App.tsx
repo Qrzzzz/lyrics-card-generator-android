@@ -15,6 +15,7 @@ import { installRendererController } from "./runtime";
 import type { RenderSpec } from "./types";
 import { prepareCustomFont } from "./fonts";
 import { measureLayout, portraitLayout } from "./layout";
+import { imageLayoutKey } from "./images";
 
 export function App() {
   const [spec, setSpec] = useState(DEFAULT_RENDER_SPEC);
@@ -32,14 +33,16 @@ export function App() {
     const domLifecycle = createRendererDomLifecycle(svgSourceCache, canvasSurface);
     let settledSpec = DEFAULT_RENDER_SPEC;
     let settledKey = "";
+    let settledImages = "";
 
     async function applySpec(nextSpec: RenderSpec, activation: "committed" | "transient") {
       const key = createRendererDomKey(nextSpec);
-      if (key !== settledKey) {
+      if (key !== settledKey || imageLayoutKey(requireCardNode(cardRef.current)) !== settledImages) {
+        svgSourceCache.clear();
         await prepareCustomFont(nextSpec);
         fontEmbedCssCache.clear();
         flushSync(() => setSpec(nextSpec));
-        await waitForStableRender();
+        await waitForStableRender(requireCardNode(cardRef.current));
         settledSpec = measureLayout(requireCardNode(cardRef.current), nextSpec);
         flushSync(() => setSpec(settledSpec));
         await waitForStableRender();
@@ -53,6 +56,7 @@ export function App() {
           }
         }
         settledKey = key;
+        settledImages = imageLayoutKey(requireCardNode(cardRef.current));
       }
       return domLifecycle.apply(
         createRendererDomKey(settledSpec),

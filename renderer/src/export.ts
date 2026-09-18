@@ -1,5 +1,6 @@
 import { getFontEmbedCSS, toSvg } from "html-to-image";
 import type { RenderSpec } from "./types";
+import { waitForCardImages } from "./images";
 
 const FONT_TIMEOUT_MS = 8_000;
 const MAX_EXPORT_WORKING_SET = 180 * 1024 * 1024;
@@ -138,7 +139,13 @@ export class ExportRenderError extends Error {
   }
 }
 
-export async function waitForStableRender() {
+export async function waitForStableRender(node?: HTMLElement) {
+  await Promise.all([node ? waitForCardImages(node) : Promise.resolve(), waitForFonts()]);
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function waitForFonts() {
   if ("fonts" in document) {
     let timeoutId: number | undefined;
     try {
@@ -158,8 +165,6 @@ export async function waitForStableRender() {
     }
   }
 
-  await nextAnimationFrame();
-  await nextAnimationFrame();
 }
 
 export async function renderNodeAsPng(
@@ -276,7 +281,8 @@ function loadSvgImage(source: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     image.onload = () => {
-      image.decode().then(
+      // Older WebViews expose load/error but may not implement decode().
+      (typeof image.decode === "function" ? image.decode() : Promise.resolve()).then(
         () => requestAnimationFrame(() => resolve(image)),
         (error) => {
           releaseDecodedImage(image);
