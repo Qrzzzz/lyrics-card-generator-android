@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "policy": "focused-manual-v1",
+  "version": "2.1",
+  "sourceCommit": "86bfcfe9f8cb8c55b7f260bafd68a7846a75af75",
+  "candidateRunId": 35291622765,
+  "candidateRunAttempt": 1,
+  "candidateArtifactName": "production-candidate-2.1-86bfcfe9f8cb",
+  "dependencyRunId": 35290537123,
+  "device": null,
+  "candidate": {
+    "versionName": "2.1",
+    "versionCode": 20100,
+    "apkSha256": "00766130579a0113dd68d2d6ddece055c7a17aa7d6c2cfd2289f4eb4ddc33b68"
+  },
+  "confirmedBy": "Qrzzzz",
+  "confirmedAt": "2026-09-18T08:44:21.7015346+08:00",
+  "confirmation": "维护者在本任务明确要求“开始做，做完直接发布，无需重新下载”，授权完成 2.1 的 #74、#73、#76 修复、合并、生产候选、正常环境审批、标签和公开发布，不夹带新功能。已绑定同源码主干成功 CI、签名候选和 attestation APK 哈希，未重新下载产物。真实临时图片与 Room 状态、受控慢保存/继续编辑/失败、连续取消导入，以及短横版原生 controller 与浏览器编码回归通过。六项实体人工操作未执行，均 NOT RUN，不把 JVM/浏览器冒充真机证据。",
+  "manualAcceptanceWaiver": {
+    "version": "2.1",
+    "scope": "six-manual-checks",
+    "authorizedBy": "Qrzzzz",
+    "authorization": "删掉以前的强制的真机实测环节，做完后直接release"
+  },
+  "checks": {
+    "open": "NOT RUN",
+    "edit": "NOT RUN",
+    "preview": "NOT RUN",
+    "exportPng": "NOT RUN",
+    "saveAndOpen": "NOT RUN",
+    "shareSheet": "NOT RUN"
+  },
+  "notCovered": [
+    "本生产候选的实体设备安装与六项人工核心操作",
+    "跨 API / Android System WebView 矩阵及本候选 instrumentation",
+    "字体文件选择器、系统保存分享的真实设备操作",
+    "20 次导出、低内存、30 分钟耐久、TalkBack 和大字体专项",
+    "向第三方应用或联系人实际发送图片"
+  ]
+}
