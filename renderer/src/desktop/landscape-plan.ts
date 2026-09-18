@@ -55,6 +55,7 @@ export type LandscapePlanInput = {
   minimumFlexibleGap?: number;
   minimumLeftScale?: number;
   maximumLeftScale?: number;
+  minimumCanvasHeight?: number;
 };
 
 /**
@@ -156,7 +157,8 @@ function planCandidate(
   const requestedInternalHeight = settings.autoHeight
     ? 0
     : Math.max(0, settings.requestedHeight - outerMargin * 2);
-  let internalHeight = Math.max(lyrics.naturalHeight, requestedInternalHeight, minimumLeftHeight);
+  let internalHeight = Math.max(lyrics.naturalHeight, requestedInternalHeight, minimumLeftHeight,
+    (input.minimumCanvasHeight ?? 0) - outerMargin * 2);
   const leftScale = clamp(internalHeight / Math.max(1, baseLeftHeight), minimumScale, maximumScale);
   const scaledBaseLeftHeight = baseLeftHeight * leftScale;
   // Rounding and extreme measured metadata can still require a few extra pixels.
