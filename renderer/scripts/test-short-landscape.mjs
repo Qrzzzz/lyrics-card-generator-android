@@ -13,10 +13,15 @@ try {
   await page.goto(server.resolvedUrls.local[0]);
   await page.waitForSelector('[data-export-card="true"]');
   await dispatchRenderer(page, 'initialize', {}, 'ready', 'init');
-  const cases = [spec, ...[640, 720, 3200, 4000].map(height => ({...spec, canvas:{...spec.canvas,layoutMode:'portrait',width:1040,height,autoWidth:true,autoHeight:true}}))];
+  const portrait = structuredClone(spec);
+  const lines = ['晚风轻轻吹过街角', '月光慢慢落在窗前', '我们沿着小路回家', '远方星光依然明亮'];
+  portrait.content.lyrics = lines.join('\n');
+  portrait.content.lyricDocument.blocks[0].units = lines.map((line, i) => ({id:`portrait-${i}`,source:[line]}));
+  const cases = [spec, ...[640, 720, 3200, 4000].map(height => ({...portrait, canvas:{...portrait.canvas,layoutMode:'portrait',width:1440,height,autoWidth:true,autoHeight:true}}))];
   for (const [index, input] of cases.entries()) {
   const { payload: measured } = await dispatchRenderer(page, 'measure', input, 'measured', `measure-${index}`);
   if (index === 0) assert.ok(measured.height >= 640 && measured.height < 720, JSON.stringify(measured));
+  if (index > 0) assert.notEqual(measured.width, input.canvas.width, 'portrait must exercise changed auto width');
   console.log('Measured:', input.canvas.layoutMode, input.canvas.height, measured);
   for (const format of ['png', 'webp', 'jpg']) for (const scale of [1, 1.4, 2]) {
     const mime = format === 'jpg' ? 'image/jpeg' : `image/${format}`;

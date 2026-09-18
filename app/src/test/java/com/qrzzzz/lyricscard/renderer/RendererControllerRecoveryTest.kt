@@ -430,7 +430,11 @@ class RendererControllerRecoveryTest {
                         layoutMode = com.qrzzzz.lyricscard.model.LayoutMode.LANDSCAPE,
                         width = 1920, height = 1080, autoHeight = true, exportFormat = format,
                     ))
+                    controller.updateSpec(spec)
+                    val confirmed = controller.confirmMeasurement(spec)
+                    assertEquals(CanvasMeasurement(width, height), confirmed.outputSize(multiplier))
                     val image = controller.exportPng(spec, multiplier)
+                    assertEquals(1, bridge.measurementCalls)
                     assertEquals(width, image.width)
                     assertEquals(height, image.height)
                     assertEquals(mime, image.mimeType)
@@ -492,6 +496,7 @@ private class FakeRendererBridge(
         val receive: (String) -> Unit,
     )
 
+    var measurementCalls = 0
     var holdMeasurement = false
     private var heldMeasurement: (() -> Unit)? = null
     fun finishMeasurement() { checkNotNull(heldMeasurement).invoke(); heldMeasurement = null }
@@ -528,6 +533,7 @@ private class FakeRendererBridge(
                 }
             }
             "measure" -> {
+                measurementCalls++
                 val respond = {
                 emit(
                 session,

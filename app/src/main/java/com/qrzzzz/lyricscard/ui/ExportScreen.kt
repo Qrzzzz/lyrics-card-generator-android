@@ -181,9 +181,7 @@ fun ExportScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 RendererPreview(
-                    spec = project.spec.copy(
-                        canvas = project.spec.canvas.copy(pixelRatio = if (state.multiplier == 1) 1 else 2),
-                    ),
+                    spec = project.spec,
                     controller = renderer,
                     onMeasurement = onMeasurement,
                     modifier = Modifier
@@ -221,9 +219,7 @@ fun ExportScreen(
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 RendererPreview(
-                    spec = project.spec.copy(
-                        canvas = project.spec.canvas.copy(pixelRatio = if (state.multiplier == 1) 1 else 2),
-                    ),
+                    spec = project.spec,
                     controller = renderer,
                     onMeasurement = onMeasurement,
                     modifier = Modifier
