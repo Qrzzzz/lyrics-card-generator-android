@@ -36,7 +36,7 @@ internal fun ExportRouteContent(
             onBack = { navController.popBackStack() },
             onMultiplier = exportViewModel::setMultiplier,
             onFileName = exportViewModel::setFileName,
-            onMeasuredHeight = exportViewModel::setMeasuredHeight,
+            onMeasurement = exportViewModel::setMeasurement,
             onSave = exportViewModel::save,
             onShare = exportViewModel::share,
             onCancel = exportViewModel::cancelExport,

@@ -50,6 +50,29 @@ private val TEST_SPEC = RenderSpec(
 @Config(sdk = [35])
 class RendererControllerRecoveryTest {
     @Test
+    fun `late measurements cannot replace a newer layout or font request`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val bridge = FakeRendererBridge(successPng()).apply { mode = FakeRendererBridge.Mode.SUCCESS; holdMeasurement = true }
+        val controller = RendererController(context, ProjectAssetStore(context), TEST_TIMEOUT_MS, bridge)
+        try {
+            controller.acquireWebView(context, Any())
+            controller.updateSpec(TEST_SPEC)
+            val old = async { runCatching { controller.confirmMeasurement(TEST_SPEC) } }
+            runCurrent()
+            val next = TEST_SPEC.copy(typography = TEST_SPEC.typography.copy(lyricSize = 48))
+            controller.updateSpec(next)
+            bridge.finishMeasurement()
+            assertTrue(old.await().exceptionOrNull() is kotlinx.coroutines.CancellationException)
+            bridge.holdMeasurement = false
+            val current = controller.confirmMeasurement(next)
+            assertEquals(next, current.spec)
+            assertEquals(CanvasMeasurement(1040, 1080), current.size)
+            assertTrue(current.revision > 1)
+        } finally { controller.close(); Dispatchers.resetMain() }
+    }
+
+    @Test
     fun `stale finalized export cleanup leaves the caller thread`() = runTest {
         val callerThread = Thread.currentThread()
         var cleanupThread: Thread? = null
@@ -407,7 +430,11 @@ class RendererControllerRecoveryTest {
                         layoutMode = com.qrzzzz.lyricscard.model.LayoutMode.LANDSCAPE,
                         width = 1920, height = 1080, autoHeight = true, exportFormat = format,
                     ))
+                    controller.updateSpec(spec)
+                    val confirmed = controller.confirmMeasurement(spec)
+                    assertEquals(CanvasMeasurement(width, height), confirmed.outputSize(multiplier))
                     val image = controller.exportPng(spec, multiplier)
+                    assertEquals(1, bridge.measurementCalls)
                     assertEquals(width, image.width)
                     assertEquals(height, image.height)
                     assertEquals(mime, image.mimeType)
@@ -469,6 +496,10 @@ private class FakeRendererBridge(
         val receive: (String) -> Unit,
     )
 
+    var measurementCalls = 0
+    var holdMeasurement = false
+    private var heldMeasurement: (() -> Unit)? = null
+    fun finishMeasurement() { checkNotNull(heldMeasurement).invoke(); heldMeasurement = null }
     var mode = Mode.HANG_AFTER_CHUNK
     val appliedSpecTitles = mutableListOf<String>()
     private val sessions = mutableListOf<Session>()
@@ -501,7 +532,10 @@ private class FakeRendererBridge(
                     emit(session, RendererEnvelope(requestId = envelope.requestId, type = "specApplied"))
                 }
             }
-            "measure" -> emit(
+            "measure" -> {
+                measurementCalls++
+                val respond = {
+                emit(
                 session,
                 RendererEnvelope(
                     requestId = envelope.requestId,
@@ -512,6 +546,9 @@ private class FakeRendererBridge(
                     },
                 ),
             )
+                }
+                if (holdMeasurement) heldMeasurement = respond else respond()
+            }
             "exportPng" -> {
                 emit(session, RendererEnvelope(requestId = envelope.requestId, type = "exportStarted"))
                 if (mode == Mode.HANG_BEFORE_CHUNK) {

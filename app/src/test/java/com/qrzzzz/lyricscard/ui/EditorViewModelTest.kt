@@ -29,6 +29,54 @@ class EditorViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     @Test
+    fun measurementDoesNotOverwriteRequestsAndRejectsOldSpec() = runTest(mainDispatcherRule.dispatcher) {
+        val stored = project("measurement")
+        val store = FakeProjectStore(listOf(stored))
+        val vm = editorViewModel(store, SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to stored.id)))
+        runCurrent()
+        val measured = com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement(
+            stored.spec, 1, com.qrzzzz.lyricscard.renderer.CanvasMeasurement(1440, 4000))
+        vm.updateMeasurement(measured)
+        assertEquals(measured, vm.uiState.value.measurement)
+        assertEquals(stored.spec, vm.uiState.value.currentProject?.spec)
+        vm.updateSpec { it.copy(typography = it.typography.copy(lyricSize = 48)) }
+        vm.updateMeasurement(measured)
+        assertEquals(null, vm.uiState.value.measurement)
+        assertTrue(vm.flushAutosave())
+        val reopened = editorViewModel(store, SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to stored.id)))
+        runCurrent()
+        assertEquals(null, reopened.uiState.value.measurement)
+        assertEquals(stored.spec.canvas, reopened.uiState.value.currentProject?.spec?.canvas)
+    }
+
+    @Test
+    fun heightTransitionsSaveReopenAndRoundTripAtBoundaries() = runTest(mainDispatcherRule.dispatcher) {
+        for (height in listOf(640, 720, 3200, 4000)) {
+            val stored = project("height-$height").let {
+                it.copy(spec = it.spec.copy(canvas = it.spec.canvas.copy(height = height, autoHeight = true)))
+            }
+            val store = FakeProjectStore(listOf(stored))
+            val vm = editorViewModel(store, SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to stored.id)))
+            runCurrent()
+            vm.updateSpec { it.copy(canvas = it.canvas.copy(autoHeight = false)) }
+            assertEquals(false, vm.uiState.value.currentProject?.spec?.canvas?.autoHeight)
+            assertEquals(height.coerceIn(720, 3200), vm.uiState.value.currentProject?.spec?.canvas?.height)
+            assertEquals(height !in 720..3200, vm.uiState.value.errorMessage != null)
+            assertTrue(vm.flushAutosave())
+            val reopened = editorViewModel(store, SavedStateHandle(mapOf(EditorViewModel.PROJECT_ID_KEY to stored.id)))
+            runCurrent()
+            val manual = reopened.uiState.value.currentProject!!.spec
+            reopened.updateSpec { it.copy(canvas = it.canvas.copy(autoHeight = true)) }
+            reopened.updateMeasurement(com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement(
+                reopened.uiState.value.currentProject!!.spec, 2,
+                com.qrzzzz.lyricscard.renderer.CanvasMeasurement(1040, 4000)))
+            reopened.updateSpec { it.copy(canvas = it.canvas.copy(autoHeight = false)) }
+            assertEquals(manual, reopened.uiState.value.currentProject!!.spec)
+            assertTrue(reopened.flushAutosave())
+        }
+    }
+
+    @Test
     fun routeProjectIdLoadsOnlyThatProjectFromRoomBoundary() = runTest(mainDispatcherRule.dispatcher) {
         val first = project("project-1")
         val second = project("project-2")

@@ -338,5 +338,8 @@
     <string name="v2_export_format">导出格式</string>
     <string name="v2_file_extension" translatable="false">.%1$s</string>
     <string name="v2_cjk_font">中文字体族</string>
+    <string name="export_dimensions_pending">正在确认画布尺寸…</string>
+    <string name="editor_manual_height_adjusted">已将手动请求高度调整为 %1$d px（允许 720–3200 px）。请检查内容是否完整；放不下时请重新开启自动高度。</string>
+    <string name="editor_height_request_help">此处保留请求高度，自动测量不会覆盖它。关闭自动高度时，超出 720–3200 px 的请求会调整到最近边界并提示。</string>
 </resources>
 

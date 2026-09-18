@@ -80,7 +80,7 @@ fun ExportScreen(
     onBack: () -> Unit,
     onMultiplier: (Int) -> Unit,
     onFileName: (String) -> Unit,
-    onMeasuredHeight: (Int) -> Unit,
+    onMeasurement: (com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement) -> Unit,
     onSave: () -> Unit,
     onShare: () -> Unit,
     onCancel: () -> Unit,
@@ -181,11 +181,9 @@ fun ExportScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 RendererPreview(
-                    spec = project.spec.copy(
-                        canvas = project.spec.canvas.copy(pixelRatio = if (state.multiplier == 1) 1 else 2),
-                    ),
+                    spec = project.spec,
                     controller = renderer,
-                    onMeasuredHeight = onMeasuredHeight,
+                    onMeasurement = onMeasurement,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(0.42f)
@@ -221,11 +219,9 @@ fun ExportScreen(
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 RendererPreview(
-                    spec = project.spec.copy(
-                        canvas = project.spec.canvas.copy(pixelRatio = if (state.multiplier == 1) 1 else 2),
-                    ),
+                    spec = project.spec,
                     controller = renderer,
-                    onMeasuredHeight = onMeasuredHeight,
+                    onMeasurement = onMeasurement,
                     modifier = Modifier
                         .weight(if (windowWidth == LyricsWindowWidth.EXPANDED) 1.7f else 1.2f)
                         .fillMaxHeight()
@@ -267,9 +263,8 @@ internal fun ExportControls(
     onPreviewBitmapReleased: (Bitmap) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val finalWidth = (project.spec.canvas.width * com.qrzzzz.lyricscard.model.exportPixelRatio(state.multiplier)).toInt()
-    val finalHeight = (state.measuredHeight * com.qrzzzz.lyricscard.model.exportPixelRatio(state.multiplier)).toInt()
-    val estimateMb = finalWidth.toLong() * finalHeight.toLong() * 4.0 / (1024.0 * 1024.0)
+    val outputSize = state.outputSize
+    val estimateMb = outputSize?.let { it.width.toLong() * it.height.toLong() * 4.0 / (1024.0 * 1024.0) }
     val invalidFileName = INVALID_FILE_CHARS.containsMatchIn(state.fileName)
     val resultPending = state.exported != null && state.preview.phase == ExportPreviewPhase.LOADING
     val actionEnabled = !state.isBusy && !resultPending
@@ -327,10 +322,11 @@ internal fun ExportControls(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.export_final_size), style = MaterialTheme.typography.labelLarge)
                     Text(
-                        stringResource(R.string.export_final_dimensions, finalWidth, finalHeight),
+                        outputSize?.let { stringResource(R.string.export_final_dimensions, it.width, it.height) }
+                            ?: stringResource(R.string.export_dimensions_pending),
                         style = MaterialTheme.typography.headlineSmall,
                     )
-                    Text(
+                    if (estimateMb != null) Text(
                         stringResource(R.string.export_memory_estimate, estimateMb),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -65,7 +65,7 @@ fun EditorScreen(
     onLinkInputChange: (String) -> Unit,
     onProjectNameChange: (String) -> Unit,
     onSpecChange: (RenderSpec) -> Unit,
-    onMeasuredHeight: (Int) -> Unit,
+    onMeasurement: (com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement) -> Unit,
     onExtractPalette: () -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -153,7 +153,7 @@ fun EditorScreen(
                     actions = actions,
                     showSafeArea = showSafeArea,
                     renderer = renderer,
-                    onMeasuredHeight = onMeasuredHeight,
+                    onMeasurement = onMeasurement,
                 )
                 windowWidth == LyricsWindowWidth.COMPACT -> EditorProperties(
                     state = state,
@@ -168,7 +168,7 @@ fun EditorScreen(
                     showPreview = showPreview,
                     showSafeArea = showSafeArea,
                     renderer = renderer,
-                    onMeasuredHeight = onMeasuredHeight,
+                    onMeasurement = onMeasurement,
                     windowWidth = windowWidth,
                 )
             }
@@ -235,7 +235,7 @@ private fun AdaptiveEditorLayout(
     showPreview: Boolean,
     showSafeArea: Boolean,
     renderer: RendererController,
-    onMeasuredHeight: (Int) -> Unit,
+    onMeasurement: (com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement) -> Unit,
     windowWidth: LyricsWindowWidth,
 ) {
     val project = checkNotNull(state.currentProject)
@@ -274,7 +274,7 @@ private fun AdaptiveEditorLayout(
         RendererPreview(
             spec = project.spec,
             controller = renderer,
-            onMeasuredHeight = onMeasuredHeight,
+            onMeasurement = onMeasurement,
             showSafeArea = showSafeArea,
             modifier = Modifier
                 .weight(if (windowWidth == LyricsWindowWidth.EXPANDED) 1.65f else 1.15f)
@@ -302,7 +302,7 @@ private fun CompactEditorBottomSheet(
     actions: EditorScreenActions,
     showSafeArea: Boolean,
     renderer: RendererController,
-    onMeasuredHeight: (Int) -> Unit,
+    onMeasurement: (com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement) -> Unit,
 ) {
     val project = checkNotNull(state.currentProject)
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -352,7 +352,7 @@ private fun CompactEditorBottomSheet(
                 RendererPreview(
                     spec = project.spec,
                     controller = renderer,
-                    onMeasuredHeight = onMeasuredHeight,
+                    onMeasurement = onMeasurement,
                     showSafeArea = showSafeArea,
                     modifier = Modifier.fillMaxSize(),
                 )

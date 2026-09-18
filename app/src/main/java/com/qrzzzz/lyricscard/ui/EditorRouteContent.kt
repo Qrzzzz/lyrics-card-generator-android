@@ -75,7 +75,7 @@ internal fun EditorRouteContent(
             onLinkInputChange = editorViewModel::updateLinkInput,
             onProjectNameChange = editorViewModel::updateProjectName,
             onSpecChange = { next -> editorViewModel.updateSpec { next } },
-            onMeasuredHeight = editorViewModel::updateMeasuredHeight,
+            onMeasurement = editorViewModel::updateMeasurement,
             onExtractPalette = editorViewModel::extractPalette,
             onUndo = editorViewModel::undo,
             onRedo = editorViewModel::redo,
