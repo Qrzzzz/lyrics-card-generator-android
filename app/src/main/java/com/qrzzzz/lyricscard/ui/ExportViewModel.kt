@@ -63,7 +63,7 @@ data class ExportUiState(
     val projectUnavailable: Boolean = false,
     val multiplier: Int = 2,
     val fileName: String = "",
-    val measuredHeight: Int = 0,
+    val measurement: com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement? = null,
     val operation: ExportOperationState = ExportOperationState.IDLE,
     val exported: ExportedImage? = null,
     val preview: ExportPreviewUiState = ExportPreviewUiState(),
@@ -71,6 +71,10 @@ data class ExportUiState(
     val errorMessage: UiText? = null,
     val effect: ExportEffect? = null,
 ) {
+    val outputSize: com.qrzzzz.lyricscard.renderer.CanvasMeasurement?
+        get() = exported?.let { com.qrzzzz.lyricscard.renderer.CanvasMeasurement(it.width, it.height) }
+            ?: measurement?.takeIf { it.spec == project?.spec }?.outputSize(multiplier)
+
     val isBusy: Boolean
         get() = operation in setOf(
             ExportOperationState.PREPARING,
@@ -149,7 +153,6 @@ class ExportViewModel internal constructor(
             projectId = projectId,
             multiplier = (savedStateHandle.get<Int>(MULTIPLIER_KEY) ?: 2).takeIf { it in listOf(1, 14, 2) } ?: 2,
             fileName = savedStateHandle[FILE_NAME_KEY] ?: "",
-            measuredHeight = savedStateHandle[MEASURED_HEIGHT_KEY] ?: 0,
             operation = initialOperation,
             exported = initialImage,
             preview = if (initialImage == null) {
@@ -212,10 +215,9 @@ class ExportViewModel internal constructor(
         _uiState.update { it.copy(fileName = next) }
     }
 
-    fun setMeasuredHeight(value: Int) {
-        if (value <= 0) return
-        savedStateHandle[MEASURED_HEIGHT_KEY] = value
-        _uiState.update { it.copy(measuredHeight = value) }
+    fun setMeasurement(value: com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement) {
+        if (_uiState.value.project?.spec != value.spec) return
+        _uiState.update { it.copy(measurement = value) }
     }
 
     fun save() {
@@ -315,9 +317,6 @@ class ExportViewModel internal constructor(
             }
             savedStateHandle[MULTIPLIER_KEY] = defaultMultiplier
             savedStateHandle[FILE_NAME_KEY] = fileName
-            if (_uiState.value.measuredHeight <= 0) {
-                savedStateHandle[MEASURED_HEIGHT_KEY] = project.spec.canvas.height
-            }
             _uiState.update {
                 it.copy(
                     project = project,
@@ -325,8 +324,7 @@ class ExportViewModel internal constructor(
                     projectUnavailable = false,
                     multiplier = defaultMultiplier,
                     fileName = fileName,
-                    measuredHeight = it.measuredHeight.takeIf { height -> height > 0 }
-                        ?: project.spec.canvas.height,
+                    measurement = null,
                 )
             }
         } catch (cause: CancellationException) {

@@ -35,6 +35,28 @@ class ExportViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     @Test
+    fun fullMeasurementUsesCanvasRoundingAndActualFileTakesPriority() = runTest(mainDispatcherRule.dispatcher) {
+        val project = project("dimensions")
+        val vm = exportViewModel(project)
+        runCurrent()
+        assertNull(vm.uiState.value.outputSize)
+        val snapshot = com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement(project.spec, 1,
+            com.qrzzzz.lyricscard.renderer.CanvasMeasurement(1227, 697))
+        vm.setMeasurement(snapshot.copy(spec = project.spec.copy(typography = project.spec.typography.copy(lyricSize = 36))))
+        assertNull(vm.uiState.value.outputSize)
+        vm.setMeasurement(snapshot)
+        for ((scale, expected) in listOf(1 to (1227 to 697), 14 to (1717 to 975), 2 to (2454 to 1394))) {
+            vm.setMultiplier(scale)
+            assertEquals(expected.first, vm.uiState.value.outputSize?.width)
+            assertEquals(expected.second, vm.uiState.value.outputSize?.height)
+        }
+        val actual = image()
+        val state = vm.uiState.value.copy(exported = actual)
+        assertEquals(actual.width, state.outputSize?.width)
+        assertEquals(actual.height, state.outputSize?.height)
+    }
+
+    @Test
     fun repeatedActionWhileOperationIsRunningDoesNotDuplicateExport() = runTest(mainDispatcherRule.dispatcher) {
         val project = project("export-once")
         val renderer = FakeRendererOperations()

@@ -39,7 +39,7 @@ import com.qrzzzz.lyricscard.R
 import com.qrzzzz.lyricscard.model.RenderSpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlin.math.abs
+import kotlinx.coroutines.ensureActive
 
 @Composable
 fun RendererPreview(
@@ -47,30 +47,23 @@ fun RendererPreview(
     controller: RendererController,
     modifier: Modifier = Modifier,
     onController: (RendererController) -> Unit = {},
-    onMeasuredHeight: (Int) -> Unit = {},
+    onMeasurement: (com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement) -> Unit = {},
     showSafeArea: Boolean = false,
 ) {
     val status by controller.status.collectAsStateWithLifecycle()
     val generation by controller.generation.collectAsStateWithLifecycle()
     val localizedStatus = stringResource(rendererStatusResource(status.uiMessageKey()))
     val previewDescription = stringResource(R.string.renderer_preview_accessibility)
-    val previewKey = if (spec.canvas.autoHeight) {
-        spec.copy(canvas = spec.canvas.copy(height = 0, pixelRatio = 1))
-    } else {
-        spec
-    }
-
+    val latestSpec by androidx.compose.runtime.rememberUpdatedState(spec)
+    val latestCallback by androidx.compose.runtime.rememberUpdatedState(onMeasurement)
     LaunchedEffect(controller) { onController(controller) }
-    LaunchedEffect(controller, spec) {
+    LaunchedEffect(controller, spec, generation) {
         controller.updateSpec(spec)
-    }
-    LaunchedEffect(controller, previewKey) {
-        if (!spec.canvas.autoHeight) return@LaunchedEffect
         delay(AUTO_HEIGHT_MEASURE_DEBOUNCE_MS)
         try {
-            val measured = controller.measure(spec)
-            controller.updateSpec(spec.copy(canvas = spec.canvas.copy(height = measured.height)))
-            if (abs(measured.height - spec.canvas.height) > 1) onMeasuredHeight(measured.height)
+            val measured = controller.confirmMeasurement(spec)
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (latestSpec == spec) latestCallback(measured)
         } catch (cause: CancellationException) {
             throw cause
         } catch (_: Throwable) {

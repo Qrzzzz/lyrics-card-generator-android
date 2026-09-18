@@ -32,6 +32,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -303,6 +304,9 @@ class RendererController private constructor(
     private var activeSessionId: Long? = null
     private var nextSessionId = 0L
     private var currentSpec: RenderSpec? = null
+    private var specRevision = 0L
+    private var confirmedMeasurement: ConfirmedCanvasMeasurement? = null
+    private var measurementGeneration = -1
     private var pendingSpec: RenderSpec? = null
     private var previewInFlightSpec: RenderSpec? = null
     private var specJob: Job? = null
@@ -402,6 +406,10 @@ class RendererController private constructor(
 
     fun updateSpec(spec: RenderSpec) {
         val validated = spec.requireValid()
+        if (currentSpec != validated) {
+            specRevision++
+            confirmedMeasurement = null
+        }
         currentSpec = validated
         pendingSpec = validated
         schedulePreviewUpdate()
@@ -470,6 +478,20 @@ class RendererController private constructor(
         measureUnlocked(spec.requireValid())
     }
 
+    suspend fun confirmMeasurement(spec: RenderSpec): ConfirmedCanvasMeasurement = operationMutex.withLock {
+        val revision = specRevision
+        val generation = _generation.value
+        val size = measureUnlocked(spec.requireValid())
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        if (currentSpec != spec || revision != specRevision || generation != _generation.value) {
+            throw CancellationException("Superseded canvas measurement")
+        }
+        ConfirmedCanvasMeasurement(spec, revision, size).also {
+            confirmedMeasurement = it
+            measurementGeneration = generation
+        }
+    }
+
     suspend fun exportPng(spec: RenderSpec, pixelRatio: Int): ExportedImage = operationMutex.withLock {
         val scale = com.qrzzzz.lyricscard.model.exportPixelRatio(pixelRatio)
         val requestedSpec = spec.requireValid()
@@ -480,7 +502,9 @@ class RendererController private constructor(
             _status.value = RendererStatus(RendererStatus.Phase.EXPORTING, "正在生成 PNG…")
 
             if (exportSpec.canvas.ratio == com.qrzzzz.lyricscard.model.CanvasRatio.CUSTOM) {
-                val measurement = measureUnlocked(exportSpec, sessionId)
+                val measurement = confirmedMeasurement
+                    ?.takeIf { it.spec == requestedSpec && measurementGeneration == _generation.value }
+                    ?.size ?: measureUnlocked(exportSpec, sessionId)
                 exportSpec = exportSpec.copy(canvas = exportSpec.canvas.copy(width = measurement.width, height = measurement.height)).requireValid()
             }
 

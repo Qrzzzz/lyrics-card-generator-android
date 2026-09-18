@@ -136,7 +136,7 @@ internal fun LayoutPanel(spec: RenderSpec, onSpecChange: (RenderSpec) -> Unit) {
                     checked = spec.canvas.autoHeight,
                     enabled = spec.canvas.layoutMode == LayoutMode.PORTRAIT,
                     supportingText = if (spec.canvas.layoutMode == LayoutMode.PORTRAIT) {
-                        null
+                        stringResource(R.string.editor_height_request_help)
                     } else {
                         stringResource(R.string.editor_auto_height_disabled_reason)
                     },

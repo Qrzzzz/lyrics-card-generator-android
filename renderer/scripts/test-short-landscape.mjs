@@ -13,12 +13,14 @@ try {
   await page.goto(server.resolvedUrls.local[0]);
   await page.waitForSelector('[data-export-card="true"]');
   await dispatchRenderer(page, 'initialize', {}, 'ready', 'init');
-  const { payload: measured } = await dispatchRenderer(page, 'measure', spec, 'measured', 'measure');
-  assert.ok(measured.height >= 640 && measured.height < 720, JSON.stringify(measured));
-  console.log('Short landscape measured:', measured);
+  const cases = [spec, ...[640, 720, 3200, 4000].map(height => ({...spec, canvas:{...spec.canvas,layoutMode:'portrait',width:1040,height,autoWidth:true,autoHeight:true}}))];
+  for (const [index, input] of cases.entries()) {
+  const { payload: measured } = await dispatchRenderer(page, 'measure', input, 'measured', `measure-${index}`);
+  if (index === 0) assert.ok(measured.height >= 640 && measured.height < 720, JSON.stringify(measured));
+  console.log('Measured:', input.canvas.layoutMode, input.canvas.height, measured);
   for (const format of ['png', 'webp', 'jpg']) for (const scale of [1, 1.4, 2]) {
     const mime = format === 'jpg' ? 'image/jpeg' : `image/${format}`;
-    const next = { ...spec, canvas: { ...spec.canvas, ...measured, exportFormat: format, exportScale: scale } };
+    const next = { ...input, canvas: { ...input.canvas, ...measured, exportFormat: format, exportScale: scale } };
     await dispatchRenderer(page, 'setSpec', next, 'specApplied', `apply-${format}-${scale}`);
     const result = await dispatchRenderer(page, 'exportPng', { spec: next, pixelRatio: scale }, 'exportCompleted', `${format}-${scale}`);
     const expected = [Math.floor(measured.width * scale), Math.floor(measured.height * scale)];
@@ -31,6 +33,7 @@ try {
     }, { chunks: result.chunks, mime });
     assert.deepEqual(decoded, expected);
     console.log(`PASS ${format} ${scale}x ${decoded.join('x')}`);
+  }
   }
 } finally {
   await browser?.close(); await new Promise(resolve => server.httpServer.close(resolve));

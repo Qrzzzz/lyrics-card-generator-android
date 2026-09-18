@@ -23,6 +23,7 @@ import com.qrzzzz.lyricscard.model.RenderSpec
 import com.qrzzzz.lyricscard.model.RenderSpecViolation
 import com.qrzzzz.lyricscard.model.SongSource
 import com.qrzzzz.lyricscard.model.requireValid
+import com.qrzzzz.lyricscard.model.withLegalManualHeight
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -87,6 +88,7 @@ data class EditorUiState(
     val isExtractingPalette: Boolean = false,
     val paletteError: UiText? = null,
     val isLeaving: Boolean = false,
+    val measurement: com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement? = null,
 )
 
 class EditorViewModel(
@@ -192,8 +194,11 @@ class EditorViewModel(
     fun updateSpec(transform: (RenderSpec) -> RenderSpec) {
         if (_uiState.value.isLeaving) return
         val project = _uiState.value.currentProject ?: return
+        var adjustedHeight = false
         val updated = runCatching {
-            val edited = transform(project.spec)
+            val requested = transform(project.spec)
+            val edited = if (project.spec.canvas.autoHeight) requested.withLegalManualHeight() else requested
+            adjustedHeight = requested.canvas.height != edited.canvas.height
             val candidate = edited.copy(content = edited.content.copy(
                 lyricDocument = if (edited.content.lyricDocument != project.spec.content.lyricDocument) {
                     edited.content.lyricDocument
@@ -211,7 +216,10 @@ class EditorViewModel(
         _uiState.update {
             it.copy(
                 currentProject = updated,
-                errorMessage = null,
+                measurement = null,
+                errorMessage = if (adjustedHeight) {
+                    UiText.resource(R.string.editor_manual_height_adjusted, updated.spec.canvas.height)
+                } else null,
                 canUndo = undoStack.isNotEmpty(),
                 canRedo = false,
             )
@@ -228,6 +236,7 @@ class EditorViewModel(
         _uiState.update {
             it.copy(
                 currentProject = project.copy(spec = previous),
+                measurement = null,
                 canUndo = undoStack.isNotEmpty(),
                 canRedo = true,
             )
@@ -244,6 +253,7 @@ class EditorViewModel(
         _uiState.update {
             it.copy(
                 currentProject = project.copy(spec = next),
+                measurement = null,
                 canUndo = true,
                 canRedo = redoStack.isNotEmpty(),
             )
@@ -252,14 +262,9 @@ class EditorViewModel(
         scheduleAutosave()
     }
 
-    fun updateMeasuredHeight(height: Int) {
-        if (_uiState.value.isLeaving) return
-        val project = _uiState.value.currentProject ?: return
-        if (!project.spec.canvas.autoHeight || project.spec.canvas.height == height) return
-        val updatedSpec = project.spec.copy(canvas = project.spec.canvas.copy(height = height)).requireValid()
-        _uiState.update { it.copy(currentProject = project.copy(spec = updatedSpec)) }
-        markEdited()
-        scheduleAutosave()
+    fun updateMeasurement(value: com.qrzzzz.lyricscard.renderer.ConfirmedCanvasMeasurement) {
+        if (_uiState.value.isLeaving || _uiState.value.currentProject?.spec != value.spec) return
+        _uiState.update { it.copy(measurement = value) }
     }
 
     fun importCover(uri: Uri) {
