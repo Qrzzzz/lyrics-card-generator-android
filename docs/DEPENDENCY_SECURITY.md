@@ -81,3 +81,18 @@ Dependabot creates reviewable pull requests only. It does not auto-merge, receiv
 ### Kotlin and Commons Compress remediation (1.1.6)
 
 The [1.1.6 maintenance record](security/maintenance-1.1.6.md) covers the remaining three medium alerts with Kotlin 2.4.20 and host-only Commons Compress 1.26.0, including compiler/R8/KSP compatibility and Actions artifact migration. Closure requires actual default-branch submission and fixed alert states; no severity or deadline is waived.
+
+### Scheduled npm audit remediation (2026-10-26)
+
+[Scheduled Quality Gate 40297265489](https://github.com/Qrzzzz/lyrics-card-generator-android/actions/runs/40297265489) failed on unchanged main source `ae255651d81d1f6f4293e035d6d092b0cacb9d54`. Renderer, Android, contracts and Unicode JVM smoke passed. The live npm audit reported five vulnerable packages (three high, two moderate), exited 1 with `SECURITY FAIL`, and correctly caused the aggregate quality gate to fail. This was an advisory finding, not an audit-service outage or an Android build failure; retrying the old lockfile cannot repair it.
+
+| Locked package family | Previous | Repair | Advisory examples |
+| --- | --- | --- | --- |
+| fast-uri (AJV schema tooling) | 3.1.6 exact override | 3.1.9 exact override | [high authority/host confusion](https://github.com/advisories/GHSA-58mr-gqgx-xq4g), [later normalization fixes](https://github.com/advisories/GHSA-w74x-v6f9-j3xg) |
+| source-map-js (PostCSS tooling) | 1.2.1 | 1.2.2 | [high event-loop denial of service](https://github.com/advisories/GHSA-68fv-2mgg-jv7q) |
+| Vite | 8.3.0 | 8.3.5 | [high Windows editor command execution](https://github.com/advisories/GHSA-587h-7wmj-h5pm) |
+| Vitest and coupled @vitest/* packages | 4.1.11 | 4.1.12 | [moderate mock registration injection](https://github.com/vitest-dev/vitest/security/advisories/GHSA-qxg6-89mg-rqv8), [Windows redirect traversal](https://github.com/advisories/GHSA-xp26-3454-mjgp) |
+
+The old exact fast-uri override prevented compatible automatic resolution from selecting its patched versions. Update that override and the Vite/Vitest manifest minimums, refresh the affected lockfile tree, and keep the existing high/critical gate and retry rules. Vite's updated Rolldown dependency and its platform bindings move together within the existing major version. No package identity, renderer protocol, signing configuration or release authorization changes.
+
+Local Node 24.22.1 validation: **PASS** for clean locked installation, `npm run audit:security` (zero vulnerabilities), `npm run check` (typecheck, 101 tests in 11 files, production build), and `scripts/test-dependency-security-contract.ps1` (29 passed, one symlink fixture skipped because Windows denied symlink creation). These results cover the repair tree, not a production candidate or physical-device acceptance. The original failed run and the historical #35 severity/deadline records above remain unchanged; same-commit Actions evidence must be checked separately.
